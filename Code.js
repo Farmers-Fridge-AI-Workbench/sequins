@@ -3,6 +3,12 @@
  * Assembly line sequencing agent for Farmer's Fridge
  * OPSICLE vNext
  *
+ * v0.4.3 — 2026-07-02
+ * - fetchActualDemand now returns the real week label (from the "2026 Week 27"
+ *   style tab name) alongside each date, instead of leaving the client to guess
+ *   it with its own formula. Fixes actuals landing in the wrong week bucket
+ *   on weekend dates.
+ *
  * v0.4.2 — 2026-07-01
  * - Removed SKU library gate from fetchForecastWeekData — all forecast SKUs load regardless of library
  * - Removed SKU library gate from fetchActualDemand — same fix for actuals fetch
@@ -285,6 +291,10 @@ function fetchActualDemand(startDate, endDate) {
     const lastRow = sheet.getLastRow();
     if (lastCol < 3 || lastRow < 4) return;
 
+    const sheetName = sheet.getName();
+    const wm = sheetName.match(/(\d{4})\s+Week\s+(\d+)/i);
+    const sheetWeekLabel = wm ? ('Wk ' + wm[2] + ' · ' + wm[1]) : sheetName;
+
     const allData = sheet.getRange(1, 1, lastRow, lastCol).getValues();
     const dateRow = allData[2]; // Row 3 = dates
 
@@ -299,7 +309,7 @@ function fetchActualDemand(startDate, endDate) {
         const dateStr = Utilities.formatDate(cellDate, tz, 'yyyy-MM-dd');
         const dayStr  = Utilities.formatDate(cellDate, tz, 'EEEE');
         dateCols.push({ col: ci, date: dateStr, day: dayStr });
-        byDate[dateStr] = { day: dayStr, col: ci };
+        byDate[dateStr] = { day: dayStr, col: ci, weekLabel: sheetWeekLabel };
       }
     }
     if (!dateCols.length) return;
@@ -326,7 +336,7 @@ function fetchActualDemand(startDate, endDate) {
     throw new Error('No dates found between ' + startDate + ' and ' + endDate + ' in Demands 2025.');
 
   const datesList = Object.entries(byDate)
-    .map(([date, info]) => ({ date, day: info.day, col: info.col }))
+    .map(([date, info]) => ({ date, day: info.day, col: info.col, weekLabel: info.weekLabel }))
     .sort((a, b) => a.date.localeCompare(b.date));
 
   return { skuData, byDate, dates: datesList, mode: 'actual' };

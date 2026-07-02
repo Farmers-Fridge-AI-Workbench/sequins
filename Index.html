@@ -1,5 +1,33 @@
 <!--
   Sequins ✨ — Index.html
+  v0.4.9 — 2026-07-02
+  - ACTUAL FIX for drag-and-drop: renderWorkbench() referenced an undefined
+    'jobs' variable (introduced in v0.4.5's Demand Debug feature) which threw
+    a ReferenceError on every call for admin users — one line before
+    window._wbLastResult got set. wbDrop() was silently no-op'ing because
+    that stash was always null. Now destructures jobs from the sequencer
+    result correctly. The earlier setData/dropEffect fix (v0.4.7) was
+    correct practice but was never the actual blocker.
+
+  v0.4.8 — 2026-07-02
+  - Fix: actuals loading used a hand-rolled week-number formula that could
+    disagree with the forecast's own week numbering on weekend dates
+    (e.g. Jul 4/5 landed in "Wk 28" instead of "Wk 27", creating duplicate
+    rows instead of updating the existing forecast days). Actuals now use
+    the real week label from the Demands 2025 tab name (via Code.js),
+    matching how forecast weeks are labeled.
+
+  v0.4.7 — 2026-07-02
+  - Fix: drag-and-drop drop was never completing — dragstart never called
+    dataTransfer.setData(), so browsers (esp. inside the Apps Script sandboxed
+    iframe) allowed the drag to start but silently blocked the drop.
+    Added setData() in wbDragStart and dropEffect in wbDragOver.
+
+  v0.4.6 — 2026-07-02
+  - White calendar picker icon on date inputs (Load Demand → Actuals)
+  - Renamed Load Demand buttons "Publish to Schedule"/"Publish Actuals" → "Load to Workbench"/"Load Actuals to Workbench"
+    (to disambiguate from the real Workbench → Line Sequence Publish Plan action)
+
   v0.4.5 — 2026-07-01
   - Fix: publishPlan failure handler no longer stuck (removed Logger.log, proper reset)
   - Add: Unpublish button in Workbench (admin + planner)
@@ -147,6 +175,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .sku-row.dragging{opacity:0.35;}
 .line-card-body.drag-over{background:var(--teal-dim);outline:2px dashed var(--teal);outline-offset:-4px;}
 .sku-row.overridden{border-left:2px solid var(--amber);}
+.form-input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(1);cursor:pointer;}
 .legend-row{display:flex;align-items:center;gap:7px;padding:2px 4px;}
 .legend-desc{font-size:9px;color:var(--muted);line-height:1.3;font-family:var(--mono);}
 .main.wb-active{background:#e2f5ee;}
@@ -322,7 +351,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           <button class="btn btn-teal" onclick="loadAllForecastWeeks()" id="loadAllBtn">⚡ Load all weeks</button>
         </div>
         <div id="fcStatus"></div><div id="fcPreview"></div>
-        <div id="fcPublishRow" style="display:none;margin-top:12px"><button class="btn btn-green" onclick="publishForecastWeek()" style="font-size:13px;padding:9px 24px">🚀 Publish to Schedule</button></div>
+        <div id="fcPublishRow" style="display:none;margin-top:12px"><button class="btn btn-green" onclick="publishForecastWeek()" style="font-size:13px;padding:9px 24px">📥 Load to Workbench</button></div>
       </div>
       <div class="card">
         <div class="card-title"><span>Actuals — Demands 2025</span><span class="mode-badge mode-actual">actual</span></div>
@@ -333,7 +362,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           <button class="btn btn-ghost" onclick="fetchActualPreview()" id="fetchActualBtn">Fetch</button>
         </div>
         <div id="actualStatus"></div><div id="actualPreview"></div>
-        <div id="actualPublishRow" style="display:none;margin-top:12px"><button class="btn btn-green" onclick="publishActuals()" style="font-size:13px;padding:9px 24px">🚀 Publish Actuals</button></div>
+        <div id="actualPublishRow" style="display:none;margin-top:12px"><button class="btn btn-green" onclick="publishActuals()" style="font-size:13px;padding:9px 24px">📥 Load Actuals to Workbench</button></div>
       </div>
       <div class="card">
         <div class="card-title"><span>Loaded Demand</span><button class="btn btn-ghost btn-sm" onclick="renderLoadedDemand()">↻</button></div>
@@ -551,9 +580,9 @@ function checkLineViolations(job,lineId,lineState,rules,lcById){
   return v;
 }
 
-function wbDragStart(e,sku,fromLine){_wbDragSku=sku;_wbDragFromLine=fromLine;e.target.classList.add('dragging');e.dataTransfer.effectAllowed='move';}
+function wbDragStart(e,sku,fromLine){_wbDragSku=sku;_wbDragFromLine=fromLine;e.target.classList.add('dragging');e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',sku);}
 function wbDragEnd(e){e.target.classList.remove('dragging');}
-function wbDragOver(e){e.preventDefault();e.currentTarget.classList.add('drag-over');}
+function wbDragOver(e){e.preventDefault();e.dataTransfer.dropEffect='move';e.currentTarget.classList.add('drag-over');}
 function wbDragLeave(e){e.currentTarget.classList.remove('drag-over');}
 function wbDrop(e,toLine){
   e.preventDefault();e.currentTarget.classList.remove('drag-over');
@@ -665,7 +694,7 @@ function renderWorkbench(){
   var ppb=document.getElementById('publishPlanBtn');if(ppb)ppb.style.display=canAct?'':'none';
   var upb=document.getElementById('unpublishPlanBtn');if(upb)upb.style.display=(canAct&&hasPub)?'':'none';
   var result=runSequencer();if(!result)return;
-  var lineState=result.lineState,lines=result.lines,rules=result.rules;
+  var lineState=result.lineState,lines=result.lines,rules=result.rules,jobs=result.jobs;
   applyWorkbenchOverrides(lineState);
   var lcById={};lines.forEach(function(l){lcById[l.id]=l;});
   document.getElementById('wbLineCards').innerHTML=buildLineCards(lines,lineState,true,rules);
@@ -680,11 +709,11 @@ function renderLoadedDemand(){var weeks=getWeeks(),el=document.getElementById('l
 function loadForecastWeeks(){google.script.run.withSuccessHandler(function(weeks){var sel=document.getElementById('forecastWeekSel');sel.innerHTML=weeks.length?weeks.map(function(w){return'<option value="'+w.label+'">'+w.label+'</option>';}).join(''):'<option value="">— no weeks found —</option>';}).withFailureHandler(function(){document.getElementById('forecastWeekSel').innerHTML='<option value="">— error —</option>';}).fetchForecastWeeks();}
 function fetchForecastPreview(){var weekLabel=document.getElementById('forecastWeekSel').value;if(!weekLabel)return;var btn=document.getElementById('fetchFcBtn');btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Fetching…';document.getElementById('fcPreview').innerHTML='';document.getElementById('fcPublishRow').style.display='none';google.script.run.withSuccessHandler(function(data){btn.disabled=false;btn.textContent='Fetch week';_pendingForecast=data;renderForecastPreview(data);document.getElementById('fcPublishRow').style.display='';document.getElementById('fcStatus').innerHTML='';}).withFailureHandler(function(err){btn.disabled=false;btn.textContent='Fetch week';document.getElementById('fcStatus').innerHTML='<div class="status status-err">'+err.message+'</div>';}).fetchForecastWeekData(weekLabel);}
 function renderForecastPreview(data){var skuData=data.skuData,dates=data.dates,weekLabel=data.weekLabel;var days=DAYS_ORDER.filter(function(d){return skuData[d]&&Object.keys(skuData[d]).length;});var skuSet={};days.forEach(function(d){Object.keys(skuData[d]).forEach(function(s){skuSet[s]=true;});});var allSkus=Object.keys(skuSet).sort(),totals={};days.forEach(function(d){totals[d]=Object.keys(skuData[d]).reduce(function(s,k){return s+skuData[d][k];},0);});var html='<div class="preview-wrap"><table class="preview-table"><thead><tr><th>SKU</th>'+days.map(function(d){return'<th>'+DAY_SHORT[d]+'<br><span style="font-size:9px;opacity:.6;font-weight:400">'+(dates[d]?new Date(dates[d]+'T12:00:00').toLocaleDateString('en-US',{month:'numeric',day:'numeric'}):'—')+'</span></th>';}).join('')+'</tr></thead><tbody>';allSkus.forEach(function(sku){html+='<tr><td>'+sku+'</td>'+days.map(function(d){return'<td>'+fmtUnits(skuData[d][sku]||0)+'</td>';}).join('')+'</tr>';});html+='<tr class="total-row"><td>Total</td>'+days.map(function(d){return'<td>'+fmtUnits(Math.round(totals[d]))+'</td>';}).join('')+'</tr></tbody></table></div><div style="font-size:10px;font-family:var(--mono);color:var(--muted);margin-top:8px">'+allSkus.length+' SKUs · '+days.length+' days · <strong style="color:var(--amber)">'+weekLabel+' · forecast</strong></div>';document.getElementById('fcPreview').innerHTML=html;}
-function publishForecastWeek(){if(!_pendingForecast)return;var btn=document.querySelector('#fcPublishRow button');btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Publishing…';var skuData=_pendingForecast.skuData,dates=_pendingForecast.dates,weekLabel=_pendingForecast.weekLabel;google.script.run.withSuccessHandler(function(result){btn.disabled=false;btn.innerHTML='🚀 Publish to Schedule';if(!STATE.demand[weekLabel])STATE.demand[weekLabel]={};Object.keys(skuData).forEach(function(day){STATE.demand[weekLabel][day]={skus:skuData[day],mode:'forecast',date:dates[day]||'',publishedBy:(CURRENT_USER&&CURRENT_USER.email)||'',publishedAt:new Date().toISOString()};});if(!CURRENT_WEEK)CURRENT_WEEK=weekLabel;document.getElementById('fcPreview').innerHTML='<div class="status status-ok">✓ Published '+result.daysLoaded+' days for '+weekLabel+'</div>';document.getElementById('fcPublishRow').style.display='none';_pendingForecast=null;renderLoadedDemand();renderSequence();}).withFailureHandler(function(err){btn.disabled=false;btn.innerHTML='🚀 Publish to Schedule';document.getElementById('fcStatus').innerHTML='<div class="status status-err">'+err.message+'</div>';}).publishForecastWeek(weekLabel,skuData,dates);}
+function publishForecastWeek(){if(!_pendingForecast)return;var btn=document.querySelector('#fcPublishRow button');btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Publishing…';var skuData=_pendingForecast.skuData,dates=_pendingForecast.dates,weekLabel=_pendingForecast.weekLabel;google.script.run.withSuccessHandler(function(result){btn.disabled=false;btn.innerHTML='📥 Load to Workbench';if(!STATE.demand[weekLabel])STATE.demand[weekLabel]={};Object.keys(skuData).forEach(function(day){STATE.demand[weekLabel][day]={skus:skuData[day],mode:'forecast',date:dates[day]||'',publishedBy:(CURRENT_USER&&CURRENT_USER.email)||'',publishedAt:new Date().toISOString()};});if(!CURRENT_WEEK)CURRENT_WEEK=weekLabel;document.getElementById('fcPreview').innerHTML='<div class="status status-ok">✓ Loaded '+result.daysLoaded+' days for '+weekLabel+' to Workbench</div>';document.getElementById('fcPublishRow').style.display='none';_pendingForecast=null;renderLoadedDemand();renderSequence();}).withFailureHandler(function(err){btn.disabled=false;btn.innerHTML='📥 Load to Workbench';document.getElementById('fcStatus').innerHTML='<div class="status status-err">'+err.message+'</div>';}).publishForecastWeek(weekLabel,skuData,dates);}
 function loadAllForecastWeeks(){var btn=document.getElementById('loadAllBtn'),el=document.getElementById('fcStatus');btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Loading all weeks…';google.script.run.withSuccessHandler(function(weeks){if(!weeks.length){btn.disabled=false;btn.innerHTML='⚡ Load all weeks';el.innerHTML='<div class="status status-warn">No weeks found</div>';return;}var loaded=0,total=weeks.length;function loadNext(i){if(i>=total){btn.disabled=false;btn.innerHTML='⚡ Load all weeks';el.innerHTML='<div class="status status-ok">✓ Loaded '+loaded+' of '+total+' weeks</div>';renderLoadedDemand();renderSequence();return;}google.script.run.withSuccessHandler(function(data){var skuData=data.skuData,dates=data.dates,weekLabel=data.weekLabel;if(!STATE.demand[weekLabel])STATE.demand[weekLabel]={};Object.keys(skuData).forEach(function(day){var ex=STATE.demand[weekLabel][day];if(ex&&ex.mode==='actual')return;STATE.demand[weekLabel][day]={skus:skuData[day],mode:'forecast',date:dates[day]||'',publishedBy:'bulk load',publishedAt:new Date().toISOString()};});loaded++;el.innerHTML='<div class="status status-info"><span class="spinner"></span>Loading… '+loaded+'/'+total+'</div>';google.script.run.withSuccessHandler(function(){loadNext(i+1);}).withFailureHandler(function(){loadNext(i+1);}).publishForecastWeek(weekLabel,skuData,dates);}).withFailureHandler(function(){loadNext(i+1);}).fetchForecastWeekData(weeks[i].label);}loadNext(0);}).withFailureHandler(function(err){btn.disabled=false;btn.innerHTML='⚡ Load all weeks';el.innerHTML='<div class="status status-err">'+err.message+'</div>';}).fetchForecastWeeks();}
 function fetchActualPreview(){var start=document.getElementById('actualStart').value,end=document.getElementById('actualEnd').value;if(!start||!end)return;var btn=document.getElementById('fetchActualBtn');btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Fetching…';document.getElementById('actualPreview').innerHTML='';document.getElementById('actualPublishRow').style.display='none';google.script.run.withSuccessHandler(function(data){btn.disabled=false;btn.textContent='Fetch';_pendingActuals=data;renderActualPreview(data);document.getElementById('actualPublishRow').style.display='';document.getElementById('actualStatus').innerHTML='';}).withFailureHandler(function(err){btn.disabled=false;btn.textContent='Fetch';document.getElementById('actualStatus').innerHTML='<div class="status status-err">'+err.message+'</div>';}).fetchActualDemand(start,end);}
 function renderActualPreview(data){var skuData=data.skuData,byDate=data.byDate,skuSet={};Object.keys(skuData).forEach(function(k){Object.keys(skuData[k]).forEach(function(s){skuSet[s]=true;});});var allSkus=Object.keys(skuSet).sort();var html='<div class="preview-wrap"><table class="preview-table"><thead><tr><th>Day</th><th>Date</th><th style="text-align:right">SKUs</th><th style="text-align:right">Total Units</th></tr></thead><tbody>';Object.keys(byDate).sort().forEach(function(date){var info=byDate[date],dayD=skuData[info.day+'|'+date]||{},tot=Object.keys(dayD).reduce(function(s,k){return s+dayD[k];},0);html+='<tr><td>'+info.day+'</td><td>'+new Date(date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+'</td><td style="text-align:right">'+Object.keys(dayD).length+'</td><td style="text-align:right">'+fmtUnits(Math.round(tot))+'</td></tr>';});var grand=Object.keys(skuData).reduce(function(s,k){return s+Object.keys(skuData[k]).reduce(function(s2,k2){return s2+skuData[k][k2];},0);},0);html+='<tr class="total-row"><td colspan="2">Total</td><td style="text-align:right">'+allSkus.length+' SKUs</td><td style="text-align:right">'+fmtUnits(grand)+'</td></tr></tbody></table></div><div style="font-size:10px;font-family:var(--mono);color:var(--muted);margin-top:8px">'+Object.keys(byDate).length+' days · <strong style="color:var(--green)">actuals</strong></div>';document.getElementById('actualPreview').innerHTML=html;}
-function publishActuals(){if(!_pendingActuals)return;var btn=document.querySelector('#actualPublishRow button');btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Publishing…';var skuData=_pendingActuals.skuData,byDate=_pendingActuals.byDate,entries=[];Object.keys(byDate).forEach(function(date){var info=byDate[date],skus=skuData[info.day+'|'+date]||{};if(!Object.keys(skus).length)return;var d=new Date(date+'T12:00:00'),jan1=new Date(d.getFullYear(),0,1),wkNum=Math.ceil((((d-jan1)/86400000)+jan1.getDay()+1)/7);entries.push({weekLabel:'Wk '+wkNum+' · '+d.getFullYear(),day:info.day,date:date,skus:skus});});google.script.run.withSuccessHandler(function(result){btn.disabled=false;btn.innerHTML='🚀 Publish Actuals';entries.forEach(function(entry){if(!STATE.demand[entry.weekLabel])STATE.demand[entry.weekLabel]={};STATE.demand[entry.weekLabel][entry.day]={skus:entry.skus,mode:'actual',date:entry.date,publishedBy:(CURRENT_USER&&CURRENT_USER.email)||'',publishedAt:new Date().toISOString()};});if(!CURRENT_WEEK&&entries.length)CURRENT_WEEK=entries[0].weekLabel;document.getElementById('actualPreview').innerHTML='<div class="status status-ok">✓ Published '+result.daysLoaded+' days of actuals</div>';document.getElementById('actualPublishRow').style.display='none';_pendingActuals=null;renderLoadedDemand();renderSequence();}).withFailureHandler(function(err){btn.disabled=false;btn.innerHTML='🚀 Publish Actuals';document.getElementById('actualStatus').innerHTML='<div class="status status-err">'+err.message+'</div>';}).publishActualDays(entries);}
+function publishActuals(){if(!_pendingActuals)return;var btn=document.querySelector('#actualPublishRow button');btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Publishing…';var skuData=_pendingActuals.skuData,byDate=_pendingActuals.byDate,entries=[];Object.keys(byDate).forEach(function(date){var info=byDate[date],skus=skuData[info.day+'|'+date]||{};if(!Object.keys(skus).length)return;var d=new Date(date+'T12:00:00'),jan1=new Date(d.getFullYear(),0,1),fallbackWk=Math.ceil((((d-jan1)/86400000)+jan1.getDay()+1)/7);entries.push({weekLabel:info.weekLabel||('Wk '+fallbackWk+' · '+d.getFullYear()),day:info.day,date:date,skus:skus});});google.script.run.withSuccessHandler(function(result){btn.disabled=false;btn.innerHTML='📥 Load Actuals to Workbench';entries.forEach(function(entry){if(!STATE.demand[entry.weekLabel])STATE.demand[entry.weekLabel]={};STATE.demand[entry.weekLabel][entry.day]={skus:entry.skus,mode:'actual',date:entry.date,publishedBy:(CURRENT_USER&&CURRENT_USER.email)||'',publishedAt:new Date().toISOString()};});if(!CURRENT_WEEK&&entries.length)CURRENT_WEEK=entries[0].weekLabel;document.getElementById('actualPreview').innerHTML='<div class="status status-ok">✓ Loaded '+result.daysLoaded+' days of actuals to Workbench</div>';document.getElementById('actualPublishRow').style.display='none';_pendingActuals=null;renderLoadedDemand();renderSequence();}).withFailureHandler(function(err){btn.disabled=false;btn.innerHTML='📥 Load Actuals to Workbench';document.getElementById('actualStatus').innerHTML='<div class="status status-err">'+err.message+'</div>';}).publishActualDays(entries);}
 
 function renderSkuLibrary(){filterSkuTable();}
 function addSkuManually(){var input=document.getElementById('newSkuInput');var raw=(input.value||'').trim().toUpperCase().replace(/[^A-Z0-9_]/g,'');if(!raw)return;var el=document.getElementById('skuLibStatus');if(STATE.skuLibrary[raw]){document.getElementById('skuSearch').value=raw;filterSkuTable();input.value='';if(el)el.innerHTML='<div class="status status-warn">'+raw+' already in library — highlighted below</div>';return;}STATE.skuLibrary[raw]={active:true,category:'',packageType:'',upm:'',allergens:'',capper:false,nightShift:false,preProcessed:false};input.value='';document.getElementById('skuSearch').value=raw;filterSkuTable();if(el)el.innerHTML='<div class="status status-info">Added '+raw+' — fill in attributes and save</div>';}
