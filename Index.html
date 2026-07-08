@@ -1,5 +1,84 @@
 <!--
   Sequins ✨ — Index.html
+  v0.5.8 — 2026-07-08
+  - Breaks are now draggable within a line (same drag system as SKUs) —
+    dropping one saves its POSITION (slot index), not a clock time. Time is
+    purely derived from wherever it lands, like a SKU's.
+  - Changeover is now skipped for the SKU right after a blocking break
+    (changeover happens during the break instead of adding on top).
+    Floating-team breaks still get a normal changeover — line never stopped.
+  - Disabled breaks show as a small toggle row (not draggable) so they can
+    be turned back on; no longer clutter the timeline while off.
+
+  v0.5.7 — 2026-07-08
+  - Moved "Floating team" control to the right of the day strip (was hard
+    to see below it), bumped its font size.
+  - Break rows: lighter teal background so they stand out more; time input
+    widened (90px→110px) so AM/PM stops clipping.
+  - 30m break now shows 🥗, 15m break keeps ☕.
+
+  v0.5.6 — 2026-07-08
+  - REVERT of v0.5.5's Line Config "Line Breaks" card. Breaks depend on that
+    day's actual sequenced runtime/volume per line, which Line Config has no
+    visibility into — a static per-line setting was the wrong home for it.
+  - Breaks are now computed per line, PER DAY, from that day's real
+    sequenced runtime (ls.totalMin before break insertion). New global
+    defaults live in Sequencing Rules (Admin + Rules Editor, same as
+    everything else there): min runtime before any break applies (default
+    240min), and an offset+duration for each of the 30m/15m breaks (default
+    240min/360min into the shift). A line under the minimum gets no breaks
+    automatically — no manual per-line toggle needed for "shift too short."
+  - Breaks now actually BLOCK line time: enabling one inserts a real gap in
+    that line's timeline and pushes every later SKU's start/end time back
+    (applyLineBreaks(), called right after applyWorkbenchOverrides() in both
+    renderWorkbench() and doPublishPlan() — needs final slot order/timing
+    first). This changes labor-hour and $/unit metrics on the Per-Line
+    Summary table for lines with blocking breaks, since paid break time is
+    now counted as line time, same as changeover time already was.
+  - Add: "Floating team covering breaks today" — a per-day (not per-line)
+    checkbox in Workbench, editable by Admin + Rules Editor. When on, breaks
+    are still computed and shown on the day card (so they're visible for
+    payroll/coverage planning) but do NOT block runtime — the assumption is
+    a backup crew covers the line so it keeps running. Read-only badge on
+    Line Sequence. Stored per week/day in the new sequins_break_overrides
+    section (setDayFloatingTeam in Code.js), independent of demand data.
+  - Add: per-line, per-day break override (enable/disable a specific break,
+    or move its clock time) — same storage section, keyed by line + break
+    id (saveBreakOverride in Code.js). Edit controls only render in
+    Workbench (draggable view) for Admin/Rules Editor; Line Sequence and
+    non-editors see a plain read-only row (or nothing, if a break is off).
+  - Breaks render inline in the line's timeline on the day card, sorted by
+    actual clock time alongside SKU rows — not a separate section — so the
+    schedule reads top-to-bottom as it will actually run.
+  - Scope note: offset defaults (240min/360min) and the single global
+    threshold are a starting point, not derived from a specific policy —
+    flagged as arbitrary and tunable, per Cori's own framing of this ask.
+  - Published plans bake in whichever break/floating-team state was true AT
+    PUBLISH TIME (matches how the rest of the app already treats published
+    snapshots as frozen) — changing rules or day overrides after publishing
+    requires republishing to take effect, same as any other rule change.
+
+  v0.5.5 — 2026-07-08 (REVERTED — see above)
+  - Add: Line Breaks card in Line Config (new "Line Breaks" table, between
+    Active Lines and Sequencing Rules). Per-line 30m + 15m break toggles
+    with editable start time each, matching Pick Tock's break-entry pattern.
+    Gated the same as the rest of Line Config — Admin + Rules Editor only
+    (Cori + Samad) — via the existing saveLineConfig() authorization; no
+    new role or permission logic needed since breaks live on the same
+    lineConfig array/object already saved by that function.
+  - Breaks default to enabled (30m + 15m), start time blank until set —
+    company convention is both breaks unless the shift is too short, and
+    "too short" is a judgment call per line/day, so it's a manual uncheck
+    rather than an automatic threshold. No shift-length auto-disable logic
+    added — flagged as a possible follow-up, not built without asking.
+  - ensureLineBreaks_() backfills a `breaks` object onto any line missing
+    it (old saved configs from before this version), so existing Line
+    Config data doesn't need a migration step.
+  - Scope note: this only adds the config UI. Actually blocking break
+    windows out of the Line Sequence/Workbench timeline (so SKUs sequence
+    around them) is a separate, not-yet-built step — flagged in the
+    project briefing backlog, not done here.
+
   v0.5.4 — 2026-07-07
   - FIX: renderWeekDropdowns() already tried to populate a #wbWeekSel
     element in Workbench, but that element was never actually added to the
@@ -323,7 +402,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         <div class="empty-sub" id="seqNoDataSub">Go to Admin → Load Demand to get started</div>
       </div>
       <div id="seqContent" style="display:none">
-        <div class="card" style="padding:12px 18px"><div class="day-strip" id="seqDayStrip"></div></div>
+        <div class="card" style="padding:12px 18px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap"><div class="day-strip" id="seqDayStrip" style="flex:1"></div><div id="seqFloatingTeam"></div></div>
         <div class="kpi-row" style="grid-template-columns:repeat(6,1fr)">
           <div class="kpi"><div class="kpi-val teal" id="k-skus">—</div><div class="kpi-lbl">SKUs scheduled</div></div>
           <div class="kpi"><div class="kpi-val" id="k-units">—</div><div class="kpi-lbl">Total units</div></div>
@@ -367,7 +446,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         <div class="empty-sub">Go to Admin → Load Demand to get started</div>
       </div>
       <div id="wbContent" style="display:none">
-        <div class="card" style="padding:12px 18px"><div class="day-strip" id="wbDayStrip"></div></div>
+        <div class="card" style="padding:12px 18px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap"><div class="day-strip" id="wbDayStrip" style="flex:1"></div><div id="wbFloatingTeam"></div></div>
         <div class="card" id="wbUnplacedCard" style="display:none;border:2px solid var(--red);background:var(--red-dim)">
           <div class="card-title" style="font-size:13px;color:var(--red)">UNPLACED SKUs - These units are NOT in the plan</div>
           <div id="wbUnplacedList" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
@@ -515,11 +594,11 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 <script>
 var DAYS_ORDER=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
 var DAY_SHORT={Monday:'Mon',Tuesday:'Tue',Wednesday:'Wed',Thursday:'Thu',Friday:'Fri',Saturday:'Sat',Sunday:'Sun'};
-var STATE={demand:{},skuLibrary:{},lineConfig:null,planners:[],overrides:{},sequencingRules:null,publishedPlans:{}};
+var STATE={demand:{},skuLibrary:{},lineConfig:null,planners:[],overrides:{},sequencingRules:null,publishedPlans:{},breakOverrides:{}};
 var CURRENT_USER=null,CURRENT_WEEK=null,CURRENT_DAY=null;
 var _pendingForecast=null,_pendingActuals=null,_pollInterval=null,_lastModified=null;
 var _metricsCollapsed=false;
-var _wbDragSku=null,_wbDragFromLine=null,_pendingMove=null;
+var _wbDragSku=null,_wbDragFromLine=null,_pendingMove=null,_wbDragBreak=null;
 var _wbDropIndex=null,_wbDropLine=null,_wbHoverEl=null,_wbUndoStack=[];
 
 var DEFAULT_LINE_CONFIG=[
@@ -534,7 +613,7 @@ var DEFAULT_LINE_CONFIG=[
   {id:'NIGHT-1',label:'Night Shift 1',type:'night',hc:9,pool:'night',startTime:'00:20',days:{Mon:true,Tue:true,Wed:true,Thu:true,Fri:false,Sat:false,Sun:true}},
   {id:'NIGHT-2',label:'Night Shift 2',type:'night',hc:9,pool:'night',startTime:'00:20',days:{Mon:true,Tue:true,Wed:true,Thu:true,Fri:false,Sat:false,Sun:false}}
 ];
-var DEFAULT_RULES={wrapLine:'LINE-3',sandwichLine:'LINE-2',noUsdaLines:['LINE-6'],greenBeltLine:'LINE-0',greenBeltPackages:['4oz jar'],capperLines:['LINE-6','NIGHT-1'],sausageSesameRule:true,targetRuntimeMin:510,slotCap:14,nightShiftUnitCap:9500,changeoverMin:8.5,hourlyRate:23.75};
+var DEFAULT_RULES={wrapLine:'LINE-3',sandwichLine:'LINE-2',noUsdaLines:['LINE-6'],greenBeltLine:'LINE-0',greenBeltPackages:['4oz jar'],capperLines:['LINE-6','NIGHT-1'],sausageSesameRule:true,targetRuntimeMin:510,slotCap:14,nightShiftUnitCap:9500,changeoverMin:8.5,hourlyRate:23.75,breakMinRuntimeMin:240,break30OffsetMin:240,break30DurationMin:30,break15OffsetMin:360,break15DurationMin:15};
 function getRules(){return STATE.sequencingRules||DEFAULT_RULES;}
 var SLOT_CAP=14,TARGET_MIN=510;
 
@@ -622,26 +701,178 @@ function applyWorkbenchOverrides(lineState){
   Object.keys(touched).forEach(function(lid){var ls=lineState[lid],rm=0;ls.slots.forEach(function(job,idx){var co=idx>0?(rules.changeoverMin||0):0;job.changeoverMin=co;rm+=co;job.startClockMin=ls.startMin+rm;rm+=job.runtimeMin;job.endClockMin=ls.startMin+rm;});ls.totalMin=rm;});
 }
 
+// ─── BREAKS ───────────────────────────────────────────────────────────────
+// Breaks are computed per line, per day, from that day's actual sequenced
+// runtime (not a static Line Config setting) — a short/low-volume day
+// shouldn't carry the same break profile as a full day. The 30m/240min and
+// 15m/360min defaults are arbitrary starting points (tunable in Sequencing
+// Rules), not derived from a specific labor requirement, since Illinois
+// itself only mandates a 20-min meal break for 7.5+ hour shifts — the
+// company's 30+15 convention already exceeds that floor.
+function getBreakOverridesForDay(){
+  return (STATE.breakOverrides&&STATE.breakOverrides[CURRENT_WEEK]&&STATE.breakOverrides[CURRENT_WEEK][CURRENT_DAY])||{};
+}
+function minToTimeStr_(m){m=((Math.round(m)%1440)+1440)%1440;var hh=Math.floor(m/60),mm=m%60;return String(hh).padStart(2,'0')+':'+String(mm).padStart(2,'0');}
+// Where a break would naturally land (as a slot index — "insert before
+// slot[N]") if nobody has dragged it, based on cumulative natural work
+// time (runtime + changeover, no breaks yet) crossing the rule's offset.
+function computeDefaultBreakPosition_(ls,offsetMin,changeoverMin){
+  var elapsed=0;
+  for(var i=0;i<ls.slots.length;i++){
+    var co=i>0?(changeoverMin||0):0;
+    if(elapsed+co>=offsetMin)return i;
+    elapsed+=co+ls.slots[i].runtimeMin;
+  }
+  return ls.slots.length;
+}
+// Returns both breaks' definitions (enabled or not, with a slot position)
+// for a line. Not pre-filtered to "enabled only" — the day-card UI needs
+// to show and re-enable a break that's currently off, not just hide it.
+// A dragged break's position (day-level override) wins over the computed
+// default; enable/disable likewise defaults from runtime unless overridden.
+function computeLineBreakDefs_(lineId,ls,naturalTotalMin,rules,dayOv){
+  var minRuntime=(rules.breakMinRuntimeMin!=null)?rules.breakMinRuntimeMin:240;
+  var lineOv=(dayOv.lines&&dayOv.lines[lineId])||{};
+  var base=[
+    {id:'b30',label:'30m',durationMin:(rules.break30DurationMin!=null?rules.break30DurationMin:30),offsetMin:(rules.break30OffsetMin!=null?rules.break30OffsetMin:240)},
+    {id:'b15',label:'15m',durationMin:(rules.break15DurationMin!=null?rules.break15DurationMin:15),offsetMin:(rules.break15OffsetMin!=null?rules.break15OffsetMin:360)}
+  ];
+  return base.map(function(d){
+    var o=lineOv[d.id]||{};
+    var autoEnabled=naturalTotalMin>=minRuntime;
+    var enabled=(typeof o.enabled==='boolean')?o.enabled:autoEnabled;
+    var position=(typeof o.position==='number')?o.position:computeDefaultBreakPosition_(ls,d.offsetMin,rules.changeoverMin);
+    position=Math.max(0,Math.min(position,ls.slots.length));
+    return{id:d.id,label:d.label,durationMin:d.durationMin,enabled:enabled,position:position};
+  });
+}
+// Mutates lineState: merges enabled breaks into the line's slot sequence
+// at their position, then walks the WHOLE merged sequence once to compute
+// real clock times — so a break's time is purely a function of where it
+// sits, exactly like a SKU's. A blocking break also suppresses the very
+// next job's changeover, since the changeover happens while people are
+// out (floating-team days keep a normal changeover — the line never
+// actually stopped, so nothing "frees up" the changeover time).
+// Must run AFTER applyWorkbenchOverrides (needs final slot order first).
+function applyLineBreaks(lineState,lines,rules,dayOv){
+  dayOv=dayOv||{};
+  var floatingTeam=!!dayOv.floatingTeam;
+  lines.forEach(function(line){
+    var ls=lineState[line.id];if(!ls)return;
+    var naturalMin=0;
+    ls.slots.forEach(function(job,idx){naturalMin+=(idx>0?(rules.changeoverMin||0):0)+job.runtimeMin;});
+    var defs=computeLineBreakDefs_(line.id,ls,naturalMin,rules,dayOv);
+    var enabledDefs=defs.filter(function(d){return d.enabled;}).sort(function(a,b){return a.position-b.position;});
+    var merged=[],bj=0;
+    for(var i=0;i<=ls.slots.length;i++){
+      while(bj<enabledDefs.length&&enabledDefs[bj].position===i){merged.push({type:'break',def:enabledDefs[bj]});bj++;}
+      if(i<ls.slots.length)merged.push({type:'job',job:ls.slots[i]});
+    }
+    var elapsed=0,placedBreaks=[];
+    merged.forEach(function(item,idx){
+      if(item.type==='break'){
+        var st=ls.startMin+elapsed;
+        placedBreaks.push({id:item.def.id,label:item.def.label,durationMin:item.def.durationMin,startClockMin:st,endClockMin:st+item.def.durationMin,blocking:!floatingTeam,enabled:true,position:item.def.position});
+        if(!floatingTeam)elapsed+=item.def.durationMin;
+      }else{
+        var job=item.job,prevBlockingBreak=idx>0&&merged[idx-1].type==='break'&&!floatingTeam;
+        var co=(idx===0||prevBlockingBreak)?0:(rules.changeoverMin||0);
+        job.changeoverMin=co;elapsed+=co;job.startClockMin=ls.startMin+elapsed;elapsed+=job.runtimeMin;job.endClockMin=ls.startMin+elapsed;
+      }
+    });
+    ls.totalMin=elapsed;
+    ls.breaks=placedBreaks;
+    ls.disabledBreaks=defs.filter(function(d){return!d.enabled;});
+  });
+}
+function updateLineBreakOverride(lineId,brk,field,val){
+  if(!CURRENT_WEEK||!CURRENT_DAY)return;
+  google.script.run.withSuccessHandler(function(){
+    if(!STATE.breakOverrides)STATE.breakOverrides={};
+    if(!STATE.breakOverrides[CURRENT_WEEK])STATE.breakOverrides[CURRENT_WEEK]={};
+    if(!STATE.breakOverrides[CURRENT_WEEK][CURRENT_DAY])STATE.breakOverrides[CURRENT_WEEK][CURRENT_DAY]={lines:{}};
+    var dov=STATE.breakOverrides[CURRENT_WEEK][CURRENT_DAY];
+    if(!dov.lines)dov.lines={};
+    if(!dov.lines[lineId])dov.lines[lineId]={};
+    if(!dov.lines[lineId][brk])dov.lines[lineId][brk]={};
+    dov.lines[lineId][brk][field]=val;
+    renderWorkbench();
+  }).withFailureHandler(function(err){alert('Failed to save break override: '+err.message);}).saveBreakOverride(CURRENT_WEEK,CURRENT_DAY,lineId,brk,field,val);
+}
+function updateFloatingTeam(val){
+  if(!CURRENT_WEEK||!CURRENT_DAY)return;
+  google.script.run.withSuccessHandler(function(){
+    if(!STATE.breakOverrides)STATE.breakOverrides={};
+    if(!STATE.breakOverrides[CURRENT_WEEK])STATE.breakOverrides[CURRENT_WEEK]={};
+    if(!STATE.breakOverrides[CURRENT_WEEK][CURRENT_DAY])STATE.breakOverrides[CURRENT_WEEK][CURRENT_DAY]={lines:{}};
+    STATE.breakOverrides[CURRENT_WEEK][CURRENT_DAY].floatingTeam=val;
+    renderWorkbench();renderFloatingTeamControl('wbFloatingTeam');
+  }).withFailureHandler(function(err){alert('Failed to save floating team setting: '+err.message);}).setDayFloatingTeam(CURRENT_WEEK,CURRENT_DAY,val);
+}
+function renderFloatingTeamControl(containerId){
+  var el=document.getElementById(containerId);if(!el)return;
+  var dov=getBreakOverridesForDay(),on=!!dov.floatingTeam,canEdit=!!window._canEditRules;
+  if(!CURRENT_WEEK||!CURRENT_DAY){el.innerHTML='';return;}
+  if(canEdit&&containerId==='wbFloatingTeam'){
+    el.innerHTML='<label style="display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:13px;color:var(--muted);cursor:pointer;text-align:right"><input type="checkbox" '+(on?'checked':'')+' style="accent-color:var(--teal);width:15px;height:15px" onchange="updateFloatingTeam(this.checked)"> Floating team covering breaks today</label>';
+  } else {
+    el.innerHTML=on?'<span style="font-family:var(--mono);font-size:13px;color:var(--teal)">🔁 Floating team covering breaks today</span>':'';
+  }
+}
+function buildJobRow_(line,job,i,draggable,rules){
+  var tag=job.isUSDA?'<span class="sku-tag tag-usda">USDA</span>':job.pool==='wrap'?'<span class="sku-tag tag-wrap">wrap</span>':job.pool==='sandwich'?'<span class="sku-tag tag-sand">sand</span>':'';
+  var preTag=job.isPreProcessed?'<span class="preproc-badge" title="Pre-processed">P</span>':'';
+  var ovTag=job.overridden?'<span class="sku-tag" style="background:var(--amber-dim);color:var(--amber)" title="Moved by '+(job.overrideMovedBy||'')+(job.overrideNote?' — '+job.overrideNote:'')+'">moved</span>':'';
+  var isfall=draggable&&rules&&((job.pool==='wrap'&&line.id!==rules.wrapLine)||(job.pool==='sandwich'&&line.id!==rules.sandwichLine)||(job.pool==='night'&&line.type!=='night'));
+  var ftag=isfall?'<span class="sku-tag" style="background:rgba(250,204,21,.15);color:#facc15">&#9889;</span>':'';
+  var rc=job.overridden?'sku-row overridden':'sku-row';
+  var tl='<div class="sku-time"><strong>'+fmtClock(job.startClockMin)+'</strong> → <strong>'+fmtClock(job.endClockMin)+'</strong></div>';
+  if(draggable){var ss=job.sku.replace(/'/g,"\\'");return'<div class="'+rc+'" draggable="true" ondragstart="wbDragStart(event,\''+ss+'\',\''+line.id+'\')" ondragend="wbDragEnd(event)" ondragover="wbRowDragOver(event,\''+line.id+'\','+i+')" ondragleave="wbRowDragLeave(event)"><div class="sku-row-top"><span class="sku-seq">'+(i+1)+'</span><span class="sku-name" title="'+job.sku+'">'+job.sku+'</span>'+preTag+tag+ovTag+ftag+'<span class="sku-units">'+fmtUnits(job.qty)+'</span></div>'+tl+'</div>';}
+  return'<div class="'+rc+'"><div class="sku-row-top"><span class="sku-seq">'+(i+1)+'</span><span class="sku-name" title="'+job.sku+'">'+job.sku+'</span>'+preTag+tag+'<span class="sku-units">'+fmtUnits(job.qty)+'</span></div>'+tl+'</div>';
+}
+// Enabled breaks are draggable, same as SKU rows — dropping one at a new
+// position saves that position as the day override; time is never typed,
+// only ever derived from wherever it lands (see applyLineBreaks). Only
+// draggable (Workbench) + Rules Editor/Admin get drag handles and the
+// on/off checkbox; everyone else sees a plain read-only row.
+function buildBreakRow_(lineId,b,canEdit,draggable){
+  var timeStr=fmtClock(b.startClockMin)+' → '+fmtClock(b.endClockMin);
+  var note=!b.blocking?' <span style="color:var(--muted)">(floating team — line stays running)</span>':'';
+  var icon=b.id==='b30'?'🥗':'☕';
+  var rowStyle='background:rgba(45,212,191,.14);border-left:2px solid var(--teal)';
+  if(!canEdit){
+    return'<div class="sku-row" style="'+rowStyle+'"><div class="sku-row-top"><span class="sku-name" style="color:var(--teal)">'+icon+' '+b.label+' Break</span></div><div class="sku-time"><strong>'+timeStr+'</strong>'+note+'</div></div>';
+  }
+  var checkbox='<label style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--muted)"><input type="checkbox" checked style="accent-color:var(--teal)" onchange="updateLineBreakOverride(\''+lineId+'\',\''+b.id+'\',\'enabled\',this.checked)"> on</label>';
+  if(draggable){
+    return'<div class="sku-row" style="'+rowStyle+'" draggable="true" ondragstart="wbBreakDragStart(event,\''+lineId+'\',\''+b.id+'\')" ondragend="wbDragEnd(event)" ondragover="wbBreakRowDragOver(event,\''+lineId+'\','+b.position+')" ondragleave="wbRowDragLeave(event)"><div class="sku-row-top" style="align-items:center"><span class="sku-name" style="color:var(--teal)">'+icon+' '+b.label+' Break</span>'+checkbox+'</div><div class="sku-time"><strong>'+timeStr+'</strong>'+note+'</div></div>';
+  }
+  return'<div class="sku-row" style="'+rowStyle+'"><div class="sku-row-top" style="align-items:center"><span class="sku-name" style="color:var(--teal)">'+icon+' '+b.label+' Break</span>'+checkbox+'</div><div class="sku-time"><strong>'+timeStr+'</strong>'+note+'</div></div>';
+}
+function buildOffBreakRow_(lineId,d){
+  var icon=d.id==='b30'?'🥗':'☕';
+  return'<div class="sku-row" style="background:rgba(148,163,184,.05);border-left:2px solid var(--border);opacity:.65"><div class="sku-row-top" style="align-items:center"><span class="sku-name" style="color:var(--muted)">'+icon+' '+d.label+' Break <span style="color:var(--muted)">(off)</span></span><label style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--muted)"><input type="checkbox" style="accent-color:var(--teal)" onchange="updateLineBreakOverride(\''+lineId+'\',\''+d.id+'\',\'enabled\',this.checked)"> on</label></div></div>';
+}
+
 function buildLineCards(lines,lineState,draggable,rules){
+  var canEditBreaks=draggable&&!!window._canEditRules;
   return lines.map(function(line){
-    var ls=lineState[line.id],slots=(ls&&ls.slots)||[];
+    var ls=lineState[line.id],slots=(ls&&ls.slots)||[],breaks=(ls&&ls.breaks)||[],offBreaks=(ls&&ls.disabledBreaks)||[];
     var badge=line.type==='night'?'<span class="line-badge badge-night">night</span>':line.type==='capper'?'<span class="line-badge badge-capper">capper</span>':'<span class="line-badge badge-day">day</span>';
     var pct=ls?Math.round(ls.totalMin/TARGET_MIN*100):0,pctColor=pct>95?'var(--amber)':pct>60?'var(--teal)':'var(--muted)';
-    var skuRows=slots.map(function(job,i){
-      var tag=job.isUSDA?'<span class="sku-tag tag-usda">USDA</span>':job.pool==='wrap'?'<span class="sku-tag tag-wrap">wrap</span>':job.pool==='sandwich'?'<span class="sku-tag tag-sand">sand</span>':'';
-      var preTag=job.isPreProcessed?'<span class="preproc-badge" title="Pre-processed">P</span>':'';
-      var ovTag=job.overridden?'<span class="sku-tag" style="background:var(--amber-dim);color:var(--amber)" title="Moved by '+(job.overrideMovedBy||'')+(job.overrideNote?' — '+job.overrideNote:'')+'">moved</span>':'';
-      var isfall=draggable&&rules&&((job.pool==='wrap'&&line.id!==rules.wrapLine)||(job.pool==='sandwich'&&line.id!==rules.sandwichLine)||(job.pool==='night'&&line.type!=='night'));
-      var ftag=isfall?'<span class="sku-tag" style="background:rgba(250,204,21,.15);color:#facc15">&#9889;</span>':'';
-      var rc=job.overridden?'sku-row overridden':'sku-row';
-      var tl='<div class="sku-time"><strong>'+fmtClock(job.startClockMin)+'</strong> → <strong>'+fmtClock(job.endClockMin)+'</strong></div>';
-      if(draggable){var ss=job.sku.replace(/'/g,"\\'");return'<div class="'+rc+'" draggable="true" ondragstart="wbDragStart(event,\''+ss+'\',\''+line.id+'\')" ondragend="wbDragEnd(event)" ondragover="wbRowDragOver(event,\''+line.id+'\','+i+')" ondragleave="wbRowDragLeave(event)"><div class="sku-row-top"><span class="sku-seq">'+(i+1)+'</span><span class="sku-name" title="'+job.sku+'">'+job.sku+'</span>'+preTag+tag+ovTag+ftag+'<span class="sku-units">'+fmtUnits(job.qty)+'</span></div>'+tl+'</div>';}
-      return'<div class="'+rc+'"><div class="sku-row-top"><span class="sku-seq">'+(i+1)+'</span><span class="sku-name" title="'+job.sku+'">'+job.sku+'</span>'+preTag+tag+'<span class="sku-units">'+fmtUnits(job.qty)+'</span></div>'+tl+'</div>';
-    }).join('');
+    var breaksByPos={};
+    breaks.forEach(function(b){(breaksByPos[b.position]=breaksByPos[b.position]||[]).push(b);});
+    var rowsHtml=[];
+    for(var i=0;i<=slots.length;i++){
+      if(breaksByPos[i])breaksByPos[i].forEach(function(b){rowsHtml.push(buildBreakRow_(line.id,b,canEditBreaks,draggable));});
+      if(i<slots.length)rowsHtml.push(buildJobRow_(line,slots[i],i,draggable,rules));
+    }
+    if(canEditBreaks)offBreaks.forEach(function(d){rowsHtml.push(buildOffBreakRow_(line.id,d));});
+    var skuRows=rowsHtml.join('');
     var footer='';
     if(ls&&ls.totalUnits){footer='<div style="padding:6px 14px;border-top:1px solid var(--border);font-family:var(--mono);font-size:10px;color:var(--muted)"><div style="display:flex;justify-content:space-between;margin-bottom:4px"><span>'+slots.length+' SKUs</span><span style="color:var(--teal)">'+fmtUnits(ls.totalUnits)+' units</span><span>'+Math.round(ls.totalMin)+'m run</span></div><div style="display:flex;justify-content:space-between"><span>'+fmtClock(ls.startMin)+' → '+fmtClock(ls.startMin+ls.totalMin)+'</span><span>HC '+ls.hc+'</span></div></div>';}
     var ba=draggable?' id="wb-line-'+line.id+'" ondragover="wbDragOver(event,\''+line.id+'\')" ondragleave="wbDragLeave(event)" ondrop="wbDrop(event,\''+line.id+'\')"':'';
-    return'<div class="line-card"><div class="line-card-header"><span class="line-name">'+line.label+'</span><div style="display:flex;align-items:center;gap:8px"><span style="font-family:var(--mono);font-size:10px;color:'+pctColor+'">'+pct+'%</span>'+badge+'</div></div><div class="line-card-body"'+ba+'>'+(slots.length?skuRows:'<div class="line-empty">no SKUs assigned</div>')+'</div>'+footer+'</div>';
+    return'<div class="line-card"><div class="line-card-header"><span class="line-name">'+line.label+'</span><div style="display:flex;align-items:center;gap:8px"><span style="font-family:var(--mono);font-size:10px;color:'+pctColor+'">'+pct+'%</span>'+badge+'</div></div><div class="line-card-body"'+ba+'>'+(rowsHtml.length?skuRows:'<div class="line-empty">no SKUs assigned</div>')+'</div>'+footer+'</div>';
   }).join('');
 }
 
@@ -658,8 +889,9 @@ function checkLineViolations(job,lineId,lineState,rules,lcById){
   return v;
 }
 
-function wbDragStart(e,sku,fromLine){_wbDragSku=sku;_wbDragFromLine=fromLine;_wbDropIndex=null;_wbDropLine=null;e.target.classList.add('dragging');e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',sku);}
+function wbDragStart(e,sku,fromLine){_wbDragSku=sku;_wbDragFromLine=fromLine;_wbDragBreak=null;_wbDropIndex=null;_wbDropLine=null;e.target.classList.add('dragging');e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',sku);}
 function wbDragEnd(e){e.target.classList.remove('dragging');clearWbDropIndicator();}
+function wbBreakDragStart(e,lineId,breakId){_wbDragBreak={lineId:lineId,breakId:breakId};_wbDragSku=null;_wbDragFromLine=null;_wbDropIndex=null;_wbDropLine=null;e.target.classList.add('dragging');e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',breakId);}
 function wbDragOver(e,lineId){
   e.preventDefault();e.dataTransfer.dropEffect='move';e.currentTarget.classList.add('drag-over');
   if(e.target===e.currentTarget){
@@ -675,12 +907,27 @@ function wbRowDragOver(e,lineId,idx){
   row.classList.toggle('drop-above',before);row.classList.toggle('drop-below',!before);
   _wbHoverEl=row;_wbDropLine=lineId;_wbDropIndex=before?idx:idx+1;
 }
+// Breaks have no slot width of their own — hovering anywhere on a break
+// row just targets its own position, no before/after split needed.
+function wbBreakRowDragOver(e,lineId,position){
+  e.preventDefault();e.dataTransfer.dropEffect='move';
+  var row=e.currentTarget;
+  if(_wbHoverEl&&_wbHoverEl!==row)_wbHoverEl.classList.remove('drop-above','drop-below');
+  row.classList.add('drop-above');
+  _wbHoverEl=row;_wbDropLine=lineId;_wbDropIndex=position;
+}
 function wbRowDragLeave(e){e.currentTarget.classList.remove('drop-above','drop-below');}
 function clearWbDropIndicator(){if(_wbHoverEl){_wbHoverEl.classList.remove('drop-above','drop-below');_wbHoverEl=null;}_wbDropIndex=null;_wbDropLine=null;}
 function wbDrop(e,toLine){
   e.preventDefault();e.currentTarget.classList.remove('drag-over');
   var targetIndex=(_wbDropLine===toLine)?_wbDropIndex:null;
   clearWbDropIndicator();
+  if(_wbDragBreak){
+    var db=_wbDragBreak;_wbDragBreak=null;
+    if(db.lineId!==toLine||targetIndex===null)return;
+    commitBreakMove(db.lineId,db.breakId,targetIndex);
+    return;
+  }
   if(!_wbDragSku||!_wbDragFromLine)return;
   var stash=window._wbLastResult;if(!stash){_wbDragSku=null;_wbDragFromLine=null;return;}
   var lineState=stash.lineState,rules=stash.rules,lcById=stash.lineConfigById;
@@ -697,6 +944,11 @@ function wbDrop(e,toLine){
   var violations=checkLineViolations(job,toLine,lineState,rules,lcById);
   if(violations.length===0){commitMove(sku,fromLine,toLine,violations,'',targetIndex);}
   else{_pendingMove={sku:sku,fromLine:fromLine,toLine:toLine,violations:violations,position:targetIndex};openMoveModal(_pendingMove);}
+}
+// Break position is just the day-level override's 'position' field —
+// same storage path as enable/disable, saveBreakOverride is field-agnostic.
+function commitBreakMove(lineId,breakId,position){
+  updateLineBreakOverride(lineId,breakId,'position',position);
 }
 function commitMove(sku,fromLine,toLine,violations,note,position){
   var existing=STATE.overrides[CURRENT_WEEK]&&STATE.overrides[CURRENT_WEEK][CURRENT_DAY]&&STATE.overrides[CURRENT_WEEK][CURRENT_DAY][sku];
@@ -767,7 +1019,7 @@ function renderSequence(){
   document.getElementById('seqNoData').style.display=hasDemand?'none':'';
   document.getElementById('seqContent').style.display=hasDemand?'':'none';
   if(!hasDemand)return;
-  renderDayStrip('seqDayStrip');renderWeekDropdowns();
+  renderDayStrip('seqDayStrip');renderWeekDropdowns();renderFloatingTeamControl('seqFloatingTeam');
   var days=getDays(CURRENT_WEEK);if(!CURRENT_DAY||days.indexOf(CURRENT_DAY)===-1)CURRENT_DAY=days[0];
   var dayData=STATE.demand[CURRENT_WEEK]&&STATE.demand[CURRENT_WEEK][CURRENT_DAY],mb=document.getElementById('seqModeBadge');
   if(dayData){mb.style.display='';mb.textContent=dayData.mode;mb.className='mode-badge mode-'+dayData.mode;}else{mb.style.display='none';}
@@ -809,7 +1061,7 @@ function renderWorkbench(){
   document.getElementById('wbNoData').style.display=hasDemand?'none':'';
   document.getElementById('wbContent').style.display=hasDemand?'':'none';
   if(!hasDemand)return;
-  renderDayStrip('wbDayStrip');renderWeekDropdowns();
+  renderDayStrip('wbDayStrip');renderWeekDropdowns();renderFloatingTeamControl('wbFloatingTeam');
   var days=getDays(CURRENT_WEEK);if(!CURRENT_DAY||days.indexOf(CURRENT_DAY)===-1)CURRENT_DAY=days[0];
   var dayData=STATE.demand[CURRENT_WEEK]&&STATE.demand[CURRENT_WEEK][CURRENT_DAY],mb=document.getElementById('wbModeBadge');
   if(dayData){mb.style.display='';mb.textContent=dayData.mode;mb.className='mode-badge mode-'+dayData.mode;}else{mb.style.display='none';}
@@ -821,6 +1073,7 @@ function renderWorkbench(){
   var result=runSequencer();if(!result)return;
   var lineState=result.lineState,lines=result.lines,rules=result.rules,jobs=result.jobs;
   applyWorkbenchOverrides(lineState);
+  applyLineBreaks(lineState,lines,rules,getBreakOverridesForDay());
   var lcById={};lines.forEach(function(l){lcById[l.id]=l;});
   document.getElementById('wbLineCards').innerHTML=buildLineCards(lines,lineState,true,rules);
   renderLineMetricsTable('wbLineMetricsTable',lineState,lines);
@@ -863,7 +1116,7 @@ function renderRulesAccess(){var ce=!!window._canEditRules,sb=document.getElemen
 function renderRules(){
   var rules=getRules(),ce=!!window._canEditRules,el=document.getElementById('rulesBody');if(!el)return;
   function field(label,key,val,type){if(!ce)return'<div style="display:flex;gap:8px;align-items:center"><span style="color:var(--muted);width:220px">'+label+'</span><span style="color:var(--text)">'+(Array.isArray(val)?val.join(', '):String(val))+'</span></div>';if(type==='bool')return'<div style="display:flex;gap:8px;align-items:center"><span style="color:var(--muted);width:220px">'+label+'</span><input type="checkbox" '+(val?'checked':'')+' style="accent-color:var(--teal);width:14px;height:14px" onchange="updateRule(\''+key+'\',this.checked)"></div>';if(type==='list')return'<div style="display:flex;gap:8px;align-items:center"><span style="color:var(--muted);width:220px">'+label+'</span><input class="inline-input" value="'+(Array.isArray(val)?val.join(', '):val)+'" onchange="updateRuleList(\''+key+'\',this.value)" style="width:200px"></div>';return'<div style="display:flex;gap:8px;align-items:center"><span style="color:var(--muted);width:220px">'+label+'</span><input class="inline-input" type="'+(type==='num'?'number':'text')+'" value="'+val+'" onchange="updateRule(\''+key+'\','+(type==='num'?'parseFloat(this.value)':'this.value')+')" style="width:120px"></div>';}
-  el.innerHTML=[field('Wrap line','wrapLine',rules.wrapLine,'text'),field('Sandwich line','sandwichLine',rules.sandwichLine,'text'),field('No USDA on lines','noUsdaLines',rules.noUsdaLines,'list'),field('Green Belt line','greenBeltLine',rules.greenBeltLine,'text'),field('Green Belt packages','greenBeltPackages',rules.greenBeltPackages,'list'),field('Capper lines','capperLines',rules.capperLines,'list'),field('Sausage/sesame rule','sausageSesameRule',rules.sausageSesameRule,'bool'),field('Target runtime (min)','targetRuntimeMin',rules.targetRuntimeMin,'num'),field('Slot cap (SKUs/line)','slotCap',rules.slotCap,'num'),field('Night shift unit cap','nightShiftUnitCap',rules.nightShiftUnitCap,'num'),field('Changeover time (min)','changeoverMin',rules.changeoverMin,'num'),field('Hourly labor rate ($)','hourlyRate',rules.hourlyRate,'num')].join('');
+  el.innerHTML=[field('Wrap line','wrapLine',rules.wrapLine,'text'),field('Sandwich line','sandwichLine',rules.sandwichLine,'text'),field('No USDA on lines','noUsdaLines',rules.noUsdaLines,'list'),field('Green Belt line','greenBeltLine',rules.greenBeltLine,'text'),field('Green Belt packages','greenBeltPackages',rules.greenBeltPackages,'list'),field('Capper lines','capperLines',rules.capperLines,'list'),field('Sausage/sesame rule','sausageSesameRule',rules.sausageSesameRule,'bool'),field('Target runtime (min)','targetRuntimeMin',rules.targetRuntimeMin,'num'),field('Slot cap (SKUs/line)','slotCap',rules.slotCap,'num'),field('Night shift unit cap','nightShiftUnitCap',rules.nightShiftUnitCap,'num'),field('Changeover time (min)','changeoverMin',rules.changeoverMin,'num'),field('Hourly labor rate ($)','hourlyRate',rules.hourlyRate,'num'),field('Min runtime for breaks (min)','breakMinRuntimeMin',rules.breakMinRuntimeMin,'num'),field('30m break offset (min into shift)','break30OffsetMin',rules.break30OffsetMin,'num'),field('30m break duration (min)','break30DurationMin',rules.break30DurationMin,'num'),field('15m break offset (min into shift)','break15OffsetMin',rules.break15OffsetMin,'num'),field('15m break duration (min)','break15DurationMin',rules.break15DurationMin,'num')].join('');
 }
 function updateRule(key,val){if(!STATE.sequencingRules)STATE.sequencingRules=JSON.parse(JSON.stringify(DEFAULT_RULES));STATE.sequencingRules[key]=val;}
 function updateRuleList(key,val){if(!STATE.sequencingRules)STATE.sequencingRules=JSON.parse(JSON.stringify(DEFAULT_RULES));STATE.sequencingRules[key]=val.split(',').map(function(s){return s.trim();}).filter(function(s){return!!s;});}
@@ -875,7 +1128,7 @@ function removeAdmin(email){google.script.run.withSuccessHandler(renderUsers).wi
 function addPlanner(){var email=document.getElementById('newPlannerEmail').value.trim().toLowerCase();if(email.indexOf('@')===-1)return;if(STATE.planners.indexOf(email)===-1)STATE.planners.push(email);google.script.run.withSuccessHandler(function(){document.getElementById('newPlannerEmail').value='';renderUsers();}).withFailureHandler(function(){}).savePlanners(STATE.planners);}
 function removePlanner(email){STATE.planners=STATE.planners.filter(function(e){return e!==email;});google.script.run.withSuccessHandler(renderUsers).withFailureHandler(function(){}).savePlanners(STATE.planners);}
 
-function startPolling(){if(_pollInterval)return;_pollInterval=setInterval(function(){google.script.run.withSuccessHandler(function(ts){if(!ts||ts===_lastModified)return;_lastModified=ts;document.getElementById('syncIndicator').style.display='';google.script.run.withSuccessHandler(function(s){document.getElementById('syncIndicator').style.display='none';if(!s)return;if(s.demand)STATE.demand=s.demand;if(s.skuLibrary)STATE.skuLibrary=s.skuLibrary;if(s.lineConfig)STATE.lineConfig=s.lineConfig;if(s.planners)STATE.planners=s.planners;if(s.overrides)STATE.overrides=s.overrides;if(s.sequencingRules)STATE.sequencingRules=s.sequencingRules;if(s.publishedPlans)STATE.publishedPlans=s.publishedPlans;renderSequence();}).withFailureHandler(function(){document.getElementById('syncIndicator').style.display='none';}).getState();}).withFailureHandler(function(){}).getLastModified();},8000);}
+function startPolling(){if(_pollInterval)return;_pollInterval=setInterval(function(){google.script.run.withSuccessHandler(function(ts){if(!ts||ts===_lastModified)return;_lastModified=ts;document.getElementById('syncIndicator').style.display='';google.script.run.withSuccessHandler(function(s){document.getElementById('syncIndicator').style.display='none';if(!s)return;if(s.demand)STATE.demand=s.demand;if(s.skuLibrary)STATE.skuLibrary=s.skuLibrary;if(s.lineConfig)STATE.lineConfig=s.lineConfig;if(s.planners)STATE.planners=s.planners;if(s.overrides)STATE.overrides=s.overrides;if(s.sequencingRules)STATE.sequencingRules=s.sequencingRules;if(s.publishedPlans)STATE.publishedPlans=s.publishedPlans;if(s.breakOverrides)STATE.breakOverrides=s.breakOverrides;renderSequence();}).withFailureHandler(function(){document.getElementById('syncIndicator').style.display='none';}).getState();}).withFailureHandler(function(){}).getLastModified();},8000);}
 
 function publishPlan(){
   var dayData=STATE.demand[CURRENT_WEEK]&&STATE.demand[CURRENT_WEEK][CURRENT_DAY];
@@ -892,6 +1145,7 @@ function confirmPublishPlan(){
 function doPublishPlan(){
   var result=runSequencer();if(!result)return;
   applyWorkbenchOverrides(result.lineState);
+  applyLineBreaks(result.lineState,result.lines,result.rules,getBreakOverridesForDay());
   var snap={lineState:result.lineState,lines:result.lines,jobs:result.jobs,unplaced:result.unplaced,publishedBy:(CURRENT_USER&&CURRENT_USER.email)||'',publishedAt:new Date().toISOString()};
   if(!STATE.publishedPlans)STATE.publishedPlans={};
   if(!STATE.publishedPlans[CURRENT_WEEK])STATE.publishedPlans[CURRENT_WEEK]={};
@@ -1039,6 +1293,7 @@ window.onload=function(){
       if(s.overrides)STATE.overrides=s.overrides;
       if(s.sequencingRules)STATE.sequencingRules=s.sequencingRules;
       if(s.publishedPlans)STATE.publishedPlans=s.publishedPlans;
+      if(s.breakOverrides)STATE.breakOverrides=s.breakOverrides;
       _lastModified=s.lastModified||null;
     }
     var weeks=getWeeks();

@@ -3,6 +3,18 @@
  * Assembly line sequencing agent for Farmer's Fridge
  * OPSICLE vNext
  *
+ * v0.4.17 — 2026-07-08
+ * - Add: sequins_break_overrides storage section + saveBreakOverride() and
+ *   setDayFloatingTeam(), backing Index.html's new per-day break feature
+ *   (breaks computed from that day's real runtime, not a static Line
+ *   Config setting — see Index.html v0.5.6 changelog for the full design).
+ *   This section only stores day-level EXCEPTIONS (a line's break toggled/
+ *   moved for one day, or a day-wide "floating team" flag) — the actual
+ *   break computation happens client-side. Gated identically to Line
+ *   Config (isAdmin || canEditRules) since it's the same tier of
+ *   floor-affecting change. Stored separately from demand, so demand
+ *   reloads/clears never touch it.
+ *
  * v0.4.16 — 2026-07-07
  * - FIX: "You have exceeded the property storage quota" on publishing Wk 28's
  *   now-complete 7-day forecast. Total Script Properties usage has been
@@ -233,7 +245,8 @@ const STATE_KEYS = {
   lineConfig:      'sequins_line_config',
   overrides:       'sequins_workbench_overrides',
   publishedPlans:  'sequins_published_plans',
-  planners:        'sequins_planners'
+  planners:        'sequins_planners',
+  breakOverrides:  'sequins_break_overrides'
 };
 // Demand is stored one Script Property per day (sequins_demand__<week>__
 // <day>), with history in a separate per-day key, tracked by this index.
@@ -564,6 +577,7 @@ function getState() {
     overrides:       getSection_(STATE_KEYS.overrides) || {},
     publishedPlans:  getSection_(STATE_KEYS.publishedPlans) || {},
     planners:        getSection_(STATE_KEYS.planners) || [],
+    breakOverrides:  getSection_(STATE_KEYS.breakOverrides) || {},
     sequencingRules: getSection_(STATE_KEYS.sequencingRules),
     lastModified:    meta.lastModified || null
   };
@@ -906,6 +920,42 @@ function saveSequencingRules(rules) {
   if (!user.isAdmin && !user.canEditRules) throw new Error('Not authorized');
   setSection_(STATE_KEYS.sequencingRules, rules);
   writeAuditLog_(user.email, 'save_rules', '', '', JSON.stringify(rules));
+  return { ok: true };
+}
+
+// ─── BREAK OVERRIDES (per week/day, per line) ─────────────────────────────────
+// Breaks are computed client-side per line/day from that day's real
+// sequenced runtime (see Index.html applyLineBreaks) — this section only
+// stores the day-level EXCEPTIONS to that computation: a specific line's
+// break toggled on/off or moved for one day, or the whole day running with
+// a floating team so breaks don't block line time. Gated identically to
+// Line Config (Admin + Rules Editor) since this is the same tier of
+// consequential, floor-affecting change. Stored separately from demand so
+// it's untouched by demand reloads/clears.
+function saveBreakOverride(weekLabel, day, lineId, brk, field, val) {
+  const user = getCurrentUser();
+  if (!user.isAdmin && !user.canEditRules) throw new Error('Not authorized');
+  const overrides = getSection_(STATE_KEYS.breakOverrides) || {};
+  if (!overrides[weekLabel]) overrides[weekLabel] = {};
+  if (!overrides[weekLabel][day]) overrides[weekLabel][day] = { lines: {} };
+  if (!overrides[weekLabel][day].lines) overrides[weekLabel][day].lines = {};
+  if (!overrides[weekLabel][day].lines[lineId]) overrides[weekLabel][day].lines[lineId] = {};
+  if (!overrides[weekLabel][day].lines[lineId][brk]) overrides[weekLabel][day].lines[lineId][brk] = {};
+  overrides[weekLabel][day].lines[lineId][brk][field] = val;
+  setSection_(STATE_KEYS.breakOverrides, overrides);
+  writeAuditLog_(user.email, 'save_break_override', weekLabel, day, lineId + ' ' + brk + '.' + field + '=' + val);
+  return { ok: true };
+}
+
+function setDayFloatingTeam(weekLabel, day, val) {
+  const user = getCurrentUser();
+  if (!user.isAdmin && !user.canEditRules) throw new Error('Not authorized');
+  const overrides = getSection_(STATE_KEYS.breakOverrides) || {};
+  if (!overrides[weekLabel]) overrides[weekLabel] = {};
+  if (!overrides[weekLabel][day]) overrides[weekLabel][day] = { lines: {} };
+  overrides[weekLabel][day].floatingTeam = !!val;
+  setSection_(STATE_KEYS.breakOverrides, overrides);
+  writeAuditLog_(user.email, 'set_floating_team', weekLabel, day, String(!!val));
   return { ok: true };
 }
 
