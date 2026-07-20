@@ -3,6 +3,29 @@
  * Assembly line sequencing agent for Farmer's Fridge
  * OPSICLE vNext
  *
+ * v0.4.19 — 2026-07-20
+ * - Add: sequins_scenarios storage section + saveScenarios(weekLabel, day,
+ *   dayScenarios). Backs Index.html's new staffing-scenario tabs (v0.5.18) —
+ *   a scenario is just {id, name, excludedLines:[lineId,...]}, per day, so
+ *   planners can preview "what if Line-6 is down" against the same demand
+ *   before publishing. Whole day's {list, activeId} object replaces on save,
+ *   same as the break-overrides pattern. Gated Admin/Planner, same tier as
+ *   publish and Workbench overrides.
+ *
+ * v0.4.18 — 2026-07-09
+ * - Add: labelNumberVersion sync onto the SKU Library from the "Label
+ *   Versions & Updates" sheet's "Label Version Log" tab, keyed by SKU,
+ *   filtered to rows whose Label Status contains ACTIVE or NEW. Stored
+ *   value combines Version Number + Label Number (e.g. "R001 · 35804-001");
+ *   SKUs with no matching row get "NO ACTIVE LABEL" so it's impossible to
+ *   miss. Backend only this pass — no Index.html changes, no red-flag
+ *   rendering yet (that's next). Runs via a daily time-driven trigger
+ *   (installLabelVersionSyncTrigger, run once from the Apps Script editor
+ *   to install) — Cori explicitly signed off on this specific automatic
+ *   behavior on 2026-07-09 (daily cadence, read-only source, no deletion).
+ *   Also added runLabelVersionSyncNow() for an admin-triggered on-demand
+ *   resync without waiting for the next scheduled run.
+ *
  * v0.4.17 — 2026-07-08
  * - Add: sequins_break_overrides storage section + saveBreakOverride() and
  *   setDayFloatingTeam(), backing Index.html's new per-day break feature
@@ -232,6 +255,8 @@ const MENU_LIBRARY_SHEET_ID = '1Exdh-emJxD7TohJ3IzjIQZDP3siPgjuVXhp3J7Gw2Ik'; //
 const MENU_LIBRARY_TAB      = 'Full Menu Summary';  // B=Category, C=SKU Name, L=Package, M=Allergens
 const PROCESSING_SHEET_ID   = '1v_C2ZUR9_PjTqCO4XU16x2oRTvmvpdT43cs0d3tyh54'; // FPLModel Engine
 const PROCESSING_TAB        = 'Processing Complexity'; // B=SKU Name, E=90 Day Duration/Unit
+const LABEL_LOG_SHEET_ID    = '17rfAQdNYSki1ndD5QzA8MACUmClGotmje4GccXfBMws'; // Label Versions & Updates
+const LABEL_LOG_TAB         = 'Label Version Log'; // A=SKU, B=SKU Name, C=Version Number, D=Label Number, E=Label File, F=Label Status
 
 // ─── STORAGE ──────────────────────────────────────────────────────────────────
 // v0.4.5 split sequins_state into per-concern keys so a bad write from one
@@ -246,7 +271,8 @@ const STATE_KEYS = {
   overrides:       'sequins_workbench_overrides',
   publishedPlans:  'sequins_published_plans',
   planners:        'sequins_planners',
-  breakOverrides:  'sequins_break_overrides'
+  breakOverrides:  'sequins_break_overrides',
+  scenarios:       'sequins_scenarios'
 };
 // Demand is stored one Script Property per day (sequins_demand__<week>__
 // <day>), with history in a separate per-day key, tracked by this index.
@@ -578,6 +604,7 @@ function getState() {
     publishedPlans:  getSection_(STATE_KEYS.publishedPlans) || {},
     planners:        getSection_(STATE_KEYS.planners) || [],
     breakOverrides:  getSection_(STATE_KEYS.breakOverrides) || {},
+    scenarios:       getSection_(STATE_KEYS.scenarios) || {},
     sequencingRules: getSection_(STATE_KEYS.sequencingRules),
     lastModified:    meta.lastModified || null
   };
@@ -906,6 +933,117 @@ function saveSkuLibrary(library) {
   return { ok: true };
 }
 
+// ─── LABEL VERSION SYNC (from Label Versions & Updates sheet) ────────────────
+/**
+ * Syncs labelNumberVersion onto every SKU already sitting in the SKU
+ * Library, from the "Label Versions & Updates" sheet's "Label Version Log"
+ * tab — the real source of truth WH and QA both check before running a
+ * line. Keyed by col A (SKU), filtered to rows whose col F (Label Status)
+ * contains ACTIVE or NEW (anything else — retired, pending, etc. — is
+ * treated as not currently valid). Stored value combines Version Number
+ * (col C) + Label Number (col D), e.g. "R001 · 35804-001". SKUs in the
+ * library with no matching ACTIVE/NEW row get "NO ACTIVE LABEL" so a
+ * missing label can't quietly slip through on a busy screen. UI red-flag
+ * rendering is a separate follow-up — this function only writes the data.
+ *
+ * Read-only against the source sheet. Only writes to Sequins' own SKU
+ * Library section, via the normal setSection_ -> safeSetProperty_ path, so
+ * it gets the same quota protection as every other write in the app.
+ */
+function syncLabelVersions_() {
+  const library = getSection_(STATE_KEYS.skuLibrary) || {};
+  const skuKeys = Object.keys(library);
+  if (!skuKeys.length) {
+    Logger.log('syncLabelVersions_: SKU Library is empty — nothing to sync.');
+    return { ok: true, matched: 0, unmatched: 0 };
+  }
+
+  // normalized SKU -> "Version · LabelNumber"
+  const labelMap = {};
+  try {
+    const sheet = SpreadsheetApp.openById(LABEL_LOG_SHEET_ID).getSheetByName(LABEL_LOG_TAB);
+    if (!sheet) throw new Error('Tab "' + LABEL_LOG_TAB + '" not found in Label Versions & Updates');
+    const lastRow = sheet.getLastRow();
+    if (lastRow > 1) {
+      const data = sheet.getRange(2, 1, lastRow - 1, 6).getValues(); // cols A:F
+      data.forEach(function(row) {
+        const sku = String(row[0] || '').trim();
+        if (!sku) return;
+        const status = String(row[5] || '').toUpperCase(); // col F
+        if (status.indexOf('ACTIVE') === -1 && status.indexOf('NEW') === -1) return;
+        const versionNum = String(row[2] || '').trim(); // col C
+        const labelNum    = String(row[3] || '').trim(); // col D
+        let combined = '';
+        if (versionNum && labelNum) combined = versionNum + ' · ' + labelNum;
+        else combined = versionNum || labelNum;
+        if (!combined) return;
+        labelMap[normalizeSku_(sku)] = combined;
+      });
+    }
+  } catch(e) {
+    Logger.log('syncLabelVersions_ failed to read Label Version Log: ' + e.message);
+    return { ok: false, error: e.message };
+  }
+
+  let matched = 0, unmatched = 0;
+  skuKeys.forEach(function(key) {
+    const norm = normalizeSku_(key);
+    if (labelMap[norm]) {
+      library[key].labelNumberVersion = labelMap[norm];
+      matched++;
+    } else {
+      library[key].labelNumberVersion = 'NO ACTIVE LABEL';
+      unmatched++;
+    }
+  });
+
+  setSection_(STATE_KEYS.skuLibrary, library);
+  Logger.log('syncLabelVersions_ complete — matched ' + matched + ', unmatched (NO ACTIVE LABEL) ' + unmatched + '.');
+  return { ok: true, matched: matched, unmatched: unmatched };
+}
+
+// Trigger handler — installed via installLabelVersionSyncTrigger() below,
+// runs once daily. Wrapped in its own try/catch since a time-driven trigger
+// has no client to surface an error to; a failure just needs to be visible
+// in Executions/Logs, not thrown into the void.
+function labelVersionSyncTrigger() {
+  try {
+    const result = syncLabelVersions_();
+    Logger.log('labelVersionSyncTrigger: ' + JSON.stringify(result));
+  } catch(e) {
+    Logger.log('labelVersionSyncTrigger failed: ' + e.message);
+  }
+}
+
+// Run ONCE from the Apps Script editor (function dropdown -> select this ->
+// Run) to install the daily trigger. Safe to re-run — checks for an
+// existing trigger on this handler first, so it can never create duplicates.
+function installLabelVersionSyncTrigger() {
+  const existing = ScriptApp.getProjectTriggers().filter(function(t) {
+    return t.getHandlerFunction() === 'labelVersionSyncTrigger';
+  });
+  if (existing.length) {
+    Logger.log('labelVersionSyncTrigger already installed (' + existing.length + ' trigger(s)) — no action taken.');
+    return;
+  }
+  ScriptApp.newTrigger('labelVersionSyncTrigger')
+    .timeBased()
+    .everyDays(1)
+    .atHour(3)
+    .create();
+  Logger.log('Installed daily labelVersionSyncTrigger (~3am script timezone).');
+}
+
+// Admin-callable manual resync — same logic as the daily trigger, for
+// testing now or an on-demand refresh without waiting for the next 3am run.
+function runLabelVersionSyncNow() {
+  const user = getCurrentUser();
+  if (!user.isAdmin) throw new Error('Not authorized');
+  const result = syncLabelVersions_();
+  writeAuditLog_(user.email, 'sync_label_versions', '', '', JSON.stringify(result));
+  return result;
+}
+
 // ─── LINE CONFIG + RULES ──────────────────────────────────────────────────────
 function saveLineConfig(lineConfig) {
   const user = getCurrentUser();
@@ -967,6 +1105,24 @@ function savePlanners(planners) {
   return { ok: true };
 }
 
+
+// ─── STAFFING SCENARIOS (per week/day) ────────────────────────────────────────
+// A scenario is just a named subset of that day's normally-available lines
+// (list of excluded lineIds) — lets a planner preview "what if Line-6 is
+// down" against the same demand before deciding what to publish. Whole
+// day's scenario object (list + which one's currently selected) is replaced
+// on every save, same shape client sends. Gated same tier as publish/
+// Workbench overrides since this is exploratory planning, not admin config.
+function saveScenarios(weekLabel, day, dayScenarios) {
+  const user = getCurrentUser();
+  if (!user.isAdmin && !user.isPlanner) throw new Error('Not authorized');
+  const scenarios = getSection_(STATE_KEYS.scenarios) || {};
+  if (!scenarios[weekLabel]) scenarios[weekLabel] = {};
+  scenarios[weekLabel][day] = dayScenarios;
+  setSection_(STATE_KEYS.scenarios, scenarios);
+  writeAuditLog_(user.email, 'save_scenarios', weekLabel, day, (dayScenarios.list || []).length + ' scenarios');
+  return { ok: true };
+}
 
 // ─── PUBLISHED PLAN ───────────────────────────────────────────────────────────
 function savePublishedPlan(weekLabel, day, snap) {

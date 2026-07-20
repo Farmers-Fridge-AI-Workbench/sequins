@@ -1,5 +1,296 @@
 <!--
   Sequins ✨ — Index.html
+  v0.5.26 — 2026-07-20
+  - FIX: SKU Library search only matched against the SKU name itself —
+    which is why searching "breakfast" earlier today missed both actual
+    Breakfast-category SKUs (name doesn't contain the word) and only
+    caught SAUSAGE_BURRITO_BREAKFAST by accident (name happens to). Now
+    matches across SKU name, category, package type, allergens, label,
+    and admissible lines — everything except UPM (a number, not text),
+    per Cori's ask. Placeholder text updated to reflect it.
+
+  v0.5.25 — 2026-07-20
+  - FIX (real bug, caught live): FC-W/FC-S chain math was counting
+    allergens from wrap/sandwich SKUs that had been manually overridden
+    to a DIFFERENT line — because applyWorkbenchOverrides() relocates a
+    job only after runSequencer() has already returned, the chain had no
+    way to know it wouldn't actually run on LINE-3/LINE-2. Live example:
+    SAUSAGE_BURRITO_BREAKFAST (milk/soy/wheat/egg) was manually moved to
+    LINE-1, but its egg allergen still showed up in "the sequence on
+    LINE-3 already carries [...]" for WRAP_SHAWARMA_CHICKPEA, even though
+    no SKU actually sequenced on LINE-3 has egg.
+    Fixed by excluding any wrap/sandwich SKU with a same-day override
+    pointing elsewhere from that pool entirely, before the chain is even
+    built — a manual move is already a deliberate "doesn't follow the
+    automatic sequence" decision. Excluded jobs are simply never run
+    through this pool's placer, so they fall into runSequencer()'s
+    `unplaced` list on their own and get picked up by
+    applyWorkbenchOverrides()'s existing unplaced-fallback path exactly
+    like before — no new plumbing needed.
+    Verified with a Node simulation reproducing the exact live SKUs
+    (LINE-3 wrap pool + the diverted sausage burrito): finalSet dropped
+    from [milk, soy, wheat, egg] to the correct [milk, soy, wheat], and
+    SAUSAGE_BURRITO_BREAKFAST confirmed excluded from the LINE-3 pool.
+    Also noted, NOT fixed (flagging per Cori's "ask before touching
+    outside scope" rule): SAUSAGE_BURRITO_BREAKFAST isn't even
+    categorized "Wrap" in the SKU Library — it's pulled into the wrap
+    pool by the separate "Shallow Box" packaging-type rule. Worth a
+    conversation about whether that's intentional for FC-W purposes.
+
+  v0.5.24 — 2026-07-20
+  - Add: allergens are now shown directly on wrap (FC-W) and sandwich
+    (FC-S) job rows in both Line Sequence and Workbench (🧬 tag under the
+    time row, e.g. "🧬 milk, soy, wheat"). This was the actual gap behind
+    Cori's "I can't tell what to do about this" — the v0.5.23 unplaced
+    message could explain the chain in words, but there was no way to
+    look at LINE-3's cards and see the allergens accumulating for
+    yourself, which is what you'd actually need to judge "is this SKU's
+    allergen data wrong, or is this a real conflict" without memorizing
+    the rule. Reading top to bottom on the locked line now shows the
+    chain build in real time, right next to the unplaced card's reason.
+    Scoped to wrap/sandwich rows only (the two pools the compounding
+    rule governs) — not added to every row, to avoid cluttering lines
+    the rule doesn't apply to.
+
+  v0.5.23 — 2026-07-20
+  - FIX: FC-W/FC-S unplaced reason ("breaks allergen compounding chain...")
+    said THAT a SKU broke the chain but not why, so there was no way to
+    tell what to actually do about it from the Unplaced card. Chain now
+    tracks its final accumulated allergen set (buildAllergenChain returns
+    finalSet), and each broken job's reason spells out: what it declares,
+    what the line's sequence already carries, and specifically which
+    allergen(s) it's missing to extend that chain — e.g. "declares
+    [sesame] — the sequence on LINE-3 already carries [wheat, milk, soy,
+    egg, treeNuts, sesame], and this SKU is missing wheat, milk, soy, egg,
+    treeNuts". Tells Cori directly whether it's a data problem (wrong/
+    missing allergens on the SKU) or a real placement problem (needs a
+    manual override).
+
+  v0.5.22 — 2026-07-20
+  - Add: Samad's allergen-compounding rule (FC-W/FC-S model), piece 2 of 2 —
+    built to his exact wording: "food-contact SKUs classified by type
+    (wrap/sandwich/etc.) sequenced in strict compounding allergen order
+    (each SKU's allergen set must be a superset of the previous one, no
+    new allergens introduced outside that chain)". Applied to the two
+    food-contact pools that map 1:1 to a single line — wrap (FC-W,
+    LINE-3) and sandwich (FC-S, LINE-2) — since that's literally what
+    "FC-W/FC-S" names.
+    New buildAllergenChain(): greedily grows a run where each next SKU's
+    allergen set is a superset of everything accumulated so far, always
+    picking whichever eligible candidate adds the fewest new allergens
+    (keeps the chain growing as slowly as possible so more SKUs can still
+    join later). A SKU that can never become a superset of the
+    accumulated set — because the chain already grew past what it
+    contains — can't go on that line in sequence without breaking the
+    rule, so it's marked unplaced right in the sort step (before ever
+    reaching the placer) with an explicit FC-W/FC-S reason, same
+    Unplaced-but-draggable treatment as any other locked-pool miss (v0.5.19).
+    Pre-processed SKUs keep their existing sequenced-first priority
+    (a separate, already-established rule) — the chain is built over the
+    non-pre-processed remainder only.
+    Replaces wrap/sandwich's old sort (ascending allergen count, USDA
+    first) with this — that old sort is gone from those two pools. Salad
+    keeps the old sort unchanged; it isn't a food-contact-locked pool.
+    Verified with a Node simulation before wiring in (7 wrap SKUs, mixed
+    allergen combos: chain grew wheat → +milk → +soy → full-6, two
+    incomparable SKUs — egg-only, sesame-only — correctly fell to broken).
+    FLAG for Cori: sandwich's candidate list still includes LINE-4/LINE-5
+    as fallback (wrap was tightened to LINE-3-only this session, sandwich
+    wasn't) — if sandwich ever overflows onto LINE-4/5, the chain
+    guarantee only holds for whatever's on LINE-2, not the overflow.
+    Didn't touch this since it wasn't asked for — flagging per your
+    "ask before touching things outside scope" rule.
+    NOT attempted: validating the chain when a planner manually reorders
+    a job within Workbench (checkLineViolations has no ordering-aware
+    check — only pool-lock/safety violations, same as before). Manual
+    overrides can still break the compounding order the same way they
+    already bypass other locks (with a note).
+
+  v0.5.21 — 2026-07-20
+  - Add: per-SKU admissible-lines system (Samad's rules engine, piece 1 of 2).
+    New SKU Library field `admissibleLines` (array of line IDs, e.g.
+    USDA salads → ['LINE-1'], USDA wraps → ['LINE-3','LINE-4']). Empty/unset
+    = fully backward compatible, falls through to the existing pool-based
+    candidate list exactly as before. SKU Library table has a new "Lines"
+    column — click opens a small modal (reuses the moveModal/modal-overlay
+    pattern) with a checkbox per configured line; blank = "Any".
+    runSequencer(): when a job's SKU has admissibleLines set, that job's
+    candidate line list is the admissible set (filtered to lines actually
+    running that day) instead of the pool's normal candidate list — using
+    the least-loaded balancer (same as bowl/flex/salad) rather than
+    first-fit, since the point of a multi-line admissible set is spreading
+    load across it, not preferring one over another. Hard safety
+    constraints (no-USDA-lines, sausage/sesame) still apply on top
+    regardless — admissibleLines overrides sequencing preference, not
+    food-safety rules.
+    checkLineViolations() and buildJobRow_'s ⚡ home-line highlight: when
+    admissibleLines is set, the old flat wrap/sandwich/capper/green lock
+    checks are skipped in favor of the admissible-set check, so a SKU
+    deliberately given an override (e.g. USDA wrap allowed on LINE-4) does
+    not also throw a contradictory "Wraps are locked to LINE-3" violation.
+  - Add: ⚡ legend entry (queued since the v0.5.16 capper fix, never added).
+    Description generalized to cover both the original lock-based flags
+    and the new admissible-lines flag, since the same icon now marks both.
+  - NOT in this pass: Samad's allergen-compounding (FC-W/FC-S) rule —
+    piece 2 of 2, intentionally held for a separate design pass now that
+    piece 1 is in place. See chat for the open questions before building it.
+
+  v0.5.20 — 2026-07-20
+  - Layout: Unplaced SKUs card moved to sit directly above the line-cards
+    board (after Per-Line Summary / no-attrs card, right before the
+    seq-grid) on both Line Sequence and Workbench — it previously sat
+    above Per-Line Summary, farther from where you'd actually drag an
+    orphaned SKU onto a line. Same card, same behavior, just relocated.
+  - FIX: wrap pool had a silent LINE-2 fallback (poolMap.wrap included
+    rules.sandwichLine as a second candidate) — "Wraps → LINE-3 only" was
+    the hard rule but wraps could quietly spill onto LINE-2 whenever
+    LINE-3 filled up, never showing up anywhere as a flagged decision.
+    Now wrap's candidate list is LINE-3 only; if it can't hold everything,
+    overflow shows up in Unplaced (fixable via the v0.5.19 drag-to-place
+    flow) instead of silently landing on LINE-2. Safe to tighten now that
+    unplaced SKUs are actually actionable instead of a dead end.
+
+  v0.5.19 — 2026-07-20
+  - FIX: no way to manually place an unplaced SKU. Three compounding gaps:
+    (1) unplaced SKU cards in Workbench had no drag handlers at all — only
+    already-placed jobs were draggable; (2) checkLineViolations had no
+    green-belt lock check (wrap/sandwich/capper all had one, green didn't —
+    same blind-spot pattern as the v0.5.16 capper fix); (3) even with (1)
+    fixed, applyWorkbenchOverrides only ever searched for the job inside
+    existing lineState slots, so an override pointing at a SKU that was
+    never placed anywhere (the whole point of this fix) would silently
+    no-op.
+    Fix: unplaced cards are now draggable (wbDragStart with a '(unplaced)'
+    sentinel fromLine) and droppable onto any line via the existing
+    wbDrop/violation-modal flow — dragging a locked-pool SKU (green,
+    capper, wrap, sandwich) still surfaces the same "this breaks X, add a
+    note to override" confirmation as any other rule-breaking move, it's
+    just no longer a dead end. applyWorkbenchOverrides now accepts the
+    unplaced list as a fallback lookup. Added trueUnplaced() — filters a
+    SKU out of the unplaced display/published-snapshot once an override
+    has actually seated it, since the raw sequencer output has no idea
+    overrides exist. Verified with an isolated Node simulation before
+    wiring in (before: unplaced; after override: seated on target line,
+    runtime credited, off the unplaced list).
+    Root cause surfaced by testing the new staffing-scenario feature —
+    excluding a line that a hard-locked pool depends on left those SKUs
+    with nowhere to go and no in-app way to resolve it.
+
+  v0.5.18 — 2026-07-20
+  - Add: staffing scenario tabs on Line Sequence + Workbench (day-strip →
+    scenario tab bar → Per-Line Summary). A scenario is a named subset of
+    that day's normally-available lines (freeform name, e.g. "Shut down
+    Line-6, 1st shift" + checkboxes for which lines stay on). Baseline
+    (full day lineup) is always the implicit first tab. Selecting a tab is
+    a live preview only — runSequencer() now filters lineConfig's day
+    lines through the active scenario's excludedLines before sequencing;
+    nothing about STATE.lineConfig itself changes. Publish/Unpublish work
+    unchanged — publishing tags the snapshot with scenarioId/scenarioName
+    so "unpublish, pick a different tab, publish again" (the actual
+    staffing-turned-out-different workflow) just falls out of the
+    existing flow for free. Published scenario name shown as a small
+    badge next to Publish/Unpublish on Workbench.
+    New storage: sequins_scenarios (own Script Properties key, one node
+    per week/day: {list:[{id,name,excludedLines}], activeId}), synced via
+    getState()/8s poll same as every other section. Gated Admin/Planner,
+    same tier as Publish and Workbench overrides.
+    Scoped per-day (not reusable across days) and whole-day on/off per
+    line (no partial-shift outages) per this session's discussion —
+    reusable named presets and partial-day windows are easy follow-ups if
+    the per-day version turns out to be too repetitive in practice. An
+    AI-assisted "type a sentence, get a scenario" version is flagged for
+    later, once this manual version's been tested — kept the scenario
+    object dead simple ({name, excludedLines}) on purpose so that's a
+    small lift when the time comes.
+
+  v0.5.17 — 2026-07-17
+  - Add: manual "🔄 Re-sequence" button on Line Sequence and Workbench
+    (forceResequence(), next to the floating-team control). Functionally
+    a no-op vs. what already happens automatically on render/poll — added
+    purely so a change (e.g. publishing actuals, editing rules) has a
+    visible "yep, that just recalculated" moment instead of having to
+    trust it happened silently.
+
+  v0.5.16 — 2026-07-17
+  - FIX: capper checkbox in SKU Library was stored but never actually
+    consulted by runSequencer() — pool assignment ran purely off the
+    SKU's category field, and LINE-6 (the Capper line) sat as an
+    ordinary candidate line inside the bowl/salad/flex pools alongside
+    LINE-4/5/1. Net effect: capper-checked SKUs whose category wasn't
+    Bowl/Breakfast could skip LINE-6 entirely, while non-capper SKUs in
+    those pools could land on LINE-6 right alongside real capper items.
+    rules.capperLines (Sequencing Rules > "Capper lines") was likewise
+    stored but never read anywhere.
+    Fix: meta.capper now forces pool='capper' outright (checkbox wins
+    over category, same precedence tier as the shallow-box wrap
+    override). Capper lines are stripped out of every other pool's
+    candidate list and reserved exclusively for the new capper pool,
+    whose candidates come straight from rules.capperLines — so both the
+    per-SKU checkbox and the rules-panel line list are now the actual
+    mechanism, not just UI that got ignored downstream. Extended the
+    same capper-lock check to checkLineViolations() (Workbench drag
+    warnings) and buildJobRow_'s home-line highlight/tag, which had the
+    identical wrap/sandwich-only blind spot.
+    Note: capper pool uses the same least-loaded balancer as bowl/flex
+    for now — Samad's tertiary rule (fill by package type, 12oz then
+    16oz or vice versa, before topping off with flex salads for run-hour
+    balance) is a separate follow-up, not part of this fix.
+
+  v0.5.15 — 2026-07-09
+  - FIX: clicking a day card while on QA Changeover did nothing — setWeek/
+    setDay/setWeekDay only ever called renderSequence()+renderWorkbench(),
+    never renderQAChangeover(), same as they already do for Line Sequence
+    and Workbench regardless of which tab is active. Now this shares that
+    pattern too.
+
+  v0.5.14 — 2026-07-09
+  - QA Changeover rows: SKU / Start–Stop / Label now stack vertically
+    instead of sitting on one horizontal line — the single-line version
+    wrapped awkwardly once label values got long.
+
+  v0.5.13 — 2026-07-09
+  - QA Changeover cards reworked per feedback: dropped the changeover-pair
+    (SKU out → SKU in) framing — showing two labels side by side per row
+    was confusing. Now a straight per-line run list: every SKU in sequence
+    with its own Start – Stop and its own single label. Every cell in a
+    row is the same font-size and var(--text) (the bright color, not
+    var(--muted)) so nothing fades out; Start/Stop is bold since that's
+    the thing actually being timed against, and the red "no label" flag
+    is the one deliberate exception to "everything looks the same."
+
+  v0.5.12 — 2026-07-09
+  - QA Changeover: switched from a flat cross-line table to one card per
+    line (buildQaLineCards_), matching Line Sequence/Workbench's line-card
+    look — nobody actually works line-by-line off a flat list. A line with
+    slots but zero real changeovers still gets a card ("no changeovers"),
+    since that's a useful signal on its own, not noise to hide.
+
+  v0.5.11 — 2026-07-09
+  - Add: QA Changeover tab (new nav item under Plan). Static list, sourced
+    from the PUBLISHED plan snapshot only — not live-recomputed — matching
+    how QA actually works today (a printed plan, not something that shifts
+    under them mid-shift). Walks each line's slots; any slot with
+    changeoverMin>0 is a real changeover (a blocking break already zeroes
+    this out via applyLineBreaks, so that suppression is inherited for
+    free, not re-derived). Shows SKU out -> SKU in + labelNumberVersion for
+    both, with the same red "NO ACTIVE LABEL" flag as the SKU Library.
+    Visible to everyone for now, same as Line Sequence — the planned
+    "Supporting Teams" role (Floor view + this + the future WH tab only)
+    isn't built yet, flagged as a follow-up, not done here.
+
+  v0.5.10 — 2026-07-09
+  - Add: "Label" column on SKU Library, showing labelNumberVersion synced
+    server-side from the Label Version Log (Code.js v0.4.18). Read-only —
+    this view doesn't edit it. "NO ACTIVE LABEL" renders as a red flag
+    (same visual language as the existing violation/unplaced-SKU styling),
+    everything else as plain muted text.
+
+  v0.5.9 — 2026-07-08
+  - Fix: 30m/15m breaks shared one auto-enable threshold, so a short day
+    could enable both and squeeze the 15m break in right at the end since
+    its real trigger point (360min) never arrived. Each break now needs
+    the day to reach its OWN offset before auto-enabling.
+
   v0.5.8 — 2026-07-08
   - Breaks are now draggable within a line (same drag system as SKUs) —
     dropping one saves its POSITION (slot index), not a clock time. Time is
@@ -273,6 +564,11 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .btn-ghost:hover{border-color:var(--teal);color:var(--teal);opacity:1;}
 .btn-danger{background:var(--red-dim);color:var(--red);border:1px solid rgba(239,68,68,.2);}
 .btn-sm{padding:3px 10px;font-size:10px;}
+.scn-tab{background:var(--panel2,#1a1f2b);color:var(--text-dim);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:11px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;}
+.scn-tab.active{background:var(--teal-dim,rgba(45,212,191,.15));color:var(--teal);border-color:var(--teal);}
+.scn-tab .scn-del{opacity:.6;font-size:10px;padding:0 2px;}
+.scn-tab .scn-del:hover{opacity:1;color:var(--red,#f87171);}
+.scn-addrow{width:100%;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);display:flex;align-items:center;flex-wrap:wrap;gap:4px;}
 .btn-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
 .mode-badge{font-size:10px;font-family:var(--mono);padding:2px 8px;border-radius:4px;font-weight:500;}
 .mode-forecast{background:var(--amber-dim);color:var(--amber);}
@@ -349,6 +645,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
       <div class="sidebar-label">Plan</div>
       <button class="nav-item active" onclick="switchView('sequence',this)"><span class="icon">📋</span>Line Sequence</button>
       <button class="nav-item" onclick="switchView('workbench',this)"><span class="icon">🔧</span>Workbench</button>
+      <button class="nav-item" onclick="switchView('qa',this)"><span class="icon">🏷️</span>QA Changeover</button>
     </div>
     <div class="nav-spacer"></div>
     <div class="sidebar-section" id="adminNav" style="display:none">
@@ -366,6 +663,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         <div class="legend-row"><span class="sku-tag tag-usda">USDA</span><span class="legend-desc">USDA SKU — not allowed on LINE-6</span></div>
         <div class="legend-row"><span class="sku-tag tag-wrap">wrap</span><span class="legend-desc">Wrap — locked to LINE-3 only</span></div>
         <div class="legend-row"><span class="sku-tag tag-sand">sand</span><span class="legend-desc">Sandwich — locked to LINE-2 only</span></div>
+        <div class="legend-row"><span class="sku-tag" style="background:rgba(250,204,21,.15);color:#facc15">&#9889;</span><span class="legend-desc">Sequenced outside its locked or admissible line(s)</span></div>
         <div class="legend-row"><span class="preproc-badge" style="width:14px;height:14px;font-size:8px;flex-shrink:0">P</span><span class="legend-desc">Pre-processed — sequenced first</span></div>
         <div class="legend-row"><span class="sku-tag" style="background:var(--amber-dim);color:var(--amber);flex-shrink:0">moved</span><span class="legend-desc">Manually overridden position</span></div>
         <div class="legend-row"><span class="mode-badge mode-actual" style="font-size:9px;padding:1px 6px;flex-shrink:0">actual</span><span class="legend-desc">Confirmed demand (Demands 2025)</span></div>
@@ -402,7 +700,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         <div class="empty-sub" id="seqNoDataSub">Go to Admin → Load Demand to get started</div>
       </div>
       <div id="seqContent" style="display:none">
-        <div class="card" style="padding:12px 18px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap"><div class="day-strip" id="seqDayStrip" style="flex:1"></div><div id="seqFloatingTeam"></div></div>
+        <div class="card" style="padding:12px 18px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap"><div class="day-strip" id="seqDayStrip" style="flex:1"></div><div id="seqFloatingTeam"></div><button class="btn btn-sm" id="seqResequenceBtn" onclick="forceResequence()" title="Recompute the sequence from current demand/rules">🔄 Re-sequence</button></div>
+        <div class="card" style="padding:10px 18px;display:flex;align-items:center;gap:8px;flex-wrap:wrap" id="seqScenarioBar"></div>
         <div class="kpi-row" style="grid-template-columns:repeat(6,1fr)">
           <div class="kpi"><div class="kpi-val teal" id="k-skus">—</div><div class="kpi-lbl">SKUs scheduled</div></div>
           <div class="kpi"><div class="kpi-val" id="k-units">—</div><div class="kpi-lbl">Total units</div></div>
@@ -411,11 +710,6 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           <div class="kpi"><div class="kpi-val amber" id="k-unplaced">—</div><div class="kpi-lbl">Unplaced</div></div>
           <div class="kpi"><div class="kpi-val red" id="k-noattrs">—</div><div class="kpi-lbl">Missing attributes</div></div>
         </div>
-        <div class="card" id="unplacedCard" style="display:none;border:2px solid var(--red);background:var(--red-dim)">
-          <div class="card-title" style="font-size:13px;color:var(--red)">UNPLACED SKUs - These units are NOT in the plan</div>
-          <div id="unplacedList" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
-          <div id="unplacedUnits" style="font-family:var(--mono);font-size:13px;color:var(--red);margin-top:10px;font-weight:600"></div>
-        </div>
         <div class="card" style="padding-bottom:0">
           <div class="card-title metrics-toggle-row" onclick="toggleMetrics()" style="margin-bottom:0;padding-bottom:12px">Per-Line Summary <span class="metrics-arrow" id="seqMetricsArrow">▾</span></div>
           <div class="metrics-body" id="seqMetricsBody"><div style="overflow-x:auto;padding-bottom:4px" id="lineMetricsTable"></div></div>
@@ -423,6 +717,11 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         <div class="card" id="noAttrsCard" style="display:none;border-color:rgba(239,68,68,.3)">
           <div class="card-title"><span style="color:var(--red)">⚠ SKUs sequenced without real attributes</span></div>
           <div id="noAttrsList" style="font-family:var(--mono);font-size:11px;color:var(--muted)"></div>
+        </div>
+        <div class="card" id="unplacedCard" style="display:none;border:2px solid var(--red);background:var(--red-dim)">
+          <div class="card-title" style="font-size:13px;color:var(--red)">UNPLACED SKUs - These units are NOT in the plan</div>
+          <div id="unplacedList" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
+          <div id="unplacedUnits" style="font-family:var(--mono);font-size:13px;color:var(--red);margin-top:10px;font-weight:600"></div>
         </div>
         <div class="seq-grid" id="lineCards"></div>
       </div>
@@ -435,6 +734,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         <div class="btn-row">
           <select class="form-select" id="wbWeekSel" style="font-size:11px;padding:5px 10px;display:none" onchange="setWeek(this.value)"></select>
           <span class="mode-badge mode-forecast" id="wbModeBadge" style="display:none"></span>
+          <span class="mode-badge" id="wbPublishedScenario" style="display:none;background:var(--teal-dim,rgba(45,212,191,.15));color:var(--teal)"></span>
           <button class="btn btn-ghost btn-sm" id="wbUndoBtn" onclick="wbUndo()" disabled title="Undo last move (Ctrl+Z)">↶ Undo</button>
           <button class="btn btn-ghost btn-sm" id="unpublishPlanBtn" style="display:none" onclick="unpublishPlan()">Unpublish</button>
           <button class="btn btn-green" id="publishPlanBtn" style="display:none" onclick="publishPlan()">🚀 Publish Plan</button>
@@ -446,21 +746,41 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         <div class="empty-sub">Go to Admin → Load Demand to get started</div>
       </div>
       <div id="wbContent" style="display:none">
-        <div class="card" style="padding:12px 18px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap"><div class="day-strip" id="wbDayStrip" style="flex:1"></div><div id="wbFloatingTeam"></div></div>
+        <div class="card" style="padding:12px 18px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap"><div class="day-strip" id="wbDayStrip" style="flex:1"></div><div id="wbFloatingTeam"></div><button class="btn btn-sm" id="wbResequenceBtn" onclick="forceResequence()" title="Recompute the sequence from current demand/rules">🔄 Re-sequence</button></div>
+        <div class="card" style="padding:10px 18px;display:flex;align-items:center;gap:8px;flex-wrap:wrap" id="wbScenarioBar"></div>
+        <div class="card" style="padding-bottom:0">
+          <div class="card-title metrics-toggle-row" onclick="toggleMetrics()" style="margin-bottom:0;padding-bottom:12px">Per-Line Summary <span class="metrics-arrow" id="wbMetricsArrow">▾</span></div>
+          <div class="metrics-body" id="wbMetricsBody"><div style="overflow-x:auto;padding-bottom:4px" id="wbLineMetricsTable"></div></div>
+        </div>
         <div class="card" id="wbUnplacedCard" style="display:none;border:2px solid var(--red);background:var(--red-dim)">
           <div class="card-title" style="font-size:13px;color:var(--red)">UNPLACED SKUs - These units are NOT in the plan</div>
           <div id="wbUnplacedList" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px"></div>
           <div id="wbUnplacedUnits" style="font-family:var(--mono);font-size:13px;color:var(--red);margin-top:10px;font-weight:600"></div>
-        </div>
-        <div class="card" style="padding-bottom:0">
-          <div class="card-title metrics-toggle-row" onclick="toggleMetrics()" style="margin-bottom:0;padding-bottom:12px">Per-Line Summary <span class="metrics-arrow" id="wbMetricsArrow">▾</span></div>
-          <div class="metrics-body" id="wbMetricsBody"><div style="overflow-x:auto;padding-bottom:4px" id="wbLineMetricsTable"></div></div>
         </div>
         <div class="seq-grid" id="wbLineCards"></div>
         <div class="card" id="demandDebugCard" style="display:none">
           <div class="card-title metrics-toggle-row" onclick="toggleDemandDebug()">Demand Debug <span class="metrics-arrow" id="demandDebugArrow">▾</span></div>
           <div class="metrics-body" id="demandDebugBody" style="padding-bottom:8px"></div>
         </div>
+      </div>
+    </div>
+
+    <!-- QA CHANGEOVER -->
+    <div class="view" id="view-qa">
+      <div class="page-header">
+        <div><div class="page-title">QA Changeover</div><div class="page-sub" id="qaSubtitle">Static changeover list from the published plan</div></div>
+      </div>
+      <div id="qaNoData" class="empty">
+        <div class="empty-icon">🏷️</div>
+        <div class="empty-title">No demand loaded yet</div>
+        <div class="empty-sub">Go to Admin → Load Demand to get started</div>
+      </div>
+      <div id="qaContent" style="display:none">
+        <div class="card" style="padding:12px 18px"><div class="day-strip" id="qaDayStrip"></div></div>
+        <div id="qaNoPlan" class="card" style="display:none;border-color:rgba(245,158,11,.25)">
+          <div style="text-align:center;padding:32px"><span style="font-family:var(--mono);font-size:12px;color:var(--muted)">No published plan for this day. Open Workbench and click Publish Plan.</span></div>
+        </div>
+        <div style="overflow-x:auto" id="qaTable"></div>
       </div>
     </div>
 
@@ -485,6 +805,19 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         <div style="display:flex;gap:8px;justify-content:flex-end">
           <button class="btn btn-ghost" onclick="closeMoveModal()">Cancel</button>
           <button class="btn btn-teal" onclick="confirmMove()">Confirm move</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ADMISSIBLE LINES MODAL -->
+    <div class="modal-overlay" id="admissibleLinesModal">
+      <div class="modal-box" style="width:360px;text-align:left">
+        <div class="modal-title" id="admLinesModalTitle">Admissible lines</div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Leave all unchecked for "Any" (no restriction — falls back to normal pool rules). Check one or more to lock this SKU to only those lines.</div>
+        <div id="admLinesModalBody" style="max-height:280px;overflow-y:auto;border:1px solid var(--border2);border-radius:6px;padding:8px 12px"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end">
+          <button class="btn btn-ghost" onclick="closeAdmissibleLinesModal()">Cancel</button>
+          <button class="btn btn-teal" onclick="applyAdmissibleLinesModal()">Apply</button>
         </div>
       </div>
     </div>
@@ -534,14 +867,14 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           <input type="text" class="form-input" id="newSkuInput" placeholder="SKU_NAME_TO_ADD" style="width:190px" onkeydown="if(event.key==='Enter')addSkuManually()">
           <button class="btn btn-teal btn-sm" onclick="addSkuManually()">+ Add SKU</button>
           <div style="width:1px;height:20px;background:var(--border2);margin:0 4px"></div>
-          <input type="text" class="form-input" id="skuSearch" placeholder="Search SKUs…" style="width:200px" oninput="filterSkuTable()">
+          <input type="text" class="form-input" id="skuSearch" placeholder="Search name, category, package, allergens…" style="width:260px" oninput="filterSkuTable()">
           <label style="font-family:var(--mono);font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="showInactiveChk" onchange="filterSkuTable()" style="accent-color:var(--teal)"> Show inactive</label>
           <span id="skuCount" style="font-family:var(--mono);font-size:10px;color:var(--muted)"></span>
           <div style="margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--muted)"><span id="sc-total" style="color:var(--teal);font-weight:600">—</span> total SKUs</div>
         </div>
         <div style="overflow-x:auto">
           <table class="data-table"><thead><tr>
-            <th>SKU</th><th>Category</th><th>Package</th><th>UPM</th><th>Allergens</th>
+            <th>SKU</th><th>Category</th><th>Package</th><th>UPM</th><th>Allergens</th><th>Label</th><th>Lines</th>
             <th style="text-align:center"><div style="color:var(--teal);font-size:14px;font-weight:600" id="sc-capper">—</div>Capper</th>
             <th style="text-align:center"><div style="color:var(--teal);font-size:14px;font-weight:600" id="sc-night">—</div>Night</th>
             <th style="text-align:center"><div style="color:var(--teal);font-size:14px;font-weight:600" id="sc-preproc">—</div>Pre-Proc</th>
@@ -617,14 +950,79 @@ var DEFAULT_RULES={wrapLine:'LINE-3',sandwichLine:'LINE-2',noUsdaLines:['LINE-6'
 function getRules(){return STATE.sequencingRules||DEFAULT_RULES;}
 var SLOT_CAP=14,TARGET_MIN=510;
 
+function forceResequence(){renderSequence();renderWorkbench();renderQAChangeover();renderScenarioBar('seqScenarioBar');renderScenarioBar('wbScenarioBar');['seqResequenceBtn','wbResequenceBtn'].forEach(function(id){var b=document.getElementById(id);if(!b)return;var orig=b.textContent;b.textContent='✓ Re-sequenced';setTimeout(function(){b.textContent=orig;},1200);});}
 function toggleMetrics(){_metricsCollapsed=!_metricsCollapsed;['seqMetricsBody','wbMetricsBody'].forEach(function(id){var el=document.getElementById(id);if(el)el.classList.toggle('collapsed',_metricsCollapsed);});['seqMetricsArrow','wbMetricsArrow'].forEach(function(id){var el=document.getElementById(id);if(el)el.classList.toggle('collapsed',_metricsCollapsed);});}
 function parseAllergens(s){var lo=(s||'').toLowerCase();return{milk:lo.indexOf('milk')!==-1,soy:lo.indexOf('soy')!==-1,wheat:lo.indexOf('wheat')!==-1,egg:lo.indexOf('egg')!==-1,treeNuts:lo.indexOf('tree nut')!==-1,sesame:lo.indexOf('sesame')!==-1};}
 function allergenScore(a){return(a.milk?1:0)+(a.soy?1:0)+(a.wheat?1:0)+(a.egg?1:0)+(a.treeNuts?1:0)+(a.sesame?1:0);}
+// ─── ALLERGEN COMPOUNDING CHAIN (Samad's FC-W/FC-S rule) ──────────────────
+// "each SKU's allergen set must be a superset of the previous one, no new
+// allergens introduced outside that chain" — literal reading: once an
+// allergen enters the running sequence on a food-contact line, every
+// later SKU on that line must still carry it (the set only ever grows).
+var ALLERGEN_KEYS=['milk','soy','wheat','egg','treeNuts','sesame'];
+function allergenSetArr(a){return ALLERGEN_KEYS.filter(function(k){return!!a[k];});}
+function isSupersetArr(big,small){for(var i=0;i<small.length;i++){if(big.indexOf(small[i])===-1)return false;}return true;}
+// Greedily builds the longest strict-superset chain: at each step, of the
+// jobs whose allergen set is a superset of what the chain has accumulated
+// so far, pick the one that adds the FEWEST new allergens — keeps the
+// chain growing as gradually as possible so the most jobs can still join
+// later. Anything that can never become a superset of the accumulated set
+// (because the chain already grew past it) is returned in `broken` — it
+// cannot go on this line in sequence without breaking Samad's rule, so it
+// falls to Unplaced instead of being silently forced in.
+function buildAllergenChain(jobs){
+  var remaining=jobs.slice(),chain=[],currentSet=[];
+  while(remaining.length){
+    var candidates=remaining.filter(function(j){return isSupersetArr(j.allergenSet,currentSet);});
+    if(!candidates.length)break;
+    candidates.sort(function(a,b){return a.allergenSet.length-b.allergenSet.length;});
+    var next=candidates[0];
+    chain.push(next);
+    currentSet=next.allergenSet;
+    remaining.splice(remaining.indexOf(next),1);
+  }
+  remaining.sort(function(a,b){return a.sku<b.sku?-1:a.sku>b.sku?1:0;});
+  return{chain:chain,broken:remaining,finalSet:currentSet};
+}
 function categoryToPool(cat){var m={'Salad':'salad','USDA Salad':'salad','Bowl':'bowl','Breakfast':'bowl','Sandwich':'sandwich','Retail Sandwich':'sandwich','Wrap':'wrap','USDA Handheld':'wrap','Handheld':'wrap','Snack':'flex','Meals':'flex','Protein':'flex'};return m[cat]||'flex';}
 function getWeeks(){return Object.keys(STATE.demand).sort();}
 function getDays(week){if(!STATE.demand[week])return[];return DAYS_ORDER.filter(function(d){return!!STATE.demand[week][d];});}
 function fmtUnits(n){return Number(n).toLocaleString();}
 function fmtClock(totalMin){var m=Math.round(totalMin),do_=Math.floor(m/1440);m=((m%1440)+1440)%1440;var hh=Math.floor(m/60),mm=m%60,ap=hh>=12?'PM':'AM',h12=hh%12===0?12:hh%12;return h12+':'+String(mm).padStart(2,'0')+' '+ap+(do_>0?' +'+do_:'');}
+
+// ─── STAFFING SCENARIOS ────────────────────────────────────────────────────
+// A scenario = a named subset of that day's normally-available lines
+// (list of excludedLines). Baseline (id=null) is always implicit — the
+// full day-config lineup, no exclusions. Selecting a scenario is a live
+// preview only: it changes what runSequencer() feeds the sequencer, it
+// does not touch STATE.lineConfig. Publishing while a scenario is active
+// just tags the resulting snapshot with which scenario produced it.
+function getDayScenarios(){
+  if(!STATE.scenarios)STATE.scenarios={};
+  if(!STATE.scenarios[CURRENT_WEEK])STATE.scenarios[CURRENT_WEEK]={};
+  if(!STATE.scenarios[CURRENT_WEEK][CURRENT_DAY])STATE.scenarios[CURRENT_WEEK][CURRENT_DAY]={list:[],activeId:null};
+  return STATE.scenarios[CURRENT_WEEK][CURRENT_DAY];
+}
+function getActiveScenario(){
+  var d=getDayScenarios(),found=null;
+  if(!d.activeId)return null;
+  d.list.forEach(function(s){if(s.id===d.activeId)found=s;});
+  return found;
+}
+function persistScenarios(){
+  if(!CURRENT_WEEK||!CURRENT_DAY)return;
+  var d=getDayScenarios();
+  google.script.run.withFailureHandler(function(err){console.error('saveScenarios failed',err);}).saveScenarios(CURRENT_WEEK,CURRENT_DAY,d);
+}
+function escHtml(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+// A SKU the sequencer couldn't place is "truly" unplaced only until a
+// manual override seats it somewhere (see applyWorkbenchOverrides). The
+// raw list from runSequencer() doesn't know about overrides, so anything
+// displayed or saved needs to be run through this first.
+function trueUnplaced(unplaced){
+  var ov=(STATE.overrides[CURRENT_WEEK]&&STATE.overrides[CURRENT_WEEK][CURRENT_DAY])||{};
+  return (unplaced||[]).filter(function(j){return!ov[j.sku];});
+}
 
 function runSequencer(){
   if(!CURRENT_WEEK||!CURRENT_DAY)return null;
@@ -632,6 +1030,10 @@ function runSequencer(){
   if(!dayData)return null;
   var skus=dayData.skus||{},lib=STATE.skuLibrary,rules=getRules();
   var lines=(STATE.lineConfig||DEFAULT_LINE_CONFIG).filter(function(l){var d=DAY_SHORT[CURRENT_DAY];return l.days&&l.days[d];});
+  var activeScenario=getActiveScenario();
+  if(activeScenario&&activeScenario.excludedLines&&activeScenario.excludedLines.length){
+    lines=lines.filter(function(l){return activeScenario.excludedLines.indexOf(l.id)===-1;});
+  }
   var hasNightLines=lines.some(function(l){return l.type==='night';});
   var jobs=Object.keys(skus).filter(function(skuName){
     var key=skuName.toUpperCase(),meta=lib[key];
@@ -643,23 +1045,96 @@ function runSequencer(){
     if(rules.greenBeltPackages.indexOf(pkg)!==-1)pool='green';
     if(meta.nightShift&&hasNightLines)pool='night';
     if(/shallow\s*box/i.test(pkg))pool='wrap';
-    return{sku:skuName,qty:Math.round(qty),upm:upm,pkg:pkg,pool:pool,hasAttrs:!!meta.category||!!meta.packageType,isUSDA:key.indexOf('USDA')!==-1,hasSausage:key.indexOf('SAUSAGE')!==-1,hasSesame:al.sesame,isPreProcessed:!!meta.preProcessed,allergenScore:allergenScore(al),runtimeMin:qty/upm};
+    if(meta.capper)pool='capper';
+    return{sku:skuName,qty:Math.round(qty),upm:upm,pkg:pkg,pool:pool,hasAttrs:!!meta.category||!!meta.packageType,isUSDA:key.indexOf('USDA')!==-1,hasSausage:key.indexOf('SAUSAGE')!==-1,hasSesame:al.sesame,isPreProcessed:!!meta.preProcessed,admissibleLines:(meta.admissibleLines&&meta.admissibleLines.length)?meta.admissibleLines.slice():null,allergenScore:allergenScore(al),allergenSet:allergenSetArr(al),runtimeMin:qty/upm};
   }).filter(function(j){return j.qty>0;});
-  var pools={wrap:[],sandwich:[],bowl:[],salad:[],flex:[],green:[],night:[]};
+  var pools={wrap:[],sandwich:[],bowl:[],salad:[],flex:[],green:[],night:[],capper:[]};
   jobs.forEach(function(j){(pools[j.pool]||pools.flex).push(j);});
   function sAl(a,b){if(a.isPreProcessed!==b.isPreProcessed)return a.isPreProcessed?-1:1;return a.isUSDA!==b.isUSDA?(a.isUSDA?-1:1):a.allergenScore-b.allergenScore;}
   function sRt(a,b){if(a.isPreProcessed!==b.isPreProcessed)return a.isPreProcessed?-1:1;return b.runtimeMin-a.runtimeMin;}
-  pools.wrap.sort(sAl);pools.sandwich.sort(sAl);pools.salad.sort(sAl);
-  pools.bowl.sort(sRt);pools.flex.sort(sRt);pools.green.sort(sRt);pools.night.sort(sRt);
+  // FC-W / FC-S (Samad's allergen-compounding rule): wrap and sandwich are
+  // the two food-contact pools each locked to one line, so "sequenced in
+  // strict compounding allergen order" means the line's run order IS this
+  // array's order (seq() below places wrap/sandwich first-fit, in array
+  // order, onto their one candidate line). Pre-processed SKUs keep their
+  // existing sequenced-first priority (a separate, already-established
+  // rule, orthogonal to allergen containment) — the chain is only built
+  // over the non-pre-processed remainder. Jobs that can't extend the chain
+  // without introducing an allergen outside it are marked unplaced right
+  // here, before ever reaching the placer, so they show up in Unplaced
+  // with the real reason instead of silently landing out of order.
+  //
+  // BUGFIX (found live, v0.5.25): a wrap/sandwich SKU manually overridden
+  // to a DIFFERENT line was still being fed into this line's chain math,
+  // even though it never physically runs here — applyWorkbenchOverrides()
+  // relocates it only after runSequencer() returns, so the chain had no
+  // way to know. That let its allergens (e.g. egg) show up in "the
+  // sequence on LINE-3 already carries [...]" for a SKU sitting on
+  // LINE-1. Fixed by excluding any SKU with a same-day override pointing
+  // elsewhere from the pool entirely before the chain is built — a manual
+  // move is already a deliberate "this one doesn't follow the automatic
+  // sequence" call, same as it already bypasses the pool-lock checks.
+  // Excluded jobs are simply left out of every pool's placement pass, so
+  // they fall through to `unplaced` on their own and get picked up by
+  // applyWorkbenchOverrides()'s existing unplaced-fallback path — no
+  // separate handling needed.
+  var todaysOverrides=(STATE.overrides[CURRENT_WEEK]&&STATE.overrides[CURRENT_WEEK][CURRENT_DAY])||{};
+  ['wrap','sandwich'].forEach(function(poolName){
+    var fcTag=poolName==='wrap'?'FC-W':'FC-S';
+    var lockedLine=poolName==='wrap'?rules.wrapLine:rules.sandwichLine;
+    var isDivertedElsewhere=function(j){var ov=todaysOverrides[j.sku];return!!(ov&&ov.line&&ov.line!==lockedLine);};
+    var kept=pools[poolName].filter(function(j){return!isDivertedElsewhere(j);});
+    var pre=kept.filter(function(j){return j.isPreProcessed;});
+    var rest=kept.filter(function(j){return!j.isPreProcessed;});
+    var built=buildAllergenChain(rest);
+    built.broken.forEach(function(j){
+      var have=j.allergenSet.length?j.allergenSet.join(', '):'none';
+      var chainHas=built.finalSet.length?built.finalSet.join(', '):'none';
+      var missing=built.finalSet.filter(function(a){return j.allergenSet.indexOf(a)===-1;});
+      var missingStr=missing.length?missing.join(', '):'an allergen the chain already carries';
+      j.unplacedReason=fcTag+': declares ['+have+'] — the sequence on '+(lockedLine||'its locked line')+' already carries ['+chainHas+'], and this SKU is missing '+missingStr+', so it can\'t extend the chain. Fix the allergen data if that\'s wrong, or drag it in manually to override.';
+    });
+    pools[poolName]=pre.concat(built.chain).concat(built.broken);
+  });
+  pools.salad.sort(sAl);
+  pools.bowl.sort(sRt);pools.flex.sort(sRt);pools.green.sort(sRt);pools.night.sort(sRt);pools.capper.sort(sRt);
   var lineState={};
   lines.forEach(function(l){var p=(l.startTime||'06:00').split(':'),sm=(parseInt(p[0],10)||0)*60+(parseInt(p[1],10)||0);lineState[l.id]={slots:[],totalMin:0,totalUnits:0,hasSausage:false,hasSesame:false,startMin:sm,hc:l.hc};});
   var placed={};
-  var poolMap={wrap:[rules.wrapLine,rules.sandwichLine],sandwich:[rules.sandwichLine,'LINE-4','LINE-5'],bowl:['LINE-6','LINE-4','LINE-5','LINE-1'],salad:['LINE-1','LINE-4','LINE-5','LINE-6'],flex:['LINE-4','LINE-5','LINE-1','LINE-6','LINE-2','LINE-3'],green:[rules.greenBeltLine],night:['NIGHT-1','NIGHT-2','LINE-4','LINE-5','LINE-1','LINE-6','LINE-2','LINE-3']};
+  // rules.capperLines is reserved exclusively for capper-checked SKUs — that's
+  // the entire point of the checkbox. Strip capper lines out of every other
+  // pool's candidate list so a non-capper job can never land there, and give
+  // the capper pool its own candidate list straight from rules.capperLines.
+  var capperLines=(rules.capperLines||[]).slice();
+  var capperSet={};capperLines.forEach(function(l){capperSet[l]=true;});
+  var poolMap={wrap:[rules.wrapLine],sandwich:[rules.sandwichLine,'LINE-4','LINE-5'],bowl:['LINE-6','LINE-4','LINE-5','LINE-1'],salad:['LINE-1','LINE-4','LINE-5','LINE-6'],flex:['LINE-4','LINE-5','LINE-1','LINE-6','LINE-2','LINE-3'],green:[rules.greenBeltLine],night:['NIGHT-1','NIGHT-2','LINE-4','LINE-5','LINE-1','LINE-6','LINE-2','LINE-3'],capper:capperLines};
+  Object.keys(poolMap).forEach(function(p){if(p==='capper')return;poolMap[p]=poolMap[p].filter(function(lid){return!capperSet[lid];});});
   function place(job,ls,lid){var co=ls.slots.length>0?(rules.changeoverMin||0):0;job.changeoverMin=co;job.startClockMin=ls.startMin+ls.totalMin+co;ls.slots.push(job);ls.totalMin+=job.runtimeMin+co;job.endClockMin=ls.startMin+ls.totalMin;ls.totalUnits+=job.qty;if(job.hasSausage)ls.hasSausage=true;if(job.hasSesame)ls.hasSesame=true;placed[job.sku]=true;job.placedOnLine=lid;}
   function seq(job,cids){for(var i=0;i<cids.length;i++){var lid=cids[i],ls=lineState[lid];if(!ls||ls.slots.length>=SLOT_CAP||ls.totalMin>=TARGET_MIN)continue;if(job.isUSDA&&rules.noUsdaLines.indexOf(lid)!==-1)continue;if(job.hasSausage&&ls.hasSesame)continue;if(job.hasSesame&&ls.hasSausage)continue;place(job,ls,lid);return true;}return false;}
   function bal(job,cids){var best=null,bl=Infinity;for(var i=0;i<cids.length;i++){var lid=cids[i],ls=lineState[lid];if(!ls||ls.slots.length>=SLOT_CAP||ls.totalMin>=TARGET_MIN)continue;if(job.isUSDA&&rules.noUsdaLines.indexOf(lid)!==-1)continue;if(job.hasSausage&&ls.hasSesame)continue;if(job.hasSesame&&ls.hasSausage)continue;if(ls.totalMin<bl){bl=ls.totalMin;best=lid;}}if(!best)return false;place(job,lineState[best],best);return true;}
   var SEQ={wrap:true,sandwich:true,green:true,night:true};
-  ['wrap','sandwich','bowl','salad','flex','green','night'].forEach(function(pool){var cids=(poolMap[pool]||[]).filter(function(lid){return!!lineState[lid];});var placer=SEQ[pool]?seq:bal;pools[pool].forEach(function(job){if(!placer(job,cids)){var reasons=[];cids.forEach(function(lid){var ls=lineState[lid];if(!ls)return;if(ls.slots.length>=SLOT_CAP)reasons.push(lid+' slot cap');else if(ls.totalMin>=TARGET_MIN)reasons.push(lid+' runtime full');});job.unplacedReason=reasons.length?reasons.slice(0,2).join(', '):'no eligible lines';}});});
+  // admissibleLines (Samad's per-SKU override) takes priority over the pool's
+  // normal candidate list when set — a SKU deliberately given an admissible
+  // set is confined to exactly that set, using the least-loaded balancer
+  // (spreads load across the set) rather than first-fit, regardless of
+  // which pool it would otherwise belong to. Hard safety checks inside
+  // seq()/bal() (no-USDA-lines, sausage/sesame) still apply on top.
+  ['wrap','sandwich','capper','bowl','salad','flex','green','night'].forEach(function(pool){
+    var poolCids=(poolMap[pool]||[]).filter(function(lid){return!!lineState[lid];});
+    pools[pool].forEach(function(job){
+      if(job.unplacedReason)return; // already excluded — e.g. broke the FC-W/FC-S allergen compounding chain above
+      var cids=poolCids,placer=SEQ[pool]?seq:bal;
+      if(job.admissibleLines){
+        cids=job.admissibleLines.filter(function(lid){return!!lineState[lid];});
+        placer=bal;
+      }
+      if(!placer(job,cids)){
+        var reasons=[];
+        cids.forEach(function(lid){var ls=lineState[lid];if(!ls)return;if(ls.slots.length>=SLOT_CAP)reasons.push(lid+' slot cap');else if(ls.totalMin>=TARGET_MIN)reasons.push(lid+' runtime full');});
+        job.unplacedReason=reasons.length?reasons.slice(0,2).join(', '):(job.admissibleLines?'no eligible admissible lines':'no eligible lines');
+      }
+    });
+  });
   return{lineState:lineState,lines:lines,jobs:jobs,unplaced:jobs.filter(function(j){return!placed[j.sku];}),rules:rules};
 }
 
@@ -682,11 +1157,17 @@ function renderLineMetricsTable(containerId,lineState,lines){
   el.innerHTML=html;
 }
 
-function applyWorkbenchOverrides(lineState){
+function applyWorkbenchOverrides(lineState,unplacedJobs){
   var overrides=(STATE.overrides[CURRENT_WEEK]&&STATE.overrides[CURRENT_WEEK][CURRENT_DAY])||{},touched={};
+  var unplacedBySku={};(unplacedJobs||[]).forEach(function(j){unplacedBySku[j.sku]=j;});
   Object.keys(overrides).forEach(function(skuName){
     var ov=overrides[skuName],job=null,removedFromLine=null,removedIdx=-1;
     Object.keys(lineState).forEach(function(lid){var ls=lineState[lid];for(var i=0;i<ls.slots.length;i++){if(ls.slots[i].sku===skuName){job=ls.slots[i];removedFromLine=lid;removedIdx=i;ls.slots.splice(i,1);ls.totalMin-=job.runtimeMin;ls.totalUnits-=job.qty;touched[lid]=true;break;}}});
+    // Job may never have been placed on any line at all (sequencer left it
+    // unplaced — no eligible lines, slot cap, whatever) rather than sitting
+    // somewhere it needs to be moved FROM. Pull it from the unplaced pile
+    // in that case so a manual override can still seat it.
+    if(!job&&unplacedBySku[skuName])job=unplacedBySku[skuName];
     if(!job)return;
     var tls=lineState[ov.line];
     if(tls){
@@ -739,7 +1220,12 @@ function computeLineBreakDefs_(lineId,ls,naturalTotalMin,rules,dayOv){
   ];
   return base.map(function(d){
     var o=lineOv[d.id]||{};
-    var autoEnabled=naturalTotalMin>=minRuntime;
+    // A break only auto-qualifies once the day is actually long enough to
+    // reach ITS OWN trigger point — not just the general minimum. Without
+    // this, a short day could "enable" both breaks off one shared floor
+    // and then squeeze the 2nd break in near the very end since its real
+    // trigger point never arrives before the shift does.
+    var autoEnabled=naturalTotalMin>=Math.max(minRuntime,d.offsetMin);
     var enabled=(typeof o.enabled==='boolean')?o.enabled:autoEnabled;
     var position=(typeof o.position==='number')?o.position:computeDefaultBreakPosition_(ls,d.offsetMin,rules.changeoverMin);
     position=Math.max(0,Math.min(position,ls.slots.length));
@@ -820,15 +1306,21 @@ function renderFloatingTeamControl(containerId){
   }
 }
 function buildJobRow_(line,job,i,draggable,rules){
-  var tag=job.isUSDA?'<span class="sku-tag tag-usda">USDA</span>':job.pool==='wrap'?'<span class="sku-tag tag-wrap">wrap</span>':job.pool==='sandwich'?'<span class="sku-tag tag-sand">sand</span>':'';
+  var tag=job.isUSDA?'<span class="sku-tag tag-usda">USDA</span>':job.pool==='wrap'?'<span class="sku-tag tag-wrap">wrap</span>':job.pool==='sandwich'?'<span class="sku-tag tag-sand">sand</span>':job.pool==='capper'?'<span class="sku-tag" style="background:var(--blue-dim);color:var(--blue)">capper</span>':'';
   var preTag=job.isPreProcessed?'<span class="preproc-badge" title="Pre-processed">P</span>':'';
   var ovTag=job.overridden?'<span class="sku-tag" style="background:var(--amber-dim);color:var(--amber)" title="Moved by '+(job.overrideMovedBy||'')+(job.overrideNote?' — '+job.overrideNote:'')+'">moved</span>':'';
-  var isfall=draggable&&rules&&((job.pool==='wrap'&&line.id!==rules.wrapLine)||(job.pool==='sandwich'&&line.id!==rules.sandwichLine)||(job.pool==='night'&&line.type!=='night'));
+  var isfall=draggable&&rules&&(job.admissibleLines&&job.admissibleLines.length?job.admissibleLines.indexOf(line.id)===-1:((job.pool==='wrap'&&line.id!==rules.wrapLine)||(job.pool==='sandwich'&&line.id!==rules.sandwichLine)||(job.pool==='night'&&line.type!=='night')||(job.pool==='capper'&&rules.capperLines&&rules.capperLines.indexOf(line.id)===-1)));
   var ftag=isfall?'<span class="sku-tag" style="background:rgba(250,204,21,.15);color:#facc15">&#9889;</span>':'';
   var rc=job.overridden?'sku-row overridden':'sku-row';
   var tl='<div class="sku-time"><strong>'+fmtClock(job.startClockMin)+'</strong> → <strong>'+fmtClock(job.endClockMin)+'</strong></div>';
-  if(draggable){var ss=job.sku.replace(/'/g,"\\'");return'<div class="'+rc+'" draggable="true" ondragstart="wbDragStart(event,\''+ss+'\',\''+line.id+'\')" ondragend="wbDragEnd(event)" ondragover="wbRowDragOver(event,\''+line.id+'\','+i+')" ondragleave="wbRowDragLeave(event)"><div class="sku-row-top"><span class="sku-seq">'+(i+1)+'</span><span class="sku-name" title="'+job.sku+'">'+job.sku+'</span>'+preTag+tag+ovTag+ftag+'<span class="sku-units">'+fmtUnits(job.qty)+'</span></div>'+tl+'</div>';}
-  return'<div class="'+rc+'"><div class="sku-row-top"><span class="sku-seq">'+(i+1)+'</span><span class="sku-name" title="'+job.sku+'">'+job.sku+'</span>'+preTag+tag+'<span class="sku-units">'+fmtUnits(job.qty)+'</span></div>'+tl+'</div>';
+  // FC-W/FC-S allergen chain is otherwise invisible — this is the whole
+  // reason the compounding rule was hard to reason about from the app
+  // alone. Only shown on wrap/sandwich rows (the two pools the rule
+  // actually governs) so this isn't clutter everywhere else. Reading top
+  // to bottom on the locked line shows the chain building in real time.
+  var alTag=(job.pool==='wrap'||job.pool==='sandwich')?'<div style="font-family:var(--mono);font-size:9px;color:var(--amber);padding:1px 0 0 22px">🧬 '+((job.allergenSet&&job.allergenSet.length)?job.allergenSet.join(', '):'no allergens')+'</div>':'';
+  if(draggable){var ss=job.sku.replace(/'/g,"\\'");return'<div class="'+rc+'" draggable="true" ondragstart="wbDragStart(event,\''+ss+'\',\''+line.id+'\')" ondragend="wbDragEnd(event)" ondragover="wbRowDragOver(event,\''+line.id+'\','+i+')" ondragleave="wbRowDragLeave(event)"><div class="sku-row-top"><span class="sku-seq">'+(i+1)+'</span><span class="sku-name" title="'+job.sku+'">'+job.sku+'</span>'+preTag+tag+ovTag+ftag+'<span class="sku-units">'+fmtUnits(job.qty)+'</span></div>'+tl+alTag+'</div>';}
+  return'<div class="'+rc+'"><div class="sku-row-top"><span class="sku-seq">'+(i+1)+'</span><span class="sku-name" title="'+job.sku+'">'+job.sku+'</span>'+preTag+tag+'<span class="sku-units">'+fmtUnits(job.qty)+'</span></div>'+tl+alTag+'</div>';
 }
 // Enabled breaks are draggable, same as SKU rows — dropping one at a new
 // position saves that position as the day override; time is never typed,
@@ -879,8 +1371,20 @@ function buildLineCards(lines,lineState,draggable,rules){
 function checkLineViolations(job,lineId,lineState,rules,lcById){
   var v=[],ls=lineState[lineId];if(!ls)return['Line not found'];var cfg=lcById[lineId];
   if(job.isUSDA&&rules.noUsdaLines.indexOf(lineId)!==-1)v.push('USDA SKU not allowed on '+lineId);
-  if(job.pool==='wrap'&&rules.wrapLine&&lineId!==rules.wrapLine)v.push('Wraps are locked to '+rules.wrapLine);
-  if(job.pool==='sandwich'&&rules.sandwichLine&&lineId!==rules.sandwichLine)v.push('Sandwiches are locked to '+rules.sandwichLine);
+  // A SKU with an explicit admissibleLines override is judged against that
+  // set alone — skip the flat wrap/sandwich/capper/green lock checks below,
+  // since those would otherwise throw a contradictory violation (e.g. a
+  // USDA wrap deliberately allowed on LINE-4 would still trip "Wraps are
+  // locked to LINE-3" if both checks ran).
+  if(job.admissibleLines&&job.admissibleLines.length){
+    if(job.admissibleLines.indexOf(lineId)===-1)v.push('SKU is only admissible on '+job.admissibleLines.join('/'));
+  } else {
+    if(job.pool==='wrap'&&rules.wrapLine&&lineId!==rules.wrapLine)v.push('Wraps are locked to '+rules.wrapLine);
+    if(job.pool==='sandwich'&&rules.sandwichLine&&lineId!==rules.sandwichLine)v.push('Sandwiches are locked to '+rules.sandwichLine);
+    if(job.pool==='capper'&&rules.capperLines&&rules.capperLines.length&&rules.capperLines.indexOf(lineId)===-1)v.push('Capper SKUs are locked to '+rules.capperLines.join('/'));
+    if(job.pool!=='capper'&&rules.capperLines&&rules.capperLines.indexOf(lineId)!==-1)v.push(lineId+' is reserved for capper SKUs');
+    if(job.pool==='green'&&rules.greenBeltLine&&lineId!==rules.greenBeltLine)v.push('Green Belt (4oz jar) SKUs are locked to '+rules.greenBeltLine);
+  }
   if(job.hasSausage&&ls.hasSesame)v.push('Sausage cannot share a line with sesame');
   if(job.hasSesame&&ls.hasSausage)v.push('Sesame cannot share a line with sausage');
   if(ls.slots.length>=rules.slotCap)v.push('Line at slot cap ('+rules.slotCap+' SKUs)');
@@ -931,10 +1435,12 @@ function wbDrop(e,toLine){
   if(!_wbDragSku||!_wbDragFromLine)return;
   var stash=window._wbLastResult;if(!stash){_wbDragSku=null;_wbDragFromLine=null;return;}
   var lineState=stash.lineState,rules=stash.rules,lcById=stash.lineConfigById;
-  var fromLs=lineState[_wbDragFromLine],job=null;
+  var fromUnplaced=(_wbDragFromLine==='(unplaced)');
+  var fromLs=fromUnplaced?null:lineState[_wbDragFromLine],job=null;
   if(fromLs){for(var i=0;i<fromLs.slots.length;i++){if(fromLs.slots[i].sku===_wbDragSku){job=fromLs.slots[i];break;}}}
+  if(!job&&fromUnplaced){(stash.unplaced||[]).forEach(function(j){if(j.sku===_wbDragSku)job=j;});}
   if(!job){_wbDragSku=null;_wbDragFromLine=null;return;}
-  var sameLine=(_wbDragFromLine===toLine);
+  var sameLine=(!fromUnplaced&&_wbDragFromLine===toLine);
   var sku=_wbDragSku,fromLine=_wbDragFromLine;_wbDragSku=null;_wbDragFromLine=null;
   if(sameLine){
     if(targetIndex===null)return;
@@ -1020,6 +1526,7 @@ function renderSequence(){
   document.getElementById('seqContent').style.display=hasDemand?'':'none';
   if(!hasDemand)return;
   renderDayStrip('seqDayStrip');renderWeekDropdowns();renderFloatingTeamControl('seqFloatingTeam');
+  renderScenarioBar('seqScenarioBar');
   var days=getDays(CURRENT_WEEK);if(!CURRENT_DAY||days.indexOf(CURRENT_DAY)===-1)CURRENT_DAY=days[0];
   var dayData=STATE.demand[CURRENT_WEEK]&&STATE.demand[CURRENT_WEEK][CURRENT_DAY],mb=document.getElementById('seqModeBadge');
   if(dayData){mb.style.display='';mb.textContent=dayData.mode;mb.className='mode-badge mode-'+dayData.mode;}else{mb.style.display='none';}
@@ -1053,8 +1560,62 @@ function renderSequence(){
   var uc=document.getElementById('unplacedCard');
   if(unplaced.length>0){uc.style.display='';var tu2=unplaced.reduce(function(s,j){return s+j.qty;},0);var ul=document.getElementById('unplacedList');ul.innerHTML='';unplaced.forEach(function(j){var d=document.createElement('div');d.className='sku-row';d.style.flexDirection='column';d.style.gap='2px';var top=document.createElement('div');top.style.display='flex';top.style.gap='8px';var nm=document.createElement('span');nm.className='sku-name';nm.textContent=j.sku;var qty=document.createElement('span');qty.className='sku-units';qty.style.color='var(--red)';qty.textContent=fmtUnits(j.qty);var pool=document.createElement('span');pool.style.cssText='font-size:10px;color:var(--muted)';pool.textContent=j.pool;top.appendChild(nm);top.appendChild(qty);top.appendChild(pool);d.appendChild(top);if(j.unplacedReason){var r=document.createElement('span');r.style.cssText='font-size:10px;color:var(--amber);padding-left:4px';r.textContent=j.unplacedReason;d.appendChild(r);}ul.appendChild(d);});document.getElementById('unplacedUnits').textContent='Total unplaced: '+fmtUnits(tu2)+' units across '+unplaced.length+' SKUs';}else{uc.style.display='none';}
 }
-function setWeek(w){CURRENT_WEEK=w;CURRENT_DAY=getDays(w)[0]||null;renderSequence();renderWorkbench();}
-function setDay(d){CURRENT_DAY=d;renderSequence();renderWorkbench();}
+function setWeek(w){CURRENT_WEEK=w;CURRENT_DAY=getDays(w)[0]||null;renderSequence();renderWorkbench();renderQAChangeover();}
+function setDay(d){CURRENT_DAY=d;renderSequence();renderWorkbench();renderQAChangeover();}
+
+// ─── QA CHANGEOVER ──────────────────────────────────────────────────────────
+// Static changeover list, sourced from the PUBLISHED plan snapshot (not a
+// live re-sequence) — QA currently works off a printed PDF plan, so this
+// matches that same "locked at publish time" expectation rather than
+// shifting under them mid-shift. A blocking break already suppresses the
+// changeover right after it (applyLineBreaks sets that job's changeoverMin
+// to 0), so this reuses that same flag rather than re-deriving it — any
+// slot with changeoverMin>0 is a real changeover, anything else isn't.
+function labelFlagCell_(sku){
+  var lib=STATE.skuLibrary||{},meta=lib[String(sku||'').toUpperCase()]||{},v=meta.labelNumberVersion||'';
+  if(v==='NO ACTIVE LABEL')return'<span style="background:var(--red-dim);color:var(--red);border:1px solid rgba(239,68,68,.2);border-radius:4px;padding:1px 6px;font-size:12px;white-space:nowrap">⚠ NO LABEL</span>';
+  return'<span style="color:var(--text);font-size:12px">'+(v||'—')+'</span>';
+}
+// One card per line, matching Line Sequence/Workbench's line-card look.
+// Full SKU sequence for the line (not just changeover pairs — two labels
+// side by side per row was confusing, and a straight run list with each
+// SKU's own start/stop is what QA actually needs to check labels against).
+// Every cell in a row is the same size and the same light color so nothing
+// fades out on a busy floor screen — only Start/Stop is bold (the thing
+// QA is actually timing against) and the red "no label" flag, which is
+// deliberately the one thing that should still stand out.
+function buildQaLineCards_(lines,lineState){
+  var cards=[];
+  lines.forEach(function(line){
+    var ls=lineState[line.id],slots=(ls&&ls.slots)||[];
+    if(!slots.length)return;
+    var badge=line.type==='night'?'<span class="line-badge badge-night">night</span>':line.type==='capper'?'<span class="line-badge badge-capper">capper</span>':'<span class="line-badge badge-day">day</span>';
+    var rows=slots.map(function(job){
+      return'<div class="sku-row" style="flex-direction:column;align-items:flex-start;gap:4px">'
+        +'<span style="font-size:13px;color:var(--text)">'+job.sku+'</span>'
+        +'<span style="font-size:13px;color:var(--text);font-weight:700">'+fmtClock(job.startClockMin)+' – '+fmtClock(job.endClockMin)+'</span>'
+        +labelFlagCell_(job.sku)
+        +'</div>';
+    }).join('');
+    cards.push('<div class="line-card"><div class="line-card-header"><span class="line-name">'+line.label+'</span>'+badge+'</div><div class="line-card-body">'+rows+'</div></div>');
+  });
+  return cards.join('');
+}
+function renderQAChangeover(){
+  var weeks=getWeeks(),hasDemand=weeks.length>0;
+  document.getElementById('qaNoData').style.display=hasDemand?'none':'';
+  document.getElementById('qaContent').style.display=hasDemand?'':'none';
+  if(!hasDemand)return;
+  renderDayStrip('qaDayStrip');
+  var days=getDays(CURRENT_WEEK);if(!CURRENT_DAY||days.indexOf(CURRENT_DAY)===-1)CURRENT_DAY=days[0];
+  document.getElementById('qaSubtitle').textContent=(CURRENT_WEEK&&CURRENT_DAY)?CURRENT_WEEK+' · '+CURRENT_DAY+' — static, from the published plan':'Static changeover list from the published plan';
+  var pub=STATE.publishedPlans&&STATE.publishedPlans[CURRENT_WEEK]&&STATE.publishedPlans[CURRENT_WEEK][CURRENT_DAY];
+  var npc=document.getElementById('qaNoPlan'),tbl=document.getElementById('qaTable');
+  if(!pub){npc.style.display='';tbl.innerHTML='';return;}
+  npc.style.display='none';
+  var html=buildQaLineCards_(pub.lines,pub.lineState);
+  tbl.innerHTML=html?'<div class="seq-grid">'+html+'</div>':'<div class="empty"><div class="empty-icon">✅</div><div class="empty-title">No SKUs scheduled today</div></div>';
+}
 
 function renderWorkbench(){
   var weeks=getWeeks(),hasDemand=weeks.length>0;
@@ -1062,6 +1623,7 @@ function renderWorkbench(){
   document.getElementById('wbContent').style.display=hasDemand?'':'none';
   if(!hasDemand)return;
   renderDayStrip('wbDayStrip');renderWeekDropdowns();renderFloatingTeamControl('wbFloatingTeam');
+  renderScenarioBar('wbScenarioBar');
   var days=getDays(CURRENT_WEEK);if(!CURRENT_DAY||days.indexOf(CURRENT_DAY)===-1)CURRENT_DAY=days[0];
   var dayData=STATE.demand[CURRENT_WEEK]&&STATE.demand[CURRENT_WEEK][CURRENT_DAY],mb=document.getElementById('wbModeBadge');
   if(dayData){mb.style.display='';mb.textContent=dayData.mode;mb.className='mode-badge mode-'+dayData.mode;}else{mb.style.display='none';}
@@ -1070,17 +1632,24 @@ function renderWorkbench(){
   var hasPub=!!(STATE.publishedPlans&&STATE.publishedPlans[CURRENT_WEEK]&&STATE.publishedPlans[CURRENT_WEEK][CURRENT_DAY]);
   var ppb=document.getElementById('publishPlanBtn');if(ppb)ppb.style.display=canAct?'':'none';
   var upb=document.getElementById('unpublishPlanBtn');if(upb)upb.style.display=(canAct&&hasPub)?'':'none';
+  var pubScnEl=document.getElementById('wbPublishedScenario');
+  if(pubScnEl){
+    var pubSnap=hasPub?STATE.publishedPlans[CURRENT_WEEK][CURRENT_DAY]:null;
+    pubScnEl.textContent=pubSnap?('Published: '+(pubSnap.scenarioName||'Baseline')):'';
+    pubScnEl.style.display=pubSnap?'':'none';
+  }
   var result=runSequencer();if(!result)return;
   var lineState=result.lineState,lines=result.lines,rules=result.rules,jobs=result.jobs;
-  applyWorkbenchOverrides(lineState);
+  applyWorkbenchOverrides(lineState,result.unplaced);
   applyLineBreaks(lineState,lines,rules,getBreakOverridesForDay());
   var lcById={};lines.forEach(function(l){lcById[l.id]=l;});
   document.getElementById('wbLineCards').innerHTML=buildLineCards(lines,lineState,true,rules);
   renderLineMetricsTable('wbLineMetricsTable',lineState,lines);
   var wbUc=document.getElementById('wbUnplacedCard');
-  if(result.unplaced&&result.unplaced.length>0){wbUc.style.display='';var wbTu=result.unplaced.reduce(function(s,j){return s+j.qty;},0);var wbUl=document.getElementById('wbUnplacedList');wbUl.innerHTML='';result.unplaced.forEach(function(j){var d=document.createElement('div');d.className='sku-row';d.style.flexDirection='column';d.style.gap='2px';var top=document.createElement('div');top.style.display='flex';top.style.gap='8px';var nm=document.createElement('span');nm.className='sku-name';nm.textContent=j.sku;var qty=document.createElement('span');qty.className='sku-units';qty.style.color='var(--red)';qty.textContent=fmtUnits(j.qty);var pool=document.createElement('span');pool.style.cssText='font-size:10px;color:var(--muted)';pool.textContent=j.pool;top.appendChild(nm);top.appendChild(qty);top.appendChild(pool);d.appendChild(top);if(j.unplacedReason){var r=document.createElement('span');r.style.cssText='font-size:10px;color:var(--amber);padding-left:4px';r.textContent=j.unplacedReason;d.appendChild(r);}wbUl.appendChild(d);});document.getElementById('wbUnplacedUnits').textContent='Total unplaced: '+fmtUnits(wbTu)+' units across '+result.unplaced.length+' SKUs';}else if(wbUc){wbUc.style.display='none';}
+  var wbTrueUnplaced=trueUnplaced(result.unplaced);
+  if(wbTrueUnplaced.length>0){wbUc.style.display='';var wbTu=wbTrueUnplaced.reduce(function(s,j){return s+j.qty;},0);var wbUl=document.getElementById('wbUnplacedList');wbUl.innerHTML='';wbTrueUnplaced.forEach(function(j){var d=document.createElement('div');d.className='sku-row';d.style.flexDirection='column';d.style.gap='2px';d.style.cursor='grab';d.setAttribute('draggable','true');var ss=j.sku;d.addEventListener('dragstart',function(e){wbDragStart(e,ss,'(unplaced)');});d.addEventListener('dragend',wbDragEnd);var top=document.createElement('div');top.style.display='flex';top.style.gap='8px';var nm=document.createElement('span');nm.className='sku-name';nm.textContent=j.sku;var qty=document.createElement('span');qty.className='sku-units';qty.style.color='var(--red)';qty.textContent=fmtUnits(j.qty);var pool=document.createElement('span');pool.style.cssText='font-size:10px;color:var(--muted)';pool.textContent=j.pool;top.appendChild(nm);top.appendChild(qty);top.appendChild(pool);d.appendChild(top);if(j.unplacedReason){var r=document.createElement('span');r.style.cssText='font-size:10px;color:var(--amber);padding-left:4px';r.textContent=j.unplacedReason;d.appendChild(r);}var hint=document.createElement('span');hint.style.cssText='font-size:10px;color:var(--muted);padding-left:4px';hint.textContent='↕ drag onto a line to place manually';d.appendChild(hint);wbUl.appendChild(d);});document.getElementById('wbUnplacedUnits').textContent='Total unplaced: '+fmtUnits(wbTu)+' units across '+wbTrueUnplaced.length+' SKUs';}else{wbUc.style.display='none';}
   if(CURRENT_USER&&CURRENT_USER.isAdmin){renderDemandDebug(dayData?dayData.skus||{}:{},jobs);}
-  window._wbLastResult={lineState:lineState,lines:lines,rules:rules,lineConfigById:lcById};
+  window._wbLastResult={lineState:lineState,lines:lines,rules:rules,lineConfigById:lcById,unplaced:result.unplaced};
   updateUndoBtn();
 }
 
@@ -1097,9 +1666,44 @@ function publishActuals(){if(!_pendingActuals)return;var btn=document.querySelec
 
 function renderSkuLibrary(){filterSkuTable();}
 function addSkuManually(){var input=document.getElementById('newSkuInput');var raw=(input.value||'').trim().toUpperCase().replace(/[^A-Z0-9_]/g,'');if(!raw)return;var el=document.getElementById('skuLibStatus');if(STATE.skuLibrary[raw]){document.getElementById('skuSearch').value=raw;filterSkuTable();input.value='';if(el)el.innerHTML='<div class="status status-warn">'+raw+' already in library — highlighted below</div>';return;}STATE.skuLibrary[raw]={active:true,category:'',packageType:'',upm:'',allergens:'',capper:false,nightShift:false,preProcessed:false};input.value='';document.getElementById('skuSearch').value=raw;filterSkuTable();if(el)el.innerHTML='<div class="status status-info">Added '+raw+' — fill in attributes and save</div>';}
-function filterSkuTable(){var search=(document.getElementById('skuSearch').value||'').toLowerCase(),showInactive=document.getElementById('showInactiveChk').checked,lib=STATE.skuLibrary,allKeys=Object.keys(lib);updateSkuCounts();var skus=allKeys.filter(function(k){if(!showInactive&&lib[k].active===false)return false;return k.toLowerCase().indexOf(search)!==-1;}).sort();document.getElementById('skuCount').textContent=skus.length+' SKUs';document.getElementById('skuTableBody').innerHTML=skus.map(function(key){var s=lib[key];function chk(f){return'<input type="checkbox" '+(s[f]?'checked':'')+' style="accent-color:var(--teal)" onchange="updateSkuField(\''+key+'\',\''+f+'\',this.checked)">';}return'<tr><td><span class="sku-active-dot '+(s.active!==false?'dot-active':'dot-inactive')+'"></span>'+key+'</td><td><input class="inline-input" value="'+(s.category||'')+'" onchange="updateSkuField(\''+key+'\',\'category\',this.value)" style="width:110px"></td><td><input class="inline-input" value="'+(s.packageType||'')+'" onchange="updateSkuField(\''+key+'\',\'packageType\',this.value)" style="width:100px"></td><td><input class="inline-input" type="number" value="'+(s.upm||'')+'" onchange="updateSkuField(\''+key+'\',\'upm\',parseFloat(this.value))" style="width:120px"></td><td><input class="inline-input" value="'+(s.allergens||'')+'" onchange="updateSkuField(\''+key+'\',\'allergens\',this.value)" style="width:140px"></td><td style="text-align:center">'+chk('capper')+'</td><td style="text-align:center">'+chk('nightShift')+'</td><td style="text-align:center">'+chk('preProcessed')+'</td><td style="text-align:center">'+chk('active')+'</td></tr>';}).join('');}
+function filterSkuTable(){var search=(document.getElementById('skuSearch').value||'').toLowerCase(),showInactive=document.getElementById('showInactiveChk').checked,lib=STATE.skuLibrary,allKeys=Object.keys(lib);updateSkuCounts();var skus=allKeys.filter(function(k){if(!showInactive&&lib[k].active===false)return false;if(!search)return true;var s=lib[k];var haystack=[k,s.category,s.packageType,s.allergens,s.labelNumberVersion,(s.admissibleLines||[]).join(' ')].join(' ').toLowerCase();return haystack.indexOf(search)!==-1;}).sort();document.getElementById('skuCount').textContent=skus.length+' SKUs';document.getElementById('skuTableBody').innerHTML=skus.map(function(key){var s=lib[key];function chk(f){return'<input type="checkbox" '+(s[f]?'checked':'')+' style="accent-color:var(--teal)" onchange="updateSkuField(\''+key+'\',\''+f+'\',this.checked)">';}var labelVal=s.labelNumberVersion||'',labelCell=labelVal==='NO ACTIVE LABEL'?'<span style="background:var(--red-dim);color:var(--red);border:1px solid rgba(239,68,68,.2);border-radius:4px;padding:2px 6px;font-size:10px;white-space:nowrap">⚠ NO ACTIVE LABEL</span>':(labelVal?'<span style="color:var(--muted);font-size:11px">'+labelVal+'</span>':'<span style="color:var(--muted);font-size:11px">—</span>');var linesCell='<span style="cursor:pointer;font-size:11px;color:'+((s.admissibleLines&&s.admissibleLines.length)?'var(--teal)':'var(--muted)')+';border-bottom:1px dashed currentColor" onclick="openAdmissibleLinesModal(\''+key+'\')" title="Click to set which lines this SKU is allowed on">'+((s.admissibleLines&&s.admissibleLines.length)?s.admissibleLines.join(', '):'Any')+'</span>';return'<tr><td><span class="sku-active-dot '+(s.active!==false?'dot-active':'dot-inactive')+'"></span>'+key+'</td><td><input class="inline-input" value="'+(s.category||'')+'" onchange="updateSkuField(\''+key+'\',\'category\',this.value)" style="width:110px"></td><td><input class="inline-input" value="'+(s.packageType||'')+'" onchange="updateSkuField(\''+key+'\',\'packageType\',this.value)" style="width:100px"></td><td><input class="inline-input" type="number" value="'+(s.upm||'')+'" onchange="updateSkuField(\''+key+'\',\'upm\',parseFloat(this.value))" style="width:120px"></td><td><input class="inline-input" value="'+(s.allergens||'')+'" onchange="updateSkuField(\''+key+'\',\'allergens\',this.value)" style="width:140px"></td><td>'+labelCell+'</td><td>'+linesCell+'</td><td style="text-align:center">'+chk('capper')+'</td><td style="text-align:center">'+chk('nightShift')+'</td><td style="text-align:center">'+chk('preProcessed')+'</td><td style="text-align:center">'+chk('active')+'</td></tr>';}).join('');}
 var _skuTimer=null;
 function updateSkuField(key,field,val){if(!STATE.skuLibrary[key])STATE.skuLibrary[key]={};STATE.skuLibrary[key][field]=val;updateSkuCounts();var el=document.getElementById('skuLibStatus');if(el)el.innerHTML='<div class="status status-info">Unsaved — auto-saving…</div>';if(_skuTimer)clearTimeout(_skuTimer);_skuTimer=setTimeout(function(){saveSkuLibrary(true);},1500);}
+
+// ─── ADMISSIBLE LINES MODAL (per-SKU line restriction, Samad's rules engine pt.1) ──
+// _admModalSelected is a working copy so Cancel doesn't mutate STATE until Apply.
+var _admModalKey=null,_admModalSelected=[];
+function openAdmissibleLinesModal(key){
+  _admModalKey=key;
+  var s=STATE.skuLibrary[key]||{};
+  _admModalSelected=(s.admissibleLines||[]).slice();
+  renderAdmissibleLinesModalBody();
+  document.getElementById('admLinesModalTitle').textContent='Admissible lines — '+key;
+  document.getElementById('admissibleLinesModal').classList.add('active');
+}
+function renderAdmissibleLinesModalBody(){
+  var lines=STATE.lineConfig||DEFAULT_LINE_CONFIG;
+  document.getElementById('admLinesModalBody').innerHTML=lines.map(function(l){
+    var checked=_admModalSelected.indexOf(l.id)!==-1;
+    return '<label style="display:flex;align-items:center;gap:8px;padding:4px 0;font-family:var(--mono);font-size:12px;cursor:pointer"><input type="checkbox" '+(checked?'checked':'')+' style="accent-color:var(--teal)" onchange="toggleAdmissibleLine(\''+l.id+'\',this.checked)"> '+l.label+'</label>';
+  }).join('');
+}
+function toggleAdmissibleLine(lineId,checked){
+  var i=_admModalSelected.indexOf(lineId);
+  if(checked&&i===-1)_admModalSelected.push(lineId);
+  if(!checked&&i!==-1)_admModalSelected.splice(i,1);
+}
+function closeAdmissibleLinesModal(){document.getElementById('admissibleLinesModal').classList.remove('active');_admModalKey=null;}
+function applyAdmissibleLinesModal(){
+  if(!_admModalKey)return;
+  if(!STATE.skuLibrary[_admModalKey])STATE.skuLibrary[_admModalKey]={};
+  STATE.skuLibrary[_admModalKey].admissibleLines=_admModalSelected.slice();
+  var key=_admModalKey;
+  closeAdmissibleLinesModal();
+  filterSkuTable();
+  var el=document.getElementById('skuLibStatus');if(el)el.innerHTML='<div class="status status-info">Unsaved — auto-saving…</div>';
+  if(_skuTimer)clearTimeout(_skuTimer);_skuTimer=setTimeout(function(){saveSkuLibrary(true);},1500);
+}
 function updateSkuCounts(){var lib=STATE.skuLibrary,k=Object.keys(lib);document.getElementById('sc-capper').textContent=k.filter(function(x){return lib[x].capper;}).length;document.getElementById('sc-night').textContent=k.filter(function(x){return lib[x].nightShift;}).length;document.getElementById('sc-preproc').textContent=k.filter(function(x){return lib[x].preProcessed;}).length;document.getElementById('sc-active').textContent=k.filter(function(x){return lib[x].active!==false;}).length;document.getElementById('sc-total').textContent=k.length;}
 function saveSkuLibrary(isAutoSave){var el=document.getElementById('skuLibStatus');if(el)el.innerHTML='<div class="status status-info"><span class="spinner"></span>Saving…</div>';google.script.run.withSuccessHandler(function(){if(el){el.innerHTML='<div class="status status-ok">✓ Saved'+(isAutoSave?' (auto)':'')+'</div>';setTimeout(function(){if(el.innerHTML.indexOf('Saved')!==-1)el.innerHTML='';},3000);}}).withFailureHandler(function(err){if(el)el.innerHTML='<div class="status status-err">⚠ SAVE FAILED: '+err.message+'</div>';}).saveSkuLibrary(STATE.skuLibrary);}
 function importSkusFromForecast(){var allSkuNamesSet={};Object.keys(STATE.demand).forEach(function(wk){Object.keys(STATE.demand[wk]).forEach(function(day){Object.keys(STATE.demand[wk][day].skus||{}).forEach(function(sku){allSkuNamesSet[sku]=true;});});});Object.keys(STATE.skuLibrary).forEach(function(key){allSkuNamesSet[key]=true;});var allSkuNames=Object.keys(allSkuNamesSet),el=document.getElementById('skuLibStatus');if(!allSkuNames.length){el.innerHTML='<div class="status status-warn">No demand loaded yet — load demand first.</div>';return;}el.innerHTML='<div class="status status-info"><span class="spinner"></span>Pulling attributes…</div>';google.script.run.withSuccessHandler(function(result){var attributes=result.attributes,notFound=result.notFound,added=0,updated=0;allSkuNames.forEach(function(sku){var key=sku.toUpperCase(),normKey=key.replace(/[^A-Z0-9]/g,''),attrs=attributes[normKey];if(!STATE.skuLibrary[key]){STATE.skuLibrary[key]={active:true,category:'',packageType:'',upm:'',allergens:'',capper:false,nightShift:false,preProcessed:false};added++;}if(attrs){if(attrs.category)STATE.skuLibrary[key].category=attrs.category;if(attrs.packageType)STATE.skuLibrary[key].packageType=attrs.packageType;if(attrs.allergens)STATE.skuLibrary[key].allergens=attrs.allergens;if(attrs.upm)STATE.skuLibrary[key].upm=attrs.upm;updated++;}});renderSkuLibrary();var nfMsg=notFound.length?('<br><span style="color:var(--amber)">⚠ '+notFound.length+' not found: '+notFound.slice(0,10).join(', ')+(notFound.length>10?'…':'')+'</span>'):'';el.innerHTML='<div class="status status-info"><span class="spinner"></span>'+added+' new, '+updated+' matched — saving…</div>';google.script.run.withSuccessHandler(function(){el.innerHTML='<div class="status status-ok">✓ Saved — '+added+' new, '+updated+' matched'+nfMsg+'</div>';}).withFailureHandler(function(err){el.innerHTML='<div class="status status-err">⚠ Pull ok, SAVE FAILED: '+err.message+'</div>';}).saveSkuLibrary(STATE.skuLibrary);}).withFailureHandler(function(err){el.innerHTML='<div class="status status-err">'+err.message+'</div>';}).fetchSkuAttributesFor(allSkuNames);}
@@ -1128,7 +1732,7 @@ function removeAdmin(email){google.script.run.withSuccessHandler(renderUsers).wi
 function addPlanner(){var email=document.getElementById('newPlannerEmail').value.trim().toLowerCase();if(email.indexOf('@')===-1)return;if(STATE.planners.indexOf(email)===-1)STATE.planners.push(email);google.script.run.withSuccessHandler(function(){document.getElementById('newPlannerEmail').value='';renderUsers();}).withFailureHandler(function(){}).savePlanners(STATE.planners);}
 function removePlanner(email){STATE.planners=STATE.planners.filter(function(e){return e!==email;});google.script.run.withSuccessHandler(renderUsers).withFailureHandler(function(){}).savePlanners(STATE.planners);}
 
-function startPolling(){if(_pollInterval)return;_pollInterval=setInterval(function(){google.script.run.withSuccessHandler(function(ts){if(!ts||ts===_lastModified)return;_lastModified=ts;document.getElementById('syncIndicator').style.display='';google.script.run.withSuccessHandler(function(s){document.getElementById('syncIndicator').style.display='none';if(!s)return;if(s.demand)STATE.demand=s.demand;if(s.skuLibrary)STATE.skuLibrary=s.skuLibrary;if(s.lineConfig)STATE.lineConfig=s.lineConfig;if(s.planners)STATE.planners=s.planners;if(s.overrides)STATE.overrides=s.overrides;if(s.sequencingRules)STATE.sequencingRules=s.sequencingRules;if(s.publishedPlans)STATE.publishedPlans=s.publishedPlans;if(s.breakOverrides)STATE.breakOverrides=s.breakOverrides;renderSequence();}).withFailureHandler(function(){document.getElementById('syncIndicator').style.display='none';}).getState();}).withFailureHandler(function(){}).getLastModified();},8000);}
+function startPolling(){if(_pollInterval)return;_pollInterval=setInterval(function(){google.script.run.withSuccessHandler(function(ts){if(!ts||ts===_lastModified)return;_lastModified=ts;document.getElementById('syncIndicator').style.display='';google.script.run.withSuccessHandler(function(s){document.getElementById('syncIndicator').style.display='none';if(!s)return;if(s.demand)STATE.demand=s.demand;if(s.skuLibrary)STATE.skuLibrary=s.skuLibrary;if(s.lineConfig)STATE.lineConfig=s.lineConfig;if(s.planners)STATE.planners=s.planners;if(s.overrides)STATE.overrides=s.overrides;if(s.sequencingRules)STATE.sequencingRules=s.sequencingRules;if(s.publishedPlans)STATE.publishedPlans=s.publishedPlans;if(s.breakOverrides)STATE.breakOverrides=s.breakOverrides;if(s.scenarios)STATE.scenarios=s.scenarios;renderSequence();}).withFailureHandler(function(){document.getElementById('syncIndicator').style.display='none';}).getState();}).withFailureHandler(function(){}).getLastModified();},8000);}
 
 function publishPlan(){
   var dayData=STATE.demand[CURRENT_WEEK]&&STATE.demand[CURRENT_WEEK][CURRENT_DAY];
@@ -1144,9 +1748,10 @@ function confirmPublishPlan(){
 }
 function doPublishPlan(){
   var result=runSequencer();if(!result)return;
-  applyWorkbenchOverrides(result.lineState);
+  applyWorkbenchOverrides(result.lineState,result.unplaced);
   applyLineBreaks(result.lineState,result.lines,result.rules,getBreakOverridesForDay());
-  var snap={lineState:result.lineState,lines:result.lines,jobs:result.jobs,unplaced:result.unplaced,publishedBy:(CURRENT_USER&&CURRENT_USER.email)||'',publishedAt:new Date().toISOString()};
+  var scn=getActiveScenario();
+  var snap={lineState:result.lineState,lines:result.lines,jobs:result.jobs,unplaced:trueUnplaced(result.unplaced),publishedBy:(CURRENT_USER&&CURRENT_USER.email)||'',publishedAt:new Date().toISOString(),scenarioId:scn?scn.id:null,scenarioName:scn?scn.name:'Baseline'};
   if(!STATE.publishedPlans)STATE.publishedPlans={};
   if(!STATE.publishedPlans[CURRENT_WEEK])STATE.publishedPlans[CURRENT_WEEK]={};
   STATE.publishedPlans[CURRENT_WEEK][CURRENT_DAY]=snap;
@@ -1191,6 +1796,7 @@ function switchView(name,btn){
   if(name==='users')renderUsers();
   if(name==='sequence'){document.querySelector('.main').classList.remove('wb-active');renderSequence();}
   if(name==='workbench'){document.querySelector('.main').classList.add('wb-active');renderWorkbench();}
+  if(name==='qa')renderQAChangeover();
 }
 
 function renderDayStrip(containerId){
@@ -1222,7 +1828,61 @@ function renderDayStrip(containerId){
     el.appendChild(div);
   });
 }
-function setWeekDay(wk,day){CURRENT_WEEK=wk;CURRENT_DAY=day;renderSequence();renderWorkbench();}
+function setWeekDay(wk,day){CURRENT_WEEK=wk;CURRENT_DAY=day;renderSequence();renderWorkbench();renderQAChangeover();}
+
+function renderScenarioBar(containerId){
+  var el=document.getElementById(containerId);if(!el)return;
+  if(!CURRENT_WEEK||!CURRENT_DAY){el.innerHTML='';return;}
+  var d=getDayScenarios();
+  var dayLines=(STATE.lineConfig||DEFAULT_LINE_CONFIG).filter(function(l){var dd=DAY_SHORT[CURRENT_DAY];return l.days&&l.days[dd];});
+  var html='<button class="scn-tab'+(!d.activeId?' active':'')+'" onclick="selectScenario(\''+containerId+'\',null)">Baseline</button>';
+  d.list.forEach(function(s){
+    html+='<button class="scn-tab'+(d.activeId===s.id?' active':'')+'" onclick="selectScenario(\''+containerId+'\',\''+s.id+'\')">'+escHtml(s.name)+
+      ' <span class="scn-del" onclick="event.stopPropagation();deleteScenario(\''+containerId+'\',\''+s.id+'\')" title="Delete scenario">✕</span></button>';
+  });
+  html+='<button class="btn btn-sm" onclick="toggleAddScenario(\''+containerId+'\')">+ Add scenario</button>';
+  html+='<div class="scn-addrow" id="'+containerId+'_add" style="display:none">'+
+    '<input class="inline-input" id="'+containerId+'_name" placeholder="e.g. Shut down Line-6, 1st shift" style="width:280px;margin-right:14px">'+
+    dayLines.map(function(l){return '<label style="margin-right:12px;font-size:11px;white-space:nowrap"><input type="checkbox" checked class="'+containerId+'_lchk" data-line="'+l.id+'" style="accent-color:var(--teal)"> '+l.label+'</label>';}).join('')+
+    '<button class="btn btn-sm" style="margin-left:8px" onclick="saveNewScenario(\''+containerId+'\')">Save</button> '+
+    '<button class="btn btn-sm" onclick="toggleAddScenario(\''+containerId+'\')">Cancel</button>'+
+  '</div>';
+  el.innerHTML=html;
+}
+function selectScenario(containerId,id){
+  var d=getDayScenarios();d.activeId=id;
+  persistScenarios();
+  renderScenarioBar(containerId);
+  renderSequence();renderWorkbench();
+}
+function toggleAddScenario(containerId){
+  var row=document.getElementById(containerId+'_add');if(!row)return;
+  row.style.display=row.style.display==='none'?'':'none';
+  if(row.style.display!=='none'){var nm=document.getElementById(containerId+'_name');if(nm)nm.value='';}
+}
+function saveNewScenario(containerId){
+  var nameEl=document.getElementById(containerId+'_name'),name=(nameEl&&nameEl.value||'').trim();
+  if(!name){if(nameEl)nameEl.focus();return;}
+  var boxes=document.querySelectorAll('.'+containerId+'_lchk'),excluded=[];
+  boxes.forEach(function(b){if(!b.checked)excluded.push(b.getAttribute('data-line'));});
+  if(excluded.length===0){alert('This matches Baseline (no lines unchecked) — uncheck at least one line to make it a distinct scenario.');return;}
+  var d=getDayScenarios(),id='scn_'+Date.now();
+  d.list.push({id:id,name:name,excludedLines:excluded});
+  d.activeId=id;
+  persistScenarios();
+  toggleAddScenario(containerId);
+  renderScenarioBar(containerId);
+  renderSequence();renderWorkbench();
+}
+function deleteScenario(containerId,id){
+  if(!confirm('Delete this scenario? This can\'t be undone.'))return;
+  var d=getDayScenarios();
+  d.list=d.list.filter(function(s){return s.id!==id;});
+  if(d.activeId===id)d.activeId=null;
+  persistScenarios();
+  renderScenarioBar(containerId);
+  renderSequence();renderWorkbench();
+}
 
 // ─── PREVIEW AS ROLE ───────────────────────────────────────────────────────
 // Admin-only, client-side simulation of how the UI looks under a different
@@ -1294,6 +1954,7 @@ window.onload=function(){
       if(s.sequencingRules)STATE.sequencingRules=s.sequencingRules;
       if(s.publishedPlans)STATE.publishedPlans=s.publishedPlans;
       if(s.breakOverrides)STATE.breakOverrides=s.breakOverrides;
+      if(s.scenarios)STATE.scenarios=s.scenarios;
       _lastModified=s.lastModified||null;
     }
     var weeks=getWeeks();
