@@ -1,6 +1,30 @@
 /**
- * Sequins ✨ — Code.js    v0.4.44 — 2026-08-06    (pairs with Index.html v0.5.88)
+ * Sequins ✨ — Code.js    v0.4.47 — 2026-08-12    (pairs with Index.html v0.5.95)
  * Full history: git log. Recent changes only, newest first.
+ *
+ * v0.4.47  pushedDemandTrigger + installPushedDemandTrigger/remove. Imports on a
+ *          15-minute timer so an already-open tab fills in without a refresh:
+ *          setDemandDay_ bumps lastModified, and the client's existing 8-second
+ *          poll re-pulls state when it changes. No client change needed.
+ *          Not installed by anything — run installPushedDemandTrigger() once.
+ *
+ * v0.4.46  Demand-tab dates read from DISPLAY values. Sheets coerces the pushed
+ *          'yyyy-MM-dd' string into a Date at midnight in the SPREADSHEET's
+ *          timezone; reformatting that in the SCRIPT's timezone moved it back a
+ *          day, so the first real push (53 rows, 08-12) read back as 08-11. The
+ *          actuals guard refused it, so nothing was written wrong.
+ *          importPushedDemand() also runs from the editor now — getActiveUser()
+ *          needs a scope the editor lacks, and editor access already outranks
+ *          the admin list.
+ *
+ * v0.4.45  Pushed demand. The planner writes Assembly Summary A:C into a Demand
+ *          tab in the archive Sheet; importPushedDemand() files those rows into
+ *          the same per-day storage the manual fetch uses. Date -> week/day is
+ *          resolved from the Compiled Forecast header, not recomputed, so the
+ *          week label can't disagree with the manual path. Never overwrites an
+ *          actual, never reaches into a loaded past day, and a re-push with an
+ *          unchanged PushedAt is a no-op. previewPushedDemand() shows the plan
+ *          without writing. Manual fetches untouched.
  *
  * v0.4.44  Actuals freeze is date-aware. A captured day is only frozen if it is
  *          in the PAST; today or later re-fetches and is returned in `refreshed`.
@@ -789,6 +813,309 @@ function publishActualDays(entries) {
   });
 
   return { ok: true, daysLoaded: entries.length };
+}
+
+// ─── PUSHED DEMAND (Demand tab in the archive Sheet) ─────────────────────────
+// The Production Planner writes Assembly Summary A:C into a Demand tab on every
+// CSV Automater run (SequinsDemandPush.gs on that side). This reads it.
+//
+// WHY THIS IS PULL-ON-OPEN, NOT A TRIGGER: Room Zoom feels automatic because
+// getPlans() runs inside doGet — it re-reads on page load, no background job.
+// Copying that shape means demand can never change underneath you mid-plan,
+// which matters because Workbench recomputes live on every render. A time-driven
+// trigger would have been able to move the plan while you were working it.
+//
+// The planner writes a DATE. Sequins keys on 'Wk 33 · 2026' + day name, built in
+// fetchForecastWeekData from the Compiled Forecast header plus
+// new Date().getFullYear(). Rather than reproduce that formula (and its quirk of
+// using today's year rather than the labelled week's), the date -> week/day map
+// is read from the same Compiled Forecast rows the manual fetch reads, so the
+// two can't disagree about what a week is called.
+const PUSHED_DEMAND_TAB = 'Demand';  // same spreadsheet as PLAN_ARCHIVE_SHEET_ID
+
+// Resolves a Demand-tab date cell to 'yyyy-MM-dd'. Display value first (already
+// correct in the spreadsheet's own timezone), then the raw Date as a last resort.
+// A Date is read via its own component parts rather than Utilities.formatDate,
+// because formatting in the script timezone is precisely what caused the
+// off-by-one day.
+function normalizePushedDate_(displayVal, rawVal, tz) {
+  const s = String(displayVal || '').trim();
+  let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if (m) return m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);          // 8/12/2026
+  if (m) return m[3] + '-' + ('0' + m[1]).slice(-2) + '-' + ('0' + m[2]).slice(-2);
+  if (rawVal instanceof Date && !isNaN(rawVal.getTime())) {
+    return rawVal.getFullYear() + '-' +
+           ('0' + (rawVal.getMonth() + 1)).slice(-2) + '-' +
+           ('0' + rawVal.getDate()).slice(-2);
+  }
+  return '';
+}
+
+function forecastDateMap_() {
+  const sheet = SpreadsheetApp.openById(FORECAST_SHEET_ID).getSheetByName(FORECAST_TAB);
+  if (!sheet) throw new Error('Tab "' + FORECAST_TAB + '" not found in Compiled Forecast');
+
+  const lastCol = sheet.getLastColumn();
+  const rows    = sheet.getRange(1, 1, 3, lastCol).getValues();
+  const tz      = Session.getScriptTimeZone();
+  const DAYS    = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+
+  const map = {};
+  let lastLabel = '';
+  for (let ci = 0; ci < lastCol; ci++) {
+    const cell = String(rows[0][ci] || '').trim();
+    if (cell) lastLabel = cell;                       // carry forward across merged cells
+    const wkMatch = lastLabel.match(/Week\s+(\d+)/i);
+    if (!wkMatch) continue;
+    const dayName = String(rows[1][ci] || '').trim();
+    if (!DAYS.includes(dayName)) continue;
+    const dateVal = rows[2][ci];
+    if (!(dateVal instanceof Date)) continue;
+    const dateStr = Utilities.formatDate(new Date(dateVal), tz, 'yyyy-MM-dd');
+    map[dateStr] = {
+      weekLabel: 'Wk ' + parseInt(wkMatch[1]) + ' \u00b7 ' + new Date().getFullYear(),
+      day: dayName
+    };
+  }
+  return map;
+}
+
+// Groups the Demand tab by date. Latest PushedAt per date wins, so a re-push
+// that landed twice can't produce a half-merged day.
+function readPushedDemandRows_() {
+  const ss  = SpreadsheetApp.openById(PLAN_ARCHIVE_SHEET_ID);
+  const tab = ss.getSheetByName(PUSHED_DEMAND_TAB);
+  if (!tab) return { days: {}, missing: true };
+
+  const lastRow = tab.getLastRow();
+  if (lastRow < 2) return { days: {}, missing: false };
+
+  const tz     = Session.getScriptTimeZone();
+  const rng    = tab.getRange(2, 1, lastRow - 1, 8);
+  const values = rng.getValues();
+  // Dates come from DISPLAY values, not raw values (v0.4.46). The push writes
+  // the string '2026-08-12'; Sheets coerces that to a Date at midnight in the
+  // SPREADSHEET's timezone, and reformatting it in the SCRIPT's timezone then
+  // shifts it a day. That is exactly what happened on the first real push — 53
+  // rows written for 08-12 read back as 08-11, which the actuals guard caught.
+  // The display value is whatever the cell shows, so it round-trips no matter
+  // how the two timezones differ.
+  const disp   = rng.getDisplayValues();
+
+  // Same door as both manual fetches: beverages and packaged CPG never enter
+  // Sequins. Fails open if Menu Library can't be read (nonAssemblySkus_ returns
+  // {}), which excludes nothing rather than silently dropping real demand.
+  const nonAssembly = nonAssemblySkus_();
+
+  const days = {};
+  let excluded = 0, skippedRows = 0;
+
+  values.forEach(function(r, i) {
+    const pushedAt = r[0] instanceof Date
+      ? Utilities.formatDate(r[0], tz, 'yyyy-MM-dd HH:mm:ss') : String(r[0] || '').trim();
+    const dateStr = normalizePushedDate_(disp[i][1], r[1], tz);
+    const sku = String(r[5] || '').trim();
+    const qty = Math.round(parseFloat(String(r[6] || '').replace(/,/g, '')) || 0);
+
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr) || !sku || qty <= 0) { skippedRows++; return; }
+    if (nonAssembly[normalizeSku_(sku)]) { excluded++; return; }
+
+    if (!days[dateStr]) days[dateStr] = { skus: {}, pushedAt: pushedAt, source: String(r[7] || '') };
+    // A later push for the same date supersedes: reset rather than merge.
+    if (pushedAt > days[dateStr].pushedAt) {
+      days[dateStr] = { skus: {}, pushedAt: pushedAt, source: String(r[7] || '') };
+    } else if (pushedAt < days[dateStr].pushedAt) {
+      return;
+    }
+    days[dateStr].skus[sku] = qty;
+  });
+
+  return { days: days, missing: false, excluded: excluded, skippedRows: skippedRows };
+}
+
+// Decides, per pushed date, whether it should land — without writing anything.
+// Both the preview and the importer run through this, so what you're shown and
+// what happens can't drift apart.
+function planPushedDemandImport_() {
+  const pushed = readPushedDemandRows_();
+  if (pushed.missing) return { missing: true, items: [] };
+
+  const map   = forecastDateMap_();
+  const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  const items = [];
+
+  Object.keys(pushed.days).sort().forEach(function(dateStr) {
+    const pd  = pushed.days[dateStr];
+    const loc = map[dateStr];
+    const skuCount = Object.keys(pd.skus).length;
+    let units = 0;
+    Object.keys(pd.skus).forEach(function(s) { units += pd.skus[s]; });
+
+    const base = { date: dateStr, skuCount: skuCount, units: units, pushedAt: pd.pushedAt };
+
+    if (!loc) {
+      items.push(Object.assign({}, base, { action: 'skip',
+        reason: 'date not found in Compiled Forecast — no week/day to file it under' }));
+      return;
+    }
+
+    const existing = getDemandDay_(loc.weekLabel, loc.day);
+    const item = Object.assign({}, base, { weekLabel: loc.weekLabel, day: loc.day });
+
+    if (existing && existing.mode === 'actual') {
+      // Same rule publishForecastWeek already enforces: a plan never overwrites
+      // a captured actual.
+      items.push(Object.assign({}, item, { action: 'skip', reason: 'day already captured as actual' }));
+    } else if (existing && existing.pushedAt === pd.pushedAt) {
+      items.push(Object.assign({}, item, { action: 'skip', reason: 'already imported (same push)' }));
+    } else if (existing && dateStr < today) {
+      // Past days are evidence. Nothing automatic reaches backwards.
+      items.push(Object.assign({}, item, { action: 'skip', reason: 'past day already loaded — left alone' }));
+    } else {
+      items.push(Object.assign({}, item, {
+        action: existing ? 'replace' : 'add',
+        prevSkuCount: existing ? Object.keys(existing.skus || {}).length : 0
+      }));
+    }
+  });
+
+  return { missing: false, items: items, excluded: pushed.excluded, skippedRows: pushed.skippedRows };
+}
+
+// Read-only. Client calls this on load to find out whether anything is waiting.
+function getPushedDemandStatus() {
+  try {
+    const plan = planPushedDemandImport_();
+    if (plan.missing) return { ok: true, missing: true, pending: 0, items: [] };
+    const pending = plan.items.filter(function(i) { return i.action !== 'skip'; });
+    return { ok: true, missing: false, pending: pending.length, items: plan.items };
+  } catch (err) {
+    Logger.log('getPushedDemandStatus failed: ' + err.message);
+    return { ok: false, error: err.message, pending: 0, items: [] };
+  }
+}
+
+// Commits. Admin only, same as every other demand write. Returns the same item
+// list the preview shows, with each one marked done or skipped.
+// Who is doing this. From the web app, the normal admin gate applies. From the
+// EDITOR, Session.getActiveUser() throws unless the manifest carries the
+// userinfo.email scope — and anyone with editor access to this project is
+// already more privileged than any admin list, so failing the gate there is
+// pure friction. Falls back to the effective user and says so in the log.
+function pushedDemandActor_() {
+  try {
+    const user = getCurrentUser();
+    if (!user.isAdmin) throw new Error('Not authorized');
+    return user;
+  } catch (err) {
+    if (String(err.message || '').indexOf('Not authorized') !== -1) throw err;
+    let email = '';
+    try { email = Session.getEffectiveUser().getEmail(); } catch (e2) { email = 'editor'; }
+    Logger.log('pushedDemandActor_: running from the editor as ' + email +
+               ' (Session.getActiveUser unavailable — admin gate skipped)');
+    return { email: email, isAdmin: true, viaEditor: true };
+  }
+}
+
+function importPushedDemand() {
+  const user = pushedDemandActor_();
+
+  const plan = planPushedDemandImport_();
+  if (plan.missing) return { ok: true, missing: true, imported: 0, items: [] };
+
+  let imported = 0;
+  plan.items.forEach(function(item) {
+    if (item.action === 'skip') return;
+    const pushed = readPushedDemandRows_().days[item.date];
+    if (!pushed) { item.action = 'skip'; item.reason = 'row vanished between plan and write'; return; }
+
+    const existing = getDemandDay_(item.weekLabel, item.day);
+    const newDay = {
+      skus: pushed.skus,
+      mode: 'forecast',           // deliberately NOT a new mode value — see below
+      date: item.date,
+      publishedBy: user.email,
+      publishedAt: new Date().toISOString(),
+      pushedAt: pushed.pushedAt,  // additive: how a re-import knows it's a no-op
+      source: 'assembly_summary'  // additive: which fetch produced this day
+    };
+    // mode stays 'forecast' on purpose. A new mode string would have to be
+    // taught to the mode badge CSS, the actual-vs-forecast guards in
+    // publishForecastWeek/fetchActualDemand, and the archive's Mode column. The
+    // source field carries the distinction without touching any of that.
+    setDemandDay_(item.weekLabel, item.day, newDay, existing);
+    imported++;
+  });
+
+  if (imported) {
+    writeAuditLog_(user.email, 'import_pushed_demand', '', '', imported + ' days from Assembly Summary');
+  }
+  Logger.log('importPushedDemand: ' + imported + ' day(s) imported; ' +
+             plan.items.filter(function(i) { return i.action === 'skip'; }).length + ' skipped');
+  return { ok: true, missing: false, imported: imported, items: plan.items };
+}
+
+// Editor-dropdown preview. Writes nothing.
+function previewPushedDemand() {
+  const plan = planPushedDemandImport_();
+  Logger.log('--- Pushed demand preview (nothing written) ---');
+  if (plan.missing) {
+    Logger.log('No "' + PUSHED_DEMAND_TAB + '" tab in the archive Sheet yet — nothing has been pushed.');
+    return;
+  }
+  if (!plan.items.length) { Logger.log('Demand tab is present but empty.'); return; }
+  plan.items.forEach(function(i) {
+    Logger.log('  ' + i.date + '  ' + (i.weekLabel ? i.weekLabel + ' / ' + i.day : '(unmapped)') +
+               '  ' + i.skuCount + ' SKUs, ' + i.units + ' units  ->  ' +
+               i.action.toUpperCase() + (i.reason ? ' (' + i.reason + ')' : ''));
+  });
+  Logger.log('Excluded non-assembly rows: ' + (plan.excluded || 0) +
+             '; unusable rows: ' + (plan.skippedRows || 0));
+}
+
+// ─── PUSHED DEMAND TRIGGER ────────────────────────────────────────────────────
+// Runs importPushedDemand() on a timer so an ALREADY-OPEN tab fills in without a
+// refresh. It works because setDemandDay_ -> setSection_ bumps sequins_meta's
+// lastModified, and the client already polls getLastModified() every 8 seconds
+// and re-pulls state when it changes. So the trigger writes, and every open
+// session notices within 8s. No client change was needed for this.
+//
+// One consequence worth knowing: Workbench recomputes live on every render, so
+// demand arriving mid-session can move an unpublished plan. Line Sequence is
+// safe — it renders the published snapshot and never moves until you publish.
+function pushedDemandTrigger() {
+  try {
+    const res = importPushedDemand();
+    Logger.log('pushedDemandTrigger: imported ' + ((res && res.imported) || 0) + ' day(s)');
+  } catch (err) {
+    Logger.log('pushedDemandTrigger failed: ' + err.message);
+  }
+}
+
+// Default every 15 minutes. Apps Script's Run button can't pass arguments, so
+// the interval lives here — edit the constant and re-install to change it.
+// Accepted values are 1, 5, 10, 15 and 30.
+function installPushedDemandTrigger() {
+  const EVERY_MINUTES = 15;
+  const existing = ScriptApp.getProjectTriggers().filter(function(t) {
+    return t.getHandlerFunction() === 'pushedDemandTrigger';
+  });
+  if (existing.length) {
+    Logger.log('pushedDemandTrigger already installed (' + existing.length + ') — no action taken. ' +
+               'Run removePushedDemandTrigger() first if you want to change the interval.');
+    return;
+  }
+  ScriptApp.newTrigger('pushedDemandTrigger').timeBased().everyMinutes(EVERY_MINUTES).create();
+  Logger.log('Installed pushedDemandTrigger, every ' + EVERY_MINUTES + ' minutes.');
+}
+
+function removePushedDemandTrigger() {
+  let n = 0;
+  ScriptApp.getProjectTriggers().forEach(function(t) {
+    if (t.getHandlerFunction() === 'pushedDemandTrigger') { ScriptApp.deleteTrigger(t); n++; }
+  });
+  Logger.log('Removed ' + n + ' pushedDemandTrigger(s).');
 }
 
 // ─── SKU ATTRIBUTES (real sources — no guessing) ──────────────────────────────
