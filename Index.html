@@ -1,52 +1,20 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.101 — 2026-08-12    (pairs with Code.js v0.4.47)
+  Sequins ✨ — Index.html    v0.5.117 — 2026-08-17    (pairs with Code.js v0.4.59)
   Full history: git log.
 
-  v0.5.101 Unplaced SKUs now offer WHERE THEY COULD GO — up to three ranked
-           lines, each with the consequence stated (what time that line would
-           then finish, how much it adds, whether it breaks the cap, which rules
-           it breaks) and a one-click "Move to LINE-X" button. The button takes
-           the same path as a drag: commitMove writes the override, saves it,
-           re-renders, and records the violations in the audit trail. A pinned
-           SKU is offered here even though the engine won't move it
-           automatically — that's what an override is for, and the pin appears
-           as a named consequence instead of a silent wall.
-
-  v0.5.100 Off-capper rescue now SAYS why it didn't rescue, instead of failing
-           silently. If the SKU is pinned in the SKU Library's Lines column it
-           says so and names the pin; if no non-capper line is eligible it says
-           that; otherwise it gives a verdict for EVERY candidate line —
-           "LINE-3: would run 22m past the cap; LINE-4: slot cap" — rather than
-           reporting only the first check that failed.
-
-  v0.5.99  Off-capper rescue. A capper SKU may now run on a normal line, but only
-           when it would otherwise not run at all — after every normal pass has
-           failed, which is precisely the "cap unreachable" or "no capper room"
-           state. Capper lines stay reserved: a non-capper SKU is still never
-           offered one. candidateLines(job, true) inverts that single rule and
-           nothing else; bal() still enforces the finish-by cap, slot cap, USDA
-           and sausage/sesame. Explicit pins outrank it. Runtime is planned at
-           the library UPM — these run faster off the capper, but there is no
-           per-SKU rate until the floor tracker captures real completion times,
-           so nothing is invented. On a day where everything fits, this loop
-           places nothing and the plan is identical.
-
-  v0.5.98  Finish-by summary line on Workbench (wbFinishBySummary), shown only
-           while the cap is on. States what the latest finish WAS without the
-           cap, what it is now, and how many SKUs stopped fitting — the plan
-           used to just redraw silently and you had to eyeball six lines to see
-           what moved. The baseline is a real engine run with ctx.finishBy
-           blanked, carrying the active scenario's exclusions, not an estimate.
-           Turns red if the volume still cannot finish by the cap.
-           Approval stays where it already was: nothing reaches the floor until
-           Publish, and unchecking the box reverts with nothing written.
-
-           Cap engine (v0.5.97, folded in): fits() tests a job's projected END
-           including changeover, so a line at 13:50 no longer accepts a 60m job
-           and runs to 14:50. USDA pairs tested as a unit. Line choice balances
-           on clock finish rather than duration. A job that fits nowhere goes to
-           Unplaced reading "would finish past the 2:00 PM cap". Night lines
-           exempt. Cap OFF byte-identical: fits() returns ls.totalMin < TARGET_MIN.
+  v0.5.117 The run-sheet entry fields now save. Everything the floor types —
+           start, end, people, actual units, plus the lead's name and
+           held-over totes — upserts to "Run Sheet Actuals" / "Run Sheet
+           Shift" in the plan archive, debounced 1.5s so a shift of edits
+           isn't a shift of round trips.
+           Each row carries the planned units and tote split beside the
+           actual, so a republish under the day can't retroactively change
+           what a recorded actual is measured against.
+           Recorded values are read back when a line/day is opened, so a
+           tablet picked up mid-shift shows what's already been entered.
+           Save state sits next to the refresh stamp and says so when a save
+           fails — a tablet that has quietly stopped saving is worse than one
+           that admits it.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -93,6 +61,22 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .metrics-arrow.collapsed{transform:rotate(-90deg);}
 .metrics-body{overflow:hidden;transition:max-height .28s ease,opacity .2s ease;max-height:800px;opacity:1;}
 .metrics-body.collapsed{max-height:0;opacity:0;}
+.ml-runhdr{display:flex;align-items:flex-end;gap:26px;flex-wrap:wrap;padding:0 0 2px 26px;border-left:1px solid var(--border);}
+.ml-runhdr.stale{border-left-color:rgba(245,158,11,.5);}
+.ml-seq{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--muted);background:var(--surface2);border:1px solid var(--border2);border-radius:5px;min-width:26px;text-align:center;padding:2px 6px;flex:0 0 auto;}
+.ml-card{display:flex;align-items:stretch;gap:0;}
+.ml-main{flex:1 1 auto;min-width:0;}
+.ml-plan{display:flex;gap:26px;align-items:center;padding:0 22px;border-left:1px solid var(--border);flex:0 0 auto;}
+.ml-stat{text-align:right;}
+.ml-stat-l{font-family:var(--mono);font-size:9px;letter-spacing:.09em;color:var(--muted);white-space:nowrap;}
+.ml-stat-v{font-family:var(--mono);font-size:21px;font-weight:700;color:var(--text);line-height:1.25;}
+.ml-stat-v.dim{color:var(--muted);font-weight:400;}
+.ml-entry{display:flex;gap:12px;align-items:center;overflow:hidden;flex:0 0 auto;border-left:1px solid var(--border);padding:0 2px 0 22px;max-width:560px;opacity:1;transition:max-width .28s ease,opacity .18s ease,padding .28s ease;}
+.ml-entry.collapsed{max-width:0;opacity:0;padding:0;border-left-color:transparent;}
+.ml-f{display:flex;flex-direction:column;gap:5px;}
+.ml-f label{font-family:var(--mono);font-size:9px;letter-spacing:.09em;color:var(--muted);white-space:nowrap;}
+.ml-f input{width:86px;background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:var(--mono);font-size:13px;padding:7px 8px;text-align:center;}
+.ml-f input:focus{outline:none;border-color:var(--teal);}
 .week-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 .week-chip{font-family:var(--mono);font-size:11px;padding:4px 12px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:var(--muted);cursor:pointer;}
 .week-chip:hover{border-color:var(--teal);color:var(--teal);}
@@ -104,10 +88,10 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .day-tab.active.mode-forecast{background:var(--amber);border-color:var(--amber);color:#000;}
 .day-tab.active.mode-actual{background:var(--green);border-color:var(--green);color:#000;}
 .day-tab .dt-date{font-size:9px;opacity:.8;font-weight:400;}
-.kpi-row{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;}
-.kpi{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;}
-.kpi-val{font-family:var(--mono);font-size:22px;font-weight:500;line-height:1.1;margin-bottom:2px;}
-.kpi-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;}
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:6px;}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;min-width:0;overflow:hidden;}
+.kpi-val{font-family:var(--mono);font-size:20px;font-weight:500;line-height:1.1;margin-bottom:2px;white-space:nowrap;}
+.kpi-lbl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;line-height:1.25;}
 .kpi-val.teal{color:var(--teal);}.kpi-val.green{color:var(--green);}.kpi-val.amber{color:var(--amber);}.kpi-val.red{color:var(--red);}
 .seq-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
 @media(max-width:1400px){.seq-grid{grid-template-columns:repeat(2,1fr);}}
@@ -255,7 +239,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
     <div class="sidebar-section">
       <div class="sidebar-label">Plan</div>
       <button class="nav-item active" onclick="switchView('sequence',this)"><span class="icon">📋</span>Line Sequence</button>
-      <button class="nav-item" onclick="switchView('workbench',this)"><span class="icon">🔧</span>Workbench</button>
+      <div id="workbenchNav" style="display:none"><button class="nav-item" onclick="switchView('workbench',this)"><span class="icon">🔧</span>Workbench</button></div>
       <div id="sandboxNav" style="display:none"><button class="nav-item" onclick="switchView('sandbox',this)"><span class="icon">🧪</span>Sandbox</button></div>
     </div>
     <div class="nav-spacer"></div>
@@ -276,9 +260,10 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
     <div class="sidebar-section">
       <div class="sidebar-label" onclick="toggleLegend()" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between">Legend <span id="legendArrow" style="font-size:10px;color:var(--muted);display:inline-block;transition:transform .2s">▾</span></div>
       <div id="legendBody" style="display:flex;flex-direction:column;gap:5px;padding:4px 4px 8px;max-height:900px;overflow:hidden;transition:max-height .25s ease,opacity .2s;opacity:1">
-        <div class="legend-row"><span class="sku-tag tag-usda">USDA</span><span class="legend-desc">Not allowed on LINE-6</span></div>
-        <div class="legend-row"><span class="sku-tag tag-wrap">wrap</span><span class="legend-desc">Wrap — locked to LINE-3 only</span></div>
-        <div class="legend-row"><span class="sku-tag tag-sand">sand</span><span class="legend-desc">Sandwich — LINE-2 only</span></div>
+        <div class="legend-row"><span class="sku-tag tag-usda">USDA</span><span class="legend-desc">Needs a USDA-approved line</span></div>
+        <div class="legend-row"><span class="legend-desc" style="opacity:.75">Food-contact class and line capability decide routing; category only prefers a home line.</span></div>
+        <div class="legend-row"><span class="sku-tag tag-wrap">wrap</span><span class="legend-desc">Wrap — home line LINE-3, not a lock</span></div>
+        <div class="legend-row"><span class="sku-tag tag-sand">sand</span><span class="legend-desc">Sandwich — home line LINE-2, not a lock</span></div>
         <div class="legend-row"><span class="sku-tag" style="background:rgba(250,204,21,.15);color:#facc15">&#9889;</span><span class="legend-desc">Off its usual home line</span></div>
         <div class="legend-row"><span class="sku-tag" style="background:rgba(45,212,191,.15);color:var(--teal)">&#9875; seed</span><span class="legend-desc">Starts the line; chain builds on it</span></div>
         <div class="legend-row"><span class="preproc-badge" style="width:14px;height:14px;font-size:8px;flex-shrink:0">P</span><span class="legend-desc">Pre-processed — runs first</span></div>
@@ -288,7 +273,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         <div class="legend-row"><span class="mode-badge mode-actual" style="font-size:9px;padding:1px 6px;flex-shrink:0">actual</span><span class="legend-desc">Confirmed demand</span></div>
         <div class="legend-row"><span class="mode-badge mode-forecast" style="font-size:9px;padding:1px 6px;flex-shrink:0">forecast</span><span class="legend-desc">Projected demand</span></div>
         <div class="legend-row"><div class="live-dot" style="width:7px;height:7px;flex-shrink:0;margin:0 1px"></div><span class="legend-desc">Live — polls every 8s</span></div>
-        <div class="legend-row" style="margin-top:6px;opacity:.55"><span class="legend-desc" style="font-family:var(--mono);font-size:10px" title="Which build the browser is actually running. If this does not match the file you pushed, the deployment is serving an older version.">Index v0.5.101</span></div>
+        <div class="legend-row" style="margin-top:6px;opacity:.55"><span class="legend-desc" style="font-family:var(--mono);font-size:10px" title="Which build the browser is actually running. If this does not match the file you pushed, the deployment is serving an older version.">Index v0.5.111</span></div>
       </div>
     </div>
     <div style="flex:1"></div>
@@ -322,13 +307,14 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
       <div id="seqContent" style="display:none">
         <div class="card" style="padding:12px 18px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap"><div class="day-strip" id="seqDayStrip" style="flex:1"></div><div id="seqFloatingTeam"></div><button class="btn btn-sm" id="seqResequenceBtn" onclick="forceResequence()" title="Recompute the sequence from current demand/rules">🔄 Re-sequence</button></div>
         <div class="card" style="padding:10px 18px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap" id="seqScenarioBar"></div><span id="seqFinishBy" style="display:inline-flex;align-items:center;gap:6px;margin-left:auto"></span></div>
-        <div class="kpi-row" style="grid-template-columns:repeat(6,1fr)">
-          <div class="kpi"><div class="kpi-val teal" id="k-skus">—</div><div class="kpi-lbl">SKUs scheduled</div></div>
-          <div class="kpi"><div class="kpi-val" id="k-units">—</div><div class="kpi-lbl">Total units</div></div>
-          <div class="kpi"><div class="kpi-val" id="k-lines">—</div><div class="kpi-lbl">Active lines</div></div>
-          <div class="kpi"><div class="kpi-val green" id="k-placed">—</div><div class="kpi-lbl">SKUs placed</div></div>
+        <div class="kpi-row">
+          <div class="kpi"><div class="kpi-val teal" id="k-skus">—</div><div class="kpi-lbl">SKUs</div></div>
+          <div class="kpi"><div class="kpi-val" id="k-units">—</div><div class="kpi-lbl">Units</div></div>
+          <div class="kpi"><div class="kpi-val" id="k-headcount">—</div><div class="kpi-lbl" title="Crew + line leads on running lines, plus offline labor on the day side. Offline sits with day because the water-spider span is day-only.">HC day / night</div></div>
+          <div class="kpi"><div class="kpi-val" id="k-lines">—</div><div class="kpi-lbl">Lines</div></div>
+          <div class="kpi"><div class="kpi-val green" id="k-placed">—</div><div class="kpi-lbl">Placed</div></div>
           <div class="kpi"><div class="kpi-val amber" id="k-unplaced">—</div><div class="kpi-lbl">Unplaced</div></div>
-          <div class="kpi"><div class="kpi-val red" id="k-noattrs">—</div><div class="kpi-lbl">Missing attributes</div></div>
+          <div class="kpi"><div class="kpi-val red" id="k-noattrs">—</div><div class="kpi-lbl">No attrs</div></div>
         </div>
         <div class="card" style="padding-bottom:0">
           <div class="card-title metrics-toggle-row" onclick="toggleMetrics()" style="margin-bottom:0;padding-bottom:12px">Per-Line Summary <span class="metrics-arrow" id="seqMetricsArrow">▾</span></div>
@@ -392,12 +378,14 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
     <div class="view" id="view-myline">
       <div class="page-header">
         <div><div class="page-title">My Line</div><div class="page-sub" id="myLineSubtitle">What's running and when</div></div>
+        <div id="myLineRunHeader" style="flex:1 1 auto;min-width:0"></div>
         <div style="display:flex;gap:8px;align-items:center">
           <select class="form-select" id="myLineSel" onchange="onMyLineChange()" style="font-size:13px;padding:8px 10px"></select>
+          <button class="btn btn-sm metrics-toggle-row" id="myLineEntryBtn" onclick="toggleMyLineEntry()" title="Show the Start Time / End Time / # People / Actual Units columns. Nothing is saved yet.">Entry <span class="metrics-arrow collapsed" id="myLineEntryArrow" style="transform:rotate(-90deg)">&#9662;</span></button>
           <button class="btn btn-teal btn-sm" onclick="refreshMyLine(this)">↻ Refresh</button>
         </div>
       </div>
-      <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:10px" id="myLineRefreshedAt"></div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:10px;display:flex;gap:14px;align-items:center"><span id="myLineRefreshedAt"></span><span id="myLineSaveStatus"></span></div>
       <div id="myLineNoData" class="empty">
         <div class="empty-icon">📟</div>
         <div class="empty-title">No demand loaded yet</div>
@@ -556,6 +544,14 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           <button class="btn btn-ghost" onclick="checkPushedDemand(true)" id="pushedDemandBtn">Check now</button>
         </div>
       </div>
+      <div class="card" id="demandMigrateCard" style="display:none;border-color:var(--amber)">
+        <div class="card-title"><span>Demand storage</span><span class="mode-badge mode-forecast">action needed</span></div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:12px" id="demandMigrateText"></div>
+        <div class="btn-row">
+          <button class="btn btn-primary" onclick="runDemandMigration()" id="demandMigrateBtn">Move stored data to the Sheet</button>
+        </div>
+        <div id="demandMigrateStatus" style="margin-top:10px"></div>
+      </div>
       <div class="card">
         <div class="card-title"><span>Compiled Forecast</span><span class="mode-badge mode-forecast">forecast</span></div>
         <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Pulls per-SKU demand from the Summary tab. Forecast data will not overwrite actuals.</div>
@@ -609,7 +605,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         </div>
         <div style="overflow-x:auto">
           <table class="data-table"><thead><tr>
-            <th>SKU</th><th>Category</th><th title="Food-contact class — drives allergen compounding + line-type">FC</th><th>Package</th><th>UPM</th><th>Allergens</th><th>Label</th><th title="Lines this SKU may run on Sunday through Thursday">Lines Sun–Th</th><th title="Lines this SKU may run on Friday and Saturday. “same” means it inherits the Sun–Th list.">Lines F–Sat</th><th title="Non-USDA counterpart. Grouping the pair saves a changeover — the base build, jar and lid are shared.">USDA Pair</th>
+            <th>SKU</th><th>Category</th><th title="Food-contact class — drives allergen compounding + line-type">FC</th><th>Package</th><th title="Units in a full tote. A SKU fact, not a package fact — the same package type carries different tote counts. Drives the tote split on My Line.">Units/Tote</th><th>UPM</th><th>Allergens</th><th>Label</th><th title="Lines this SKU may run on Sunday through Thursday">Lines Sun–Th</th><th title="Lines this SKU may run on Friday and Saturday. “same” means it inherits the Sun–Th list.">Lines F–Sat</th><th title="Non-USDA counterpart. Grouping the pair saves a changeover — the base build, jar and lid are shared.">USDA Pair</th>
             <th style="text-align:center"><div style="color:var(--teal);font-size:14px;font-weight:600" id="sc-capper">—</div>Capper</th>
             <th style="text-align:center"><div style="color:var(--teal);font-size:14px;font-weight:600" id="sc-night">—</div>Night</th>
             <th style="text-align:center"><div style="color:var(--teal);font-size:14px;font-weight:600" id="sc-preproc">—</div>Pre-Proc</th>
@@ -628,8 +624,44 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         <button class="btn btn-teal btn-sm" id="saveLineConfigBtn" onclick="saveLineConfig()" style="display:none">Save changes</button>
       </div>
       <div class="card">
-        <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px"><span>Active Lines</span><button class="btn btn-ghost btn-sm" id="migrateCapsBtn" onclick="migrateLineCaps()" style="display:none" title="Copies each line's CURRENT capabilities onto the line itself, so Capper / Sm Cup / USDA / Night stop being answered from the Sequencing Rules line lists. Values cannot change — they're read from what the engine already computes. Run once.">⚓ Anchor capabilities to lines</button></div>
-        <table class="data-table"><thead><tr><th>Line</th><th>Type</th><th style="text-align:right">HC</th><th>Pool</th><th title="SKU that STARTS this line — placed as slot 0, allergen chain compounds on top. Carries every day.">Seed</th><th style="text-align:center" title="Capper equipment">Capper</th><th style="text-align:center" title="Green belt / small cups">Sm Cup</th><th style="text-align:center" title="USDA-approved">USDA</th><th style="text-align:center" title="Night shift line">Night</th><th>Start Time</th><th style="text-align:center">Mon</th><th style="text-align:center">Tue</th><th style="text-align:center">Wed</th><th style="text-align:center">Thu</th><th style="text-align:center">Fri</th><th style="text-align:center">Sat</th><th style="text-align:center">Sun</th></tr></thead><tbody id="lineConfigBody"></tbody></table>
+        <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px"><span>Active Lines</span><button class="btn btn-ghost btn-sm" id="migrateCapsBtn" onclick="migrateLineCaps()" style="display:none" title="Copies each line's CURRENT capabilities onto the line itself, so Capper / Sm Cup / USDA / Night stop being answered from the Sequencing Rules line lists. Values cannot change — they're read from what the engine already computes. Run once.">⚓ Anchor capabilities to lines</button><button class="btn btn-teal btn-sm" id="addLineBtn" onclick="toggleAddLine()" style="display:none" title="Add a new assembly line without touching the code. It joins the plan on whichever days you check.">+ Add line</button></div>
+        <div id="addLinePanel" style="display:none;border:1px solid var(--border2);border-radius:6px;padding:14px;margin-bottom:12px;background:var(--surface2)">
+          <div style="font-family:var(--mono);font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--teal);margin-bottom:10px">New line</div>
+          <div style="display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;font-family:var(--mono);font-size:11px">
+            <label style="display:flex;flex-direction:column;gap:4px"><span style="color:var(--muted)">Line ID *</span><input class="inline-input" id="alId" style="width:110px" placeholder="LINE-8" oninput="alIdTyped()"></label>
+            <label style="display:flex;flex-direction:column;gap:4px"><span style="color:var(--muted)">Label</span><input class="inline-input" id="alLabel" style="width:170px" placeholder="(defaults to ID)"></label>
+            <label style="display:flex;flex-direction:column;gap:4px"><span style="color:var(--muted)">Type</span><select class="inline-input" id="alType" style="width:100px" onchange="alTypeChanged()"><option value="day">day</option><option value="night">night</option><option value="capper">capper</option></select></label>
+            <label style="display:flex;flex-direction:column;gap:4px"><span style="color:var(--muted)">HC</span><input class="inline-input" type="number" min="0" id="alHc" value="10" style="width:55px;text-align:right"></label>
+            <label style="display:flex;flex-direction:column;gap:4px"><span style="color:var(--muted)" title="Line lead — counted in the War Room $/unit figure only.">Lead</span><input class="inline-input" type="number" min="0" id="alLead" value="0" style="width:55px;text-align:right"></label>
+            <label style="display:flex;flex-direction:column;gap:4px"><span style="color:var(--muted)" title="Which category chain prefers this line. flex takes whatever needs a home.">Pool</span><select class="inline-input" id="alPool" style="width:100px"><option value="flex">flex</option><option value="wrap">wrap</option><option value="sandwich">sandwich</option><option value="salad">salad</option><option value="bowl">bowl</option><option value="green">green</option><option value="capper">capper</option><option value="night">night</option></select></label>
+            <label style="display:flex;flex-direction:column;gap:4px"><span style="color:var(--muted)">Start time</span><input class="inline-input" type="time" id="alStart" value="06:00" style="width:100px"></label>
+            <label style="display:flex;flex-direction:column;gap:4px"><span style="color:var(--muted)" title="Assembly room this line sits in.">Room</span><input class="inline-input" id="alRoom" style="width:110px" placeholder="Room W"></label>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:18px;margin-top:12px;font-family:var(--mono);font-size:11px">
+            <div style="display:flex;gap:12px;align-items:center"><span style="color:var(--muted)">Capabilities</span>
+              <label style="display:flex;gap:5px;align-items:center"><input type="checkbox" id="alCapCapper" style="accent-color:var(--teal)">Capper</label>
+              <label style="display:flex;gap:5px;align-items:center"><input type="checkbox" id="alCapSmallCup" style="accent-color:var(--teal)">Sm Cup</label>
+              <label style="display:flex;gap:5px;align-items:center"><input type="checkbox" id="alCapUsda" checked style="accent-color:var(--teal)">USDA</label>
+              <label style="display:flex;gap:5px;align-items:center"><input type="checkbox" id="alCapNight" style="accent-color:var(--teal)">Night</label>
+            </div>
+            <div style="display:flex;gap:12px;align-items:center"><span style="color:var(--muted)" title="Leave every day unchecked to add the line now and switch it on later — it will be saved but sit out of every plan.">Runs on</span>
+              <label style="display:flex;gap:5px;align-items:center"><input type="checkbox" id="alDayMon" style="accent-color:var(--teal)">Mon</label>
+              <label style="display:flex;gap:5px;align-items:center"><input type="checkbox" id="alDayTue" style="accent-color:var(--teal)">Tue</label>
+              <label style="display:flex;gap:5px;align-items:center"><input type="checkbox" id="alDayWed" style="accent-color:var(--teal)">Wed</label>
+              <label style="display:flex;gap:5px;align-items:center"><input type="checkbox" id="alDayThu" style="accent-color:var(--teal)">Thu</label>
+              <label style="display:flex;gap:5px;align-items:center"><input type="checkbox" id="alDayFri" style="accent-color:var(--teal)">Fri</label>
+              <label style="display:flex;gap:5px;align-items:center"><input type="checkbox" id="alDaySat" style="accent-color:var(--teal)">Sat</label>
+              <label style="display:flex;gap:5px;align-items:center"><input type="checkbox" id="alDaySun" style="accent-color:var(--teal)">Sun</label>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:14px;align-items:center">
+            <button class="btn btn-teal btn-sm" id="alSubmitBtn" onclick="submitAddLine()">Add line</button>
+            <button class="btn btn-ghost btn-sm" onclick="toggleAddLine(false)">Cancel</button>
+            <span style="color:var(--muted);font-size:11px">Saves straight to Line Config. Seed SKU is set in the table afterwards.</span>
+          </div>
+          <div id="addLineStatus" style="margin-top:8px"></div>
+        </div>
+        <table class="data-table"><thead><tr><th>Line</th><th>Type</th><th title="Assembly room this line sits in. Printed at the top of the run sheet so the floor knows the plan is for their room.">Room</th><th style="text-align:right">HC</th><th style="text-align:right" title="Line lead — counted as one extra person in the War Room $/unit figure only. Does not affect sequencing or Per-Line Summary.">Lead</th><th>Pool</th><th title="SKU that STARTS this line — placed as slot 0, allergen chain compounds on top. Carries every day.">Seed</th><th style="text-align:center" title="Capper equipment">Capper</th><th style="text-align:center" title="Green belt / small cups">Sm Cup</th><th style="text-align:center" title="USDA-approved">USDA</th><th style="text-align:center" title="Night shift line">Night</th><th>Start Time</th><th style="text-align:center">Mon</th><th style="text-align:center">Tue</th><th style="text-align:center">Wed</th><th style="text-align:center">Thu</th><th style="text-align:center">Fri</th><th style="text-align:center">Sat</th><th style="text-align:center">Sun</th></tr></thead><tbody id="lineConfigBody"></tbody></table>
         <div id="lineConfigStatus" style="margin-top:8px"></div>
       </div>
       <div class="card">
@@ -664,6 +696,12 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           <div style="display:flex;gap:8px"><input type="text" class="form-input" id="newFloorViewerEmail" placeholder="email@farmersfridge.com" style="flex:1"><button class="btn btn-teal btn-sm" onclick="addFloorViewer()">Add</button></div>
           <div id="floorViewerStatus" style="margin-top:8px"></div>
         </div>
+        <div class="card">
+          <div class="card-title">External View Link <span style="color:var(--purple)">(no Farmer&#39;s Fridge account needed)</span></div>
+          <div style="color:var(--muted);font-size:11px;line-height:1.5;margin-bottom:10px;max-width:560px">One shared link showing this week&#39;s published plans, read-only. It goes out in the daily plan email, so USDA and anyone else on that email can click straight through. Anyone holding the link can open it and the log can&#39;t tell them apart — regenerate to kill the old one.</div>
+          <div id="externalLinkBody" style="margin-bottom:10px"></div>
+          <div id="externalViewerStatus" style="margin-top:8px"></div>
+        </div>
       </div>
     </div>
 
@@ -688,7 +726,7 @@ function admissibleLinesFor_(meta,day){
   var list=(isLateWeekDay_(day)&&meta.friSatOverride)?meta.admissibleLinesFriSat:meta.admissibleLines;
   return (list&&list.length)?list.slice():null;
 }
-var STATE={demand:{},skuLibrary:{},lineConfig:null,planners:[],overrides:{},sequencingRules:null,publishedPlans:{},breakOverrides:{},floorViewers:[],finishBy:{},sandboxes:[]};
+var STATE={planEmail:{},demand:{},skuLibrary:{},lineConfig:null,planners:[],overrides:{},sequencingRules:null,publishedPlans:{},breakOverrides:{},floorViewers:[],finishBy:{},sandboxes:[]};
 var CURRENT_USER=null,CURRENT_WEEK=null,CURRENT_DAY=null;
 var _pendingForecast=null,_pendingActuals=null,_pollInterval=null,_lastModified=null;
 var _metricsCollapsed=false;
@@ -707,8 +745,19 @@ var DEFAULT_LINE_CONFIG=[
   {id:'NIGHT-1',label:'Night Shift 1',type:'night',hc:9,pool:'night',startTime:'00:20',caps:{capper:true,smallCup:false,usdaApproved:false,night:true},days:{Mon:true,Tue:true,Wed:true,Thu:true,Fri:false,Sat:false,Sun:true}},
   {id:'NIGHT-2',label:'Night Shift 2',type:'night',hc:9,pool:'night',startTime:'00:20',caps:{capper:false,smallCup:false,usdaApproved:false,night:true},days:{Mon:true,Tue:true,Wed:true,Thu:true,Fri:false,Sat:false,Sun:false}}
 ];
-var DEFAULT_RULES={greenBeltPackages:['4oz jar'],homeLines:{wrap:'LINE-3',sandwich:'LINE-2',salad:'LINE-1',bowl:'LINE-5',green:'LINE-0'},lineSeeds:{},sausageSesameRule:true,targetRuntimeMin:510,slotCap:14,nightShiftUnitCap:9500,changeoverMin:8.5,hourlyRate:23.75,breakMinRuntimeMin:240,break30OffsetMin:240,break30DurationMin:30,break15OffsetMin:360,break15DurationMin:15,break30Paid:false,break15Paid:true};
-function getRules(){return STATE.sequencingRules||DEFAULT_RULES;}
+var DEFAULT_RULES={greenBeltPackages:['4oz jar'],homeLines:{wrap:'LINE-3',sandwich:'LINE-2',salad:'LINE-1',bowl:'LINE-5',green:'LINE-0'},lineSeeds:{},sausageSesameRule:true,targetRuntimeMin:510,slotCap:14,nightShiftUnitCap:9500,changeoverMin:8.5,hourlyRate:24.39,offlineLaborHeadcount:5,processingStaticPerUnit:0.11,planEmailRecipients:'',planEmailCc:'',breakMinRuntimeMin:240,break30OffsetMin:240,break30DurationMin:30,break15OffsetMin:360,break15DurationMin:15,break30Paid:false,break15Paid:true};
+function getRules(){
+  // v0.5.106: merge over DEFAULT_RULES instead of an all-or-nothing ||.
+  // A stored rules object written before a key existed used to return
+  // undefined for it; now it falls back to the default. Only `undefined`
+  // falls back — an explicit false or 0 still wins, so nothing that is
+  // currently set moves.
+  var stored=STATE.sequencingRules;if(!stored)return DEFAULT_RULES;
+  var out={},k;
+  for(k in DEFAULT_RULES){if(Object.prototype.hasOwnProperty.call(DEFAULT_RULES,k))out[k]=DEFAULT_RULES[k];}
+  for(k in stored){if(Object.prototype.hasOwnProperty.call(stored,k)&&stored[k]!==undefined)out[k]=stored[k];}
+  return out;
+}
 // ─── CAPABILITY MODEL (v0.5.28) ─────────────────────────────────────────────
 // Lines advertise capabilities; SKUs declare requirements; the sequencer
 // matches the two. lineCaps() prefers an explicit per-line `caps` object but
@@ -1654,9 +1703,278 @@ function orderLinesForChain_(lineState,rules){
 // while $/Unit moves whenever hourlyRate does. Note the archive's UPLH is a
 // per-SKU RUN RATE, so this line-level figure necessarily reads lower — it
 // carries changeover and paid-break time that a pure run rate doesn't.
+// ─── WAR ROOM $/UNIT (v0.5.106) ────────────────────────────────────
+// Reproduces the legacy Assembly Sequencing 2.0 sheet's S13, which is what
+// feeds row 91 "Assembly $ / unit plan" of New Ops. Metrics. This is NOT the
+// same number as the Per-Line Summary's $/Unit and is not meant to be — it
+// deliberately keeps three of the sheet's conventions:
+//   1. billed on TOTAL time, not paid time (unpaid breaks are still charged)
+//   2. each line's crew is headcount + line lead (LINE-1/2/3 carry a lead)
+//   3. offline labor (water spiders) charged across the day-shift span
+// Night lines count toward units and hours but never toward the offline span
+// — verified across 90 archived days, a night line has never set the day's
+// last end time.
+function ruleNum_(rules,key){
+  var v=rules&&rules[key];
+  return (typeof v==='number'&&isFinite(v))?v:DEFAULT_RULES[key];
+}
+// Headcount the plan actually asks for, split by shift. Crew + line lead on
+// every line that is running; offline labor counts on the day side because
+// the span it is billed across is day-only. A line with no units is not
+// staffed, so it contributes nothing.
+function planHeadcount_(lineState,lines){
+  var rules=getRules(),day=0,night=0;
+  (lines||[]).forEach(function(line){
+    var ls=(lineState||{})[line.id];
+    if(!ls||!(ls.slots||[]).length||!ls.totalUnits)return;
+    var n=(Number(ls.hc)||0)+(Number(line.lineLead)||0);
+    if(lineCaps(line).night)night+=n;else day+=n;
+  });
+  if(day>0)day+=ruleNum_(rules,'offlineLaborHeadcount');
+  return{day:day,night:night,total:day+night};
+}
+function warRoomCost_(lineState,lines){
+  var rules=getRules(),rate=ruleNum_(rules,'hourlyRate'),offHC=ruleNum_(rules,'offlineLaborHeadcount');
+  var lineHrs=0,units=0,leadHrs=0,dayStart=null,dayEnd=null,leads=0,startLine='',endLine='';
+  lines.forEach(function(line){
+    var ls=lineState[line.id],slots=(ls&&ls.slots)||[];
+    if(!slots.length)return;
+    // A line that ran nothing has no crew to support, so it sets no span.
+    if(!ls.totalUnits)return;
+    var isNight=!!lineCaps(line).night;
+    if(!isNight){
+      var s=ls.startMin,e=ls.startMin+ls.totalMin;
+      if(dayStart===null||s<dayStart){dayStart=s;startLine=line.label;}
+      if(dayEnd===null||e>dayEnd){dayEnd=e;endLine=line.label;}
+    }
+    var lead=Number(line.lineLead)||0,hrs=ls.totalMin/60;
+    lineHrs+=hrs*((Number(ls.hc)||0)+lead);
+    leadHrs+=hrs*lead;
+    if(lead)leads+=lead;
+    units+=ls.totalUnits;
+  });
+  var spanH=(dayStart===null||dayEnd===null)?0:Math.max(0,(dayEnd-dayStart)/60);
+  var offHrs=offHC*spanH;
+  var totalHrs=lineHrs+offHrs;
+  return {rate:rate,units:units,lineHrs:lineHrs,leadHrs:leadHrs,leads:leads,
+          startLine:startLine,endLine:endLine,dayStart:dayStart,dayEnd:dayEnd,
+          offHC:offHC,spanH:spanH,offHrs:offHrs,totalHrs:totalHrs,
+          perUnit:units>0?(totalHrs*rate)/units:0};
+}
+// ─── PLAN EMAIL: preview, pill, send (v0.5.108) ──────────────────────────────
+// The pill is the whole point of the persistent state: an armed-but-unsent
+// plan has to keep nagging after a reload, and has to nag whoever opens
+// Sequins next, not just the person who published.
+var PLAN_EMAIL_CTX=null;
+function planEmailState_(wk,dy){
+  var m=STATE.planEmail||{};
+  return (m[wk]&&m[wk][dy])||null;
+}
+function planEmailPending_(){
+  var m=STATE.planEmail||{},out=[];
+  Object.keys(m).forEach(function(wk){
+    Object.keys(m[wk]||{}).forEach(function(dy){
+      var st=m[wk][dy];
+      if(st&&st.status==='pending')out.push({week:wk,day:dy,state:st});
+    });
+  });
+  return out;
+}
+function renderPlanEmailPill(){
+  var el=document.getElementById('planEmailPill');
+  if(!el){el=document.createElement('div');el.id='planEmailPill';document.body.appendChild(el);}
+  if(!window._canPublish){el.style.display='none';return;}
+  var pend=planEmailPending_();
+  if(!pend.length){el.style.display='none';return;}
+  var p=pend[0],extra=pend.length>1?(' +'+(pend.length-1)+' more'):'';
+  el.style.cssText='position:fixed;right:18px;bottom:18px;z-index:9000;cursor:pointer;'
+    +'background:var(--amber,#d98a00);color:#1a1a1a;font-family:var(--mono);font-size:12px;'
+    +'font-weight:600;padding:9px 14px;border-radius:20px;box-shadow:0 3px 14px rgba(0,0,0,.45);'
+    +'display:flex;align-items:center;gap:8px';
+  el.innerHTML='\u2709 Assembly Plan not sent \u2014 '+p.day+extra;
+  el.onclick=function(){openPlanEmail(p.week,p.day);};
+}
+function openPlanEmail(wk,dy){
+  google.script.run.withSuccessHandler(function(snap){
+    if(!snap){alert('No published plan found for '+dy+'. Publish it first.');return;}
+    PLAN_EMAIL_CTX={week:wk,day:dy,snap:snap,
+      subject:planEmailSubject_(snap),html:planEmailHtml_(snap)};
+    showPlanEmailModal_();
+  }).withFailureHandler(function(err){
+    alert('Could not load the published plan for '+dy+'.\n\n'+((err&&err.message)?err.message:String(err)));
+  }).getPublishedPlan(wk,dy);
+}
+function showPlanEmailModal_(){
+  var c=PLAN_EMAIL_CTX;if(!c)return;
+  var rules=getRules(),to=String(rules.planEmailRecipients||'').trim();
+  var m=document.getElementById('planEmailModal');
+  if(!m){m=document.createElement('div');m.id='planEmailModal';document.body.appendChild(m);}
+  m.style.cssText='position:fixed;inset:0;z-index:9500;background:rgba(0,0,0,.6);display:flex;'
+    +'align-items:center;justify-content:center;padding:24px';
+  var warn=to?'':'<div style="background:#5a2020;color:#ffd7d7;padding:8px 12px;border-radius:5px;'
+    +'font-size:12px;margin-bottom:10px">No recipients set \u2014 Sequencing Rules \u2192 Assembly plan email.</div>';
+  m.innerHTML='<div style="background:var(--surface,#16181d);border:1px solid var(--border2,#333);'
+    +'border-radius:9px;max-width:1000px;width:100%;max-height:92vh;display:flex;flex-direction:column">'
+    +'<div style="padding:14px 18px;border-bottom:1px solid var(--border2,#333)">'
+    +'<div style="font-family:var(--mono);font-size:11px;color:var(--muted,#888);letter-spacing:.05em;'
+    +'text-transform:uppercase">Assembly plan email</div>'
+    +'<div style="font-size:14px;font-weight:600;color:var(--text,#eee);padding-top:3px">'+c.subject+'</div>'
+    +'<div style="font-size:11px;color:var(--muted,#888);padding-top:3px;font-family:var(--mono)">To: '
+    +(to||'\u2014')+'</div></div>'
+    +'<div style="padding:14px 18px;overflow:auto;flex:1">'+warn
+    +'<div style="background:#fff;border-radius:5px;padding:16px">'+c.html+'</div></div>'
+    +'<div style="padding:12px 18px;border-top:1px solid var(--border2,#333);display:flex;gap:8px;'
+    +'justify-content:flex-end;align-items:center">'
+    +'<button class="btn btn-sm" onclick="dismissPlanEmailPrompt()">Don\u2019t send</button>'
+    +'<button class="btn btn-sm" onclick="closePlanEmail()">Not now</button>'
+    +'<button class="btn btn-teal btn-sm" id="planEmailSendBtn" onclick="sendPlanEmailNow()"'
+    +(to?'':' disabled')+'>Send</button></div></div>';
+}
+function closePlanEmail(){var m=document.getElementById('planEmailModal');if(m)m.style.display='none';renderPlanEmailPill();}
+function sendPlanEmailNow(){
+  var c=PLAN_EMAIL_CTX;if(!c)return;
+  var b=document.getElementById('planEmailSendBtn');
+  if(b){b.disabled=true;b.innerHTML='<span class="spinner"></span>Sending\u2026';}
+  google.script.run.withSuccessHandler(function(res){
+    if(!STATE.planEmail)STATE.planEmail={};
+    if(!STATE.planEmail[c.week])STATE.planEmail[c.week]={};
+    STATE.planEmail[c.week][c.day]={status:'sent',subject:c.subject,sentBy:res.sentBy,sentAt:new Date().toISOString()};
+    closePlanEmail();
+    alert('Sent to '+res.to+(res.cc?('\ncc '+res.cc):''));
+  }).withFailureHandler(function(err){
+    if(b){b.disabled=false;b.textContent='Send';}
+    alert('NOT SENT.\n\n'+((err&&err.message)?err.message:String(err)));
+  }).sendAssemblyPlanEmail(c.week,c.day,c.subject,c.html);
+}
+function dismissPlanEmailPrompt(){
+  var c=PLAN_EMAIL_CTX;if(!c)return;
+  var why=prompt('Clear the reminder without sending. Why?','');
+  if(why===null)return;
+  google.script.run.withSuccessHandler(function(){
+    if(STATE.planEmail&&STATE.planEmail[c.week])STATE.planEmail[c.week][c.day]={status:'dismissed'};
+    closePlanEmail();
+  }).withFailureHandler(function(err){
+    alert('Could not clear it.\n\n'+((err&&err.message)?err.message:String(err)));
+  }).dismissPlanEmail(c.week,c.day,why);
+}
+// ─── ASSEMBLY PLAN EMAIL (v0.5.108) ──────────────────────────────────────────
+// Body renders from the PUBLISHED snapshot, never from a live recompute, so
+// what gets sent always matches the plan people can open. The per-line figures
+// here follow the legacy sheet's conventions (total time, crew + line lead) so
+// the table ties to the summary box above it — they are deliberately NOT the
+// Per-Line Summary's paid-time numbers.
+var PLAN_EMAIL_DOW=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+function planEmailDate_(snap){
+  var d=null,raw=snap&&snap.date;
+  if(raw){var m=String(raw).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if(m)d=new Date(Number(m[1]),Number(m[2])-1,Number(m[3]));
+    else{var m2=String(raw).match(/^(\d{1,2})[\/.](\d{1,2})[\/.](\d{4})/);
+      if(m2)d=new Date(Number(m2[3]),Number(m2[1])-1,Number(m2[2]));}}
+  return d&&!isNaN(d.getTime())?d:null;
+}
+// Subject format is load-bearing downstream — "Thursday Assembly Plan 8.13.2026",
+// no leading zeros. Do not reformat it.
+function planEmailSubject_(snap){
+  var d=planEmailDate_(snap);if(!d)return'';
+  return PLAN_EMAIL_DOW[d.getDay()]+' Assembly Plan '+(d.getMonth()+1)+'.'+d.getDate()+'.'+d.getFullYear();
+}
+function planEmailProductFlow_(ls){
+  var slots=(ls&&ls.slots)||[];if(!slots.length)return'No Product Sequenced';
+  var out=[],prev='';
+  slots.forEach(function(j){
+    var t=(j.isUSDA?'USDA ':'')+(j.pool||'');t=t.replace(/\s+$/,'');
+    if(!t||t===prev)return;out.push(t);prev=t;
+  });
+  return out.length?out.join('>> ')+'>>':'No Product Sequenced';
+}
+function planEmailRows_(snap){
+  var rules=getRules(),rate=ruleNum_(rules,'hourlyRate'),rows=[];
+  (snap.lines||[]).forEach(function(line){
+    var ls=(snap.lineState||{})[line.id];if(!ls)return;
+    var slots=ls.slots||[],u={};slots.forEach(function(j){u[j.sku]=true;});
+    var lead=Number(line.lineLead)||0,hrs=(ls.totalMin||0)/60;
+    var lh=slots.length&&ls.totalUnits?hrs*((Number(ls.hc)||0)+lead):0;
+    rows.push({label:line.label,totalMin:ls.totalMin||0,hc:ls.hc,
+      co:Math.max(0,Object.keys(u).length-1),start:ls.startMin,
+      end:(ls.startMin||0)+(ls.totalMin||0),units:ls.totalUnits||0,
+      laborHrs:lh,perUnit:ls.totalUnits?(lh*rate)/ls.totalUnits:null,
+      flow:planEmailProductFlow_(ls)});
+  });
+  return rows;
+}
+function planEmailSummary_(snap){
+  var rules=getRules(),rate=ruleNum_(rules,'hourlyRate');
+  var proc=ruleNum_(rules,'processingStaticPerUnit');
+  var wr=warRoomCost_(snap.lineState||{},snap.lines||[]);
+  // Lines Running counts lines that ran product, excluding the green belt.
+  // The legacy sheet did this with a hardcoded −1, which was wrong on the days
+  // LINE-0 didn't run; excluding it by name is right on every day.
+  var running=0;
+  (snap.lines||[]).forEach(function(line){
+    var ls=(snap.lineState||{})[line.id];
+    if(ls&&ls.totalUnits>0&&String(line.id).toUpperCase()!=='LINE-0')running++;
+  });
+  return{units:wr.units,linesRunning:running,simPerUnit:wr.perUnit,proc:proc,
+    ap:wr.perUnit+proc,hoursBank:rate>0?(proc*wr.units)/rate:0,
+    totalLaborHrs:wr.totalHrs,rate:rate};
+}
+// The link needs the deployed web-app URL, which only the server knows.
+function loadWebAppUrl_(){google.script.run.withSuccessHandler(function(u){window._webAppUrl=u||'';}).withFailureHandler(function(){}).getWebAppUrl();}
+function planEmailHtml_(snap){
+  var sum=planEmailSummary_(snap),rows=planEmailRows_(snap),d=planEmailDate_(snap);
+  var url=(window._webAppUrl||'');
+  function esc(t){return String(t==null?'':t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+  function hm(m){if(m==null)return'—';var h=Math.floor(m/60),mm=Math.round(m%60);return h+':'+(mm<10?'0':'')+mm;}
+  var F='font-family:Calibri,Arial,sans-serif;';
+  var TH='padding:5px 8px;border:1px solid #d0d0d0;background:#f2f2f2;font-size:12px;text-align:left;';
+  var TD='padding:4px 8px;border:1px solid #d0d0d0;font-size:12px;';
+  var h='<div style="'+F+'color:#222">';
+  h+='<p style="font-size:13px;margin:0 0 12px">Assembly plan for <b>'+
+     (d?PLAN_EMAIL_DOW[d.getDay()]+' '+(d.getMonth()+1)+'/'+d.getDate()+'/'+d.getFullYear():'')+'</b>.</p>';
+  h+='<table cellspacing="0" cellpadding="0" style="border-collapse:collapse;margin-bottom:16px"><tr>';
+  [['Total Units',fmtUnits(sum.units)],['Lines Running',String(sum.linesRunning)],
+   ['Simulated $/unit','$'+sum.simPerUnit.toFixed(3)],['Processing (static)','$'+sum.proc.toFixed(3)],
+   ['Total Simulated $/unit (A&P)','$'+sum.ap.toFixed(3)],['Hours Bank',sum.hoursBank.toFixed(1)],
+   ['Total Labor Hours',sum.totalLaborHrs.toFixed(1)]
+  ].forEach(function(p){
+    h+='<td style="'+TD+'background:#fafafa;text-align:center;min-width:92px">'+
+       '<div style="font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.04em">'+esc(p[0])+'</div>'+
+       '<div style="font-size:16px;font-weight:600;padding-top:2px">'+esc(p[1])+'</div></td>';
+  });
+  h+='</tr></table>';
+  h+='<div style="font-size:13px;font-weight:600;margin:0 0 6px">Sequence Summary</div>';
+  h+='<table cellspacing="0" cellpadding="0" style="border-collapse:collapse"><tr>';
+  ['Line','Total Time','Average Headcount','Changeovers','Start Time','End Time','Total Units','Labor Hours','$/unit','Product Type on Lines']
+    .forEach(function(t){h+='<th style="'+TH+'">'+esc(t)+'</th>';});
+  h+='</tr>';
+  rows.forEach(function(r){
+    h+='<tr><td style="'+TD+'"><b>'+esc(r.label)+'</b></td>'+
+       '<td style="'+TD+'">'+hm(r.totalMin)+'</td>'+
+       '<td style="'+TD+'">'+(r.hc==null?'—':r.hc)+'</td>'+
+       '<td style="'+TD+'">'+r.co+'</td>'+
+       '<td style="'+TD+'">'+fmtClock(r.start)+'</td>'+
+       '<td style="'+TD+'">'+fmtClock(r.end)+'</td>'+
+       '<td style="'+TD+'text-align:right">'+fmtUnits(r.units)+'</td>'+
+       '<td style="'+TD+'text-align:right">'+r.laborHrs.toFixed(2)+'</td>'+
+       '<td style="'+TD+'text-align:right">'+(r.perUnit==null?'—':'$'+r.perUnit.toFixed(3))+'</td>'+
+       '<td style="'+TD+'">'+esc(r.flow)+'</td></tr>';
+  });
+  h+='</table>';
+  h+='<p style="font-size:12px;margin:14px 0 0">'+
+     (url?'<a href="'+esc(url)+'">Open the plan in Sequins</a>':'Open the plan in Sequins.')+'</p>';
+  // Second link for anyone without a Farmer's Fridge account — USDA on site,
+  // mainly. Read-only, this week's published plans. Omitted entirely when
+  // external viewing is turned off.
+  if(window._externalUrl){
+    h+='<p style="font-size:12px;margin:6px 0 0;color:#555">No Farmer\u2019s Fridge login? '+
+       '<a href="'+esc(window._externalUrl)+'">View the plan here</a>.</p>';
+  }
+  h+='</div>';
+  return h;
+}
 function renderLineMetricsTable(containerId,lineState,lines){
   var el=document.getElementById(containerId);if(!el)return;
-  var rules=getRules(),rate=rules.hourlyRate||23.75;
+  var rules=getRules(),rate=ruleNum_(rules,'hourlyRate');
   var html='<table class="data-table metrics-table"><thead><tr><th>Line</th><th style="text-align:right">Total Time</th><th style="text-align:right" title="Clock time less any unpaid break. This is what Labor Hrs is billed on.">Paid Time</th><th style="text-align:right">Avg HC</th><th style="text-align:right">Changeovers</th><th>Start</th><th>End</th><th style="text-align:right">Units</th><th style="text-align:right" title="Paid minutes / 60 x headcount">Labor Hrs</th><th style="text-align:right" title="Units per labor hour. Includes changeover and paid break, so it reads below the archive&#39;s per-SKU run-rate UPLH.">UPLH</th><th style="text-align:right">$/Unit</th></tr></thead><tbody>';
   var tMin=0,tPaid=0,tCo=0,tUnits=0,tLH=0;
   lines.forEach(function(line){
@@ -1675,6 +1993,21 @@ function renderLineMetricsTable(containerId,lineState,lines){
   var tHH=Math.floor(tMin/60),tMM=Math.round(tMin%60),pHH=Math.floor(tPaid/60),pMM=Math.round(tPaid%60);
   var bpu=tUnits>0?(tLH*rate)/tUnits:0,bUplh=tLH>0?tUnits/tLH:0;
   html+='<tr style="border-top:1.5px solid var(--border2);font-weight:600"><td>Total</td><td style="text-align:right">'+tHH+'h '+tMM+'m</td><td style="text-align:right">'+pHH+'h '+pMM+'m</td><td style="text-align:right">—</td><td style="text-align:right">'+tCo+'</td><td>—</td><td>—</td><td style="text-align:right;color:var(--teal)">'+fmtUnits(tUnits)+'</td><td style="text-align:right">'+tLH.toFixed(1)+'</td><td style="text-align:right">'+bUplh.toFixed(1)+'</td><td style="text-align:right">$'+bpu.toFixed(3)+'</td></tr></tbody></table>';
+  // v0.5.106: War Room figure sits BELOW the table, not in it — the table
+  // above is unchanged. Rules-editors only; the floor has no use for it.
+  if(window._canEditRules){
+    var wr=warRoomCost_(lineState,lines);
+    html+='<div style="margin-top:8px;padding:7px 10px;background:var(--surface2);border-radius:5px;'
+        + 'font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.6">'
+        + '<span style="color:var(--text)">War Room $/unit</span> '
+        + '<span style="color:var(--teal);font-weight:600">$'+wr.perUnit.toFixed(3)+'</span>'
+        + ' — '+wr.totalHrs.toFixed(1)+' hrs on '+fmtUnits(wr.units)+' units @ $'+wr.rate.toFixed(2)
+        + '<br>line '+wr.lineHrs.toFixed(1)+' (incl. '+wr.leadHrs.toFixed(1)+' lead)'
+        + ' + offline '+wr.offHrs.toFixed(1)+' ('+wr.offHC+' × '+wr.spanH.toFixed(2)+'h span, '
+        + (wr.dayStart===null?'—':fmtClock(wr.dayStart)+' '+wr.startLine+' → '+fmtClock(wr.dayEnd)+' '+wr.endLine)+')'
+        + ' — billed on total time, matches the legacy sheet. Not written anywhere.'
+        + '</div>';
+  }
   el.innerHTML=html;
 }
 
@@ -1914,8 +2247,20 @@ function buildJobRow_(line,job,i,draggable,rules){
     var isFc=(job.pool==='wrap'||job.pool==='sandwich');
     return '<div style="'+st+';color:'+(isFc?'var(--amber)':'var(--muted)')+'">🧬 '+(job.allergenSet.length?job.allergenSet.join(', '):'no allergens')+'</div>';
   })();
-  if(draggable){var ss=job.sku.replace(/'/g,"\\'");return'<div class="'+rc+'" draggable="true" ondragstart="wbDragStart(event,\''+ss+'\',\''+line.id+'\')" ondragend="wbDragEnd(event)" ondragover="wbRowDragOver(event,\''+line.id+'\','+i+')" ondragleave="wbRowDragLeave(event)"><div class="sku-row-top"><span class="sku-seq">'+(i+1)+'</span><span class="sku-name" title="'+job.sku+'">'+job.sku+'</span>'+preTag+tag+ovTag+ftag+cfTag+cbTag+bsTag+'<span class="sku-units">'+fmtUnits(job.qty)+'</span></div>'+tl+alTag+'</div>';}
-  return'<div class="'+rc+'"><div class="sku-row-top"><span class="sku-seq">'+(i+1)+'</span><span class="sku-name" title="'+job.sku+'">'+job.sku+'</span>'+preTag+tag+cfTag+cbTag+bsTag+'<span class="sku-units">'+fmtUnits(job.qty)+'</span></div>'+tl+alTag+'</div>';
+  // Label number on every plan row (v0.5.110). It was only ever on My Line,
+  // which meant the people building the plan couldn't see what the floor would
+  // be told to stick on the box. Published rows carry labelVersion frozen at
+  // publish; live rows fall back to the SKU library's current value.
+  var lblTag=(function(){
+    var st='font-family:var(--mono);font-size:9px;padding:1px 0 0 22px';
+    var lv=job.labelVersion||((STATE.skuLibrary||{})[(job.sku||'').toUpperCase()]||{}).labelNumberVersion;
+    if(lv==='NO ACTIVE LABEL')
+      return '<div style="'+st+';color:var(--red)" title="No ACTIVE or NEW label in the Label Version Log for this SKU.">\u26a0 NO ACTIVE LABEL</div>';
+    if(!lv)return'';
+    return '<div style="'+st+';color:var(--muted)" title="Label number / version">\ud83c\udff7 '+lv+'</div>';
+  })();
+  if(draggable){var ss=job.sku.replace(/'/g,"\\'");return'<div class="'+rc+'" draggable="true" ondragstart="wbDragStart(event,\''+ss+'\',\''+line.id+'\')" ondragend="wbDragEnd(event)" ondragover="wbRowDragOver(event,\''+line.id+'\','+i+')" ondragleave="wbRowDragLeave(event)"><div class="sku-row-top"><span class="sku-seq">'+(i+1)+'</span><span class="sku-name" title="'+job.sku+'">'+job.sku+'</span>'+preTag+tag+ovTag+ftag+cfTag+cbTag+bsTag+'<span class="sku-units">'+fmtUnits(job.qty)+'</span></div>'+tl+alTag+lblTag+'</div>';}
+  return'<div class="'+rc+'"><div class="sku-row-top"><span class="sku-seq">'+(i+1)+'</span><span class="sku-name" title="'+job.sku+'">'+job.sku+'</span>'+preTag+tag+cfTag+cbTag+bsTag+'<span class="sku-units">'+fmtUnits(job.qty)+'</span></div>'+tl+alTag+lblTag+'</div>';
 }
 // Enabled breaks are draggable, same as SKU rows — dropping one at a new
 // position saves that position as the day override; time is never typed,
@@ -2203,7 +2548,7 @@ function renderSequence(){
     document.getElementById('lineMetricsTable').innerHTML='';
     document.getElementById('unplacedCard').style.display='none';
     document.getElementById('noAttrsCard').style.display='none';
-    ['k-skus','k-units','k-lines','k-placed','k-unplaced','k-noattrs'].forEach(function(id){var e=document.getElementById(id);if(e)e.textContent='--';});
+    ['k-skus','k-units','k-lines','k-placed','k-unplaced','k-noattrs','k-headcount'].forEach(function(id){var e=document.getElementById(id);if(e)e.textContent='--';});
     return;
   }
   if(npc)npc.style.display='none';
@@ -2221,6 +2566,8 @@ function renderSequence(){
   document.getElementById('k-unplaced').className='kpi-val '+(unplaced.length>0?'amber':'green');
   document.getElementById('k-noattrs').textContent=naj.length;
   document.getElementById('k-noattrs').className='kpi-val '+(naj.length>0?'red':'green');
+  var hcS=planHeadcount_(lineState,lines);
+  document.getElementById('k-headcount').textContent=hcS.day+' / '+hcS.night;
   var nac=document.getElementById('noAttrsCard');
   if(naj.length>0){nac.style.display='';document.getElementById('noAttrsList').innerHTML=naj.map(function(j){return'<div class="sku-row" style="background:transparent"><span class="sku-name">'+j.sku+'</span><span class="sku-units">'+fmtUnits(j.qty)+'</span></div>';}).join('');}else{nac.style.display='none';}
   document.getElementById('seqCurfewBanner').innerHTML=curfewBannerHtml_(lines,lineState);
@@ -2276,12 +2623,51 @@ function renderWorkbench(){
 }
 
 function renderLoadedDemand(){var weeks=getWeeks(),el=document.getElementById('loadedDemandTable');if(!weeks.length){el.innerHTML='<div style="font-family:var(--mono);font-size:11px;color:var(--muted)">No demand loaded.</div>';return;}var html='<table class="data-table"><thead><tr><th>Week</th><th>Day</th><th>Date</th><th>Mode</th><th style="text-align:right">SKUs</th><th style="text-align:right">Total Units</th><th>Published by</th><th>Published at</th><th></th></tr></thead><tbody>';weeks.forEach(function(wk){getDays(wk).forEach(function(day){var dd=STATE.demand[wk][day],tot=Object.keys(dd.skus||{}).reduce(function(s,k){return s+dd.skus[k];},0),date=dd.date?new Date(dd.date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'—',publishedAt=dd.publishedAt?new Date(dd.publishedAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}):'—';html+='<tr><td>'+wk+'</td><td>'+day+'</td><td>'+date+'</td><td><span class="mode-badge mode-'+dd.mode+'">'+dd.mode+'</span></td><td style="text-align:right">'+Object.keys(dd.skus||{}).length+'</td><td style="text-align:right">'+fmtUnits(Math.round(tot))+'</td><td style="color:var(--muted)">'+(dd.publishedBy||'—')+'</td><td style="color:var(--muted);font-size:11px">'+publishedAt+'</td><td style="text-align:right"><button class="btn btn-danger btn-sm" onclick="clearDemandDayUI(\''+wk+'\',\''+day+'\')" title="Clear this day">Clear</button></td></tr>';});});html+='</tbody></table>';el.innerHTML=html;}
+// Demand lives in the 'Demand Store' tab now, not Script Properties. Any day
+// still sitting in properties is shown here with a button, because a cleanup
+// that only exists in the Apps Script editor is a cleanup that doesn't happen.
+function checkDemandMigration(){
+  if(!CURRENT_USER||!CURRENT_USER.isAdmin)return;
+  google.script.run.withSuccessHandler(function(st){
+    var card=document.getElementById('demandMigrateCard');
+    var days=st.legacyDays||0,keys=st.stateKeys||0;
+    if(!days&&!keys){card.style.display='none';return;}
+    var bits=[];
+    if(days)bits.push(days+' day'+(days>1?'s':'')+' of demand ('+st.legacyKB+'KB)');
+    if(keys)bits.push(keys+' date-keyed state key'+(keys>1?'s':'')+' \u2014 workbench overrides, finish-by, break overrides, scenarios ('+st.stateKB+'KB)');
+    card.style.display='';
+    document.getElementById('demandMigrateText').textContent=
+      bits.join(' and ')+' are still in Script Properties, which has a shared ~500KB ceiling. '+
+      'While they sit there they count against that ceiling and writes can fail. This moves them into the '+
+      'Demand Store and State Store tabs and frees the space. Everything is verified in the Sheet before its '+
+      'old copy is removed.';
+  }).withFailureHandler(function(){}).demandMigrationStatus();
+}
+function runDemandMigration(){
+  var btn=document.getElementById('demandMigrateBtn'),el=document.getElementById('demandMigrateStatus');
+  btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Moving\u2026';
+  // Demand first, then the four date-keyed state keys. Sequential on purpose:
+  // both write to the same spreadsheet and the second reports on its own.
+  function done(msg,cls){btn.disabled=false;btn.textContent='Move stored data to the Sheet';
+    el.innerHTML='<div class="status '+cls+'">'+msg+'</div>';checkDemandMigration();renderLoadedDemand();}
+  function fail(err){btn.disabled=false;btn.textContent='Move stored data to the Sheet';
+    el.innerHTML='<div class="status status-err">'+err.message+'</div>';}
+  google.script.run.withSuccessHandler(function(d){
+    google.script.run.withSuccessHandler(function(t){
+      var skipped=(d.skipped||0)+(t.skipped||0);
+      done('Moved '+d.moved+' demand day'+(d.moved===1?'':'s')+' and '+t.moved+' state row'+(t.moved===1?'':'s')+
+        ', freed ~'+((d.freedKB||0)+(t.freedKB||0))+'KB'+
+        (skipped?'. '+skipped+' skipped and left in place \u2014 re-run to retry.':'.'),
+        skipped?'status-warn':'status-ok');
+    }).withFailureHandler(fail).migrateStateToSheet();
+  }).withFailureHandler(fail).migrateDemandToSheet();
+}
 function clearDemandDayUI(weekLabel,day){var dd=STATE.demand[weekLabel]&&STATE.demand[weekLabel][day];var dateStr=dd&&dd.date?new Date(dd.date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):day;if(!confirm('Clear '+weekLabel+' — '+day+' ('+dateStr+')?\n\nThis removes this one day\'s loaded demand. This cannot be undone.'))return;google.script.run.withSuccessHandler(function(){if(STATE.demand[weekLabel])delete STATE.demand[weekLabel][day];renderLoadedDemand();renderSequence();renderWorkbench();}).withFailureHandler(function(err){alert('Failed to clear: '+err.message);}).clearDemandDay(weekLabel,day);}
 function loadForecastWeeks(){google.script.run.withSuccessHandler(function(weeks){var sel=document.getElementById('forecastWeekSel');sel.innerHTML=weeks.length?weeks.map(function(w){return'<option value="'+w.label+'">'+w.label+'</option>';}).join(''):'<option value="">— no weeks found —</option>';}).withFailureHandler(function(){document.getElementById('forecastWeekSel').innerHTML='<option value="">— error —</option>';}).fetchForecastWeeks();}
 function fetchForecastPreview(){var weekLabel=document.getElementById('forecastWeekSel').value;if(!weekLabel)return;var btn=document.getElementById('fetchFcBtn');btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Fetching…';document.getElementById('fcPreview').innerHTML='';document.getElementById('fcPublishRow').style.display='none';google.script.run.withSuccessHandler(function(data){btn.disabled=false;btn.textContent='Fetch week';_pendingForecast=data;renderForecastPreview(data);document.getElementById('fcPublishRow').style.display='';document.getElementById('fcStatus').innerHTML='';}).withFailureHandler(function(err){btn.disabled=false;btn.textContent='Fetch week';document.getElementById('fcStatus').innerHTML='<div class="status status-err">'+err.message+'</div>';}).fetchForecastWeekData(weekLabel);}
 function renderForecastPreview(data){var skuData=data.skuData,dates=data.dates,weekLabel=data.weekLabel;var days=DAYS_ORDER.filter(function(d){return skuData[d]&&Object.keys(skuData[d]).length;});var skuSet={};days.forEach(function(d){Object.keys(skuData[d]).forEach(function(s){skuSet[s]=true;});});var allSkus=Object.keys(skuSet).sort(),totals={};days.forEach(function(d){totals[d]=Object.keys(skuData[d]).reduce(function(s,k){return s+skuData[d][k];},0);});var html='<div class="preview-wrap"><table class="preview-table"><thead><tr><th>SKU</th>'+days.map(function(d){return'<th>'+DAY_SHORT[d]+'<br><span style="font-size:9px;opacity:.6;font-weight:400">'+(dates[d]?new Date(dates[d]+'T12:00:00').toLocaleDateString('en-US',{month:'numeric',day:'numeric'}):'—')+'</span></th>';}).join('')+'</tr></thead><tbody>';allSkus.forEach(function(sku){html+='<tr><td>'+sku+'</td>'+days.map(function(d){return'<td>'+fmtUnits(skuData[d][sku]||0)+'</td>';}).join('')+'</tr>';});html+='<tr class="total-row"><td>Total</td>'+days.map(function(d){return'<td>'+fmtUnits(Math.round(totals[d]))+'</td>';}).join('')+'</tr></tbody></table></div><div style="font-size:10px;font-family:var(--mono);color:var(--muted);margin-top:8px">'+allSkus.length+' SKUs · '+days.length+' days · <strong style="color:var(--amber)">'+weekLabel+' · forecast</strong></div>';document.getElementById('fcPreview').innerHTML=html;}
 function publishForecastWeek(){if(!_pendingForecast)return;var btn=document.querySelector('#fcPublishRow button');btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Publishing…';var skuData=_pendingForecast.skuData,dates=_pendingForecast.dates,weekLabel=_pendingForecast.weekLabel;google.script.run.withSuccessHandler(function(result){btn.disabled=false;btn.innerHTML='📥 Load to Workbench';if(!STATE.demand[weekLabel])STATE.demand[weekLabel]={};Object.keys(skuData).forEach(function(day){STATE.demand[weekLabel][day]={skus:skuData[day],mode:'forecast',date:dates[day]||'',publishedBy:(CURRENT_USER&&CURRENT_USER.email)||'',publishedAt:new Date().toISOString()};});if(!CURRENT_WEEK)CURRENT_WEEK=weekLabel;document.getElementById('fcPreview').innerHTML='<div class="status status-ok">✓ Loaded '+result.daysLoaded+' days for '+weekLabel+' to Workbench</div>';document.getElementById('fcPublishRow').style.display='none';_pendingForecast=null;renderLoadedDemand();renderSequence();}).withFailureHandler(function(err){btn.disabled=false;btn.innerHTML='📥 Load to Workbench';document.getElementById('fcStatus').innerHTML='<div class="status status-err">'+err.message+'</div>';}).publishForecastWeek(weekLabel,skuData,dates);}
-function loadAllForecastWeeks(){var btn=document.getElementById('loadAllBtn'),el=document.getElementById('fcStatus');btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Loading all weeks…';google.script.run.withSuccessHandler(function(weeks){if(!weeks.length){btn.disabled=false;btn.innerHTML='⚡ Load all weeks';el.innerHTML='<div class="status status-warn">No weeks found</div>';return;}var loaded=0,total=weeks.length;function loadNext(i){if(i>=total){btn.disabled=false;btn.innerHTML='⚡ Load all weeks';el.innerHTML='<div class="status status-ok">✓ Loaded '+loaded+' of '+total+' weeks</div>';renderLoadedDemand();renderSequence();return;}google.script.run.withSuccessHandler(function(data){var skuData=data.skuData,dates=data.dates,weekLabel=data.weekLabel;if(!STATE.demand[weekLabel])STATE.demand[weekLabel]={};Object.keys(skuData).forEach(function(day){var ex=STATE.demand[weekLabel][day];if(ex&&ex.mode==='actual')return;STATE.demand[weekLabel][day]={skus:skuData[day],mode:'forecast',date:dates[day]||'',publishedBy:'bulk load',publishedAt:new Date().toISOString()};});loaded++;el.innerHTML='<div class="status status-info"><span class="spinner"></span>Loading… '+loaded+'/'+total+'</div>';google.script.run.withSuccessHandler(function(){loadNext(i+1);}).withFailureHandler(function(){loadNext(i+1);}).publishForecastWeek(weekLabel,skuData,dates);}).withFailureHandler(function(){loadNext(i+1);}).fetchForecastWeekData(weeks[i].label);}loadNext(0);}).withFailureHandler(function(err){btn.disabled=false;btn.innerHTML='⚡ Load all weeks';el.innerHTML='<div class="status status-err">'+err.message+'</div>';}).fetchForecastWeeks();}
+function loadAllForecastWeeks(){var btn=document.getElementById('loadAllBtn'),el=document.getElementById('fcStatus');btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Loading all weeks…';google.script.run.withSuccessHandler(function(weeks){if(!weeks.length){btn.disabled=false;btn.innerHTML='⚡ Load all weeks';el.innerHTML='<div class="status status-warn">No weeks found</div>';return;}var loaded=0,failed=[],total=weeks.length;function loadNext(i){if(i>=total){btn.disabled=false;btn.innerHTML='⚡ Load all weeks';el.innerHTML=failed.length?('<div class="status status-err">Loaded '+loaded+' of '+total+' weeks. '+failed.length+' FAILED and did not save:<br>'+failed.join('<br>')+'</div>'):('<div class="status status-ok">✓ Loaded '+loaded+' of '+total+' weeks</div>');renderLoadedDemand();renderSequence();return;}google.script.run.withSuccessHandler(function(data){var skuData=data.skuData,dates=data.dates,weekLabel=data.weekLabel;if(!STATE.demand[weekLabel])STATE.demand[weekLabel]={};Object.keys(skuData).forEach(function(day){var ex=STATE.demand[weekLabel][day];if(ex&&ex.mode==='actual')return;STATE.demand[weekLabel][day]={skus:skuData[day],mode:'forecast',date:dates[day]||'',publishedBy:'bulk load',publishedAt:new Date().toISOString()};});el.innerHTML='<div class="status status-info"><span class="spinner"></span>Loading… '+(loaded+failed.length+1)+'/'+total+'</div>';google.script.run.withSuccessHandler(function(){loaded++;loadNext(i+1);}).withFailureHandler(function(err){failed.push(weekLabel+': '+err.message);delete STATE.demand[weekLabel];loadNext(i+1);}).publishForecastWeek(weekLabel,skuData,dates);}).withFailureHandler(function(err){failed.push(weeks[i].label+': '+err.message);loadNext(i+1);}).fetchForecastWeekData(weeks[i].label);}loadNext(0);}).withFailureHandler(function(err){btn.disabled=false;btn.innerHTML='⚡ Load all weeks';el.innerHTML='<div class="status status-err">'+err.message+'</div>';}).fetchForecastWeeks();}
 function fetchActualPreview(){var start=document.getElementById('actualStart').value,end=document.getElementById('actualEnd').value;if(!start||!end)return;var btn=document.getElementById('fetchActualBtn');btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Fetching…';document.getElementById('actualPreview').innerHTML='';document.getElementById('actualPublishRow').style.display='none';
 // Collect days already captured as actuals — passed to the server so it skips
 // them (frozen evidence: never re-read or overwrite) and skips whole tabs it
@@ -2296,7 +2682,7 @@ function renderActualPreview(data){var skuData=data.skuData,byDate=data.byDate,s
 function publishActuals(){if(!_pendingActuals)return;var btn=document.querySelector('#actualPublishRow button');btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Publishing…';var skuData=_pendingActuals.skuData,byDate=_pendingActuals.byDate,entries=[];Object.keys(byDate).forEach(function(date){var info=byDate[date],skus=skuData[info.day+'|'+date]||{};if(!Object.keys(skus).length)return;var d=new Date(date+'T12:00:00'),jan1=new Date(d.getFullYear(),0,1),fallbackWk=Math.ceil((((d-jan1)/86400000)+jan1.getDay()+1)/7);entries.push({weekLabel:info.weekLabel||('Wk '+fallbackWk+' · '+d.getFullYear()),day:info.day,date:date,skus:skus});});google.script.run.withSuccessHandler(function(result){btn.disabled=false;btn.innerHTML='📥 Load Actuals to Workbench';entries.forEach(function(entry){if(!STATE.demand[entry.weekLabel])STATE.demand[entry.weekLabel]={};STATE.demand[entry.weekLabel][entry.day]={skus:entry.skus,mode:'actual',date:entry.date,publishedBy:(CURRENT_USER&&CURRENT_USER.email)||'',publishedAt:new Date().toISOString()};});if(!CURRENT_WEEK&&entries.length)CURRENT_WEEK=entries[0].weekLabel;document.getElementById('actualPreview').innerHTML='<div class="status status-ok">✓ Loaded '+result.daysLoaded+' days of actuals to Workbench</div>';document.getElementById('actualPublishRow').style.display='none';_pendingActuals=null;renderLoadedDemand();renderSequence();}).withFailureHandler(function(err){btn.disabled=false;btn.innerHTML='📥 Load Actuals to Workbench';document.getElementById('actualStatus').innerHTML='<div class="status status-err">'+err.message+'</div>';}).publishActualDays(entries);}
 
 function renderSkuLibrary(){filterSkuTable();}
-function addSkuManually(){var input=document.getElementById('newSkuInput');var raw=(input.value||'').trim().toUpperCase().replace(/[^A-Z0-9_]/g,'');if(!raw)return;var el=document.getElementById('skuLibStatus');if(STATE.skuLibrary[raw]){document.getElementById('skuSearch').value=raw;filterSkuTable();input.value='';if(el)el.innerHTML='<div class="status status-warn">'+raw+' already in library — highlighted below</div>';return;}STATE.skuLibrary[raw]={active:true,category:'',packageType:'',upm:'',allergens:'',capper:false,nightShift:false,preProcessed:false};input.value='';document.getElementById('skuSearch').value=raw;filterSkuTable();if(el)el.innerHTML='<div class="status status-info">Added '+raw+' — fill in attributes and save</div>';}
+function addSkuManually(){var input=document.getElementById('newSkuInput');var raw=(input.value||'').trim().toUpperCase().replace(/[^A-Z0-9_]/g,'');if(!raw)return;var el=document.getElementById('skuLibStatus');if(STATE.skuLibrary[raw]){document.getElementById('skuSearch').value=raw;filterSkuTable();input.value='';if(el)el.innerHTML='<div class="status status-warn">'+raw+' already in library — highlighted below</div>';return;}STATE.skuLibrary[raw]={active:true,category:'',packageType:'',unitsPerTote:'',upm:'',allergens:'',capper:false,nightShift:false,preProcessed:false};input.value='';document.getElementById('skuSearch').value=raw;filterSkuTable();if(el)el.innerHTML='<div class="status status-info">Added '+raw+' — fill in attributes and save</div>';}
 // ─── USDA PAIRING (usdaPairedSku) ───────────────────────────────────────────
 // A USDA SKU and its non-USDA counterpart share the base build, jar and lid, so
 // running them back-to-back saves a changeover. Cannot be derived from names —
@@ -2433,7 +2819,7 @@ function filterSkuTable(){var search=(document.getElementById('skuSearch').value
       if(warn)sel+='<div style="font-family:var(--mono);font-size:10px;color:var(--amber);margin-top:3px;max-width:210px;line-height:1.3">\u26A0 '+warn+'</div>';
       return sel;
     })();
-    var fc=s.fcClass||'';var fcCell='<select class="inline-input" onchange="updateSkuField(\''+key+'\',\'fcClass\',this.value)" style="width:78px"><option value=""'+(fc===''?' selected':'')+'>—</option><option value="FC-W"'+(fc==='FC-W'?' selected':'')+'>FC-W</option><option value="FC-S"'+(fc==='FC-S'?' selected':'')+'>FC-S</option></select>';return'<tr><td><span class="sku-active-dot '+(s.active!==false?'dot-active':'dot-inactive')+'"></span>'+key+'</td><td><input class="inline-input" value="'+(s.category||'')+'" onchange="updateSkuField(\''+key+'\',\'category\',this.value)" style="width:110px"></td><td>'+fcCell+'</td><td><input class="inline-input" value="'+(s.packageType||'')+'" onchange="updateSkuField(\''+key+'\',\'packageType\',this.value)" style="width:100px"></td><td><input class="inline-input" type="number" value="'+(s.upm||'')+'" onchange="updateSkuField(\''+key+'\',\'upm\',parseFloat(this.value))" style="width:120px"></td><td>'+(isAllergenUnknown_(s.allergens)?'<span style="background:var(--red-dim);color:var(--red);border:1px solid rgba(239,68,68,.25);border-radius:4px;padding:2px 6px;font-size:10px;white-space:nowrap" title="No allergen data — sequenced as worst case (all six allergens) so it can never seed a food-contact chain">\u26A0 NO ALLERGEN DATA</span>':'')+'<input class="inline-input" value="'+((s.allergens&&!isAllergenUnknown_(s.allergens))?s.allergens:'')+'" onchange="updateSkuField(\''+key+'\',\'allergens\',this.value)" style="width:140px'+(isAllergenUnknown_(s.allergens)?';margin-top:3px':'')+'"></td><td>'+labelCell+'</td><td>'+linesCell+'</td><td>'+linesLateCell+'</td><td>'+pairCell+'</td><td style="text-align:center">'+chk('capper')+'</td><td style="text-align:center">'+chk('nightShift')+'</td><td style="text-align:center">'+chk('preProcessed')+'</td><td style="text-align:center">'+chk('active')+'</td><td>'+stagingCell_(key,s)+'</td></tr>';}).join('');}
+    var fc=s.fcClass||'';var fcCell='<select class="inline-input" onchange="updateSkuField(\''+key+'\',\'fcClass\',this.value)" style="width:78px"><option value=""'+(fc===''?' selected':'')+'>—</option><option value="FC-W"'+(fc==='FC-W'?' selected':'')+'>FC-W</option><option value="FC-S"'+(fc==='FC-S'?' selected':'')+'>FC-S</option></select>';return'<tr><td><span class="sku-active-dot '+(s.active!==false?'dot-active':'dot-inactive')+'"></span>'+key+'</td><td><input class="inline-input" value="'+(s.category||'')+'" onchange="updateSkuField(\''+key+'\',\'category\',this.value)" style="width:110px"></td><td>'+fcCell+'</td><td><input class="inline-input" value="'+(s.packageType||'')+'" onchange="updateSkuField(\''+key+'\',\'packageType\',this.value)" style="width:100px"></td><td><input class="inline-input" type="number" min="1" value="'+(s.unitsPerTote||'')+'" onchange="updateSkuField(\''+key+'\',\'unitsPerTote\',parseFloat(this.value))" style="width:82px"></td><td><input class="inline-input" type="number" value="'+(s.upm||'')+'" onchange="updateSkuField(\''+key+'\',\'upm\',parseFloat(this.value))" style="width:120px"></td><td>'+(isAllergenUnknown_(s.allergens)?'<span style="background:var(--red-dim);color:var(--red);border:1px solid rgba(239,68,68,.25);border-radius:4px;padding:2px 6px;font-size:10px;white-space:nowrap" title="No allergen data — sequenced as worst case (all six allergens) so it can never seed a food-contact chain">\u26A0 NO ALLERGEN DATA</span>':'')+'<input class="inline-input" value="'+((s.allergens&&!isAllergenUnknown_(s.allergens))?s.allergens:'')+'" onchange="updateSkuField(\''+key+'\',\'allergens\',this.value)" style="width:140px'+(isAllergenUnknown_(s.allergens)?';margin-top:3px':'')+'"></td><td>'+labelCell+'</td><td>'+linesCell+'</td><td>'+linesLateCell+'</td><td>'+pairCell+'</td><td style="text-align:center">'+chk('capper')+'</td><td style="text-align:center">'+chk('nightShift')+'</td><td style="text-align:center">'+chk('preProcessed')+'</td><td style="text-align:center">'+chk('active')+'</td><td>'+stagingCell_(key,s)+'</td></tr>';}).join('');}
 var _skuTimer=null;
 // ─── STAGING / PENDING SKUS (v0.5.72) ────────────────────────────────────────
 // A pending SKU is one entered in Sequins before Menu Library knows it exists —
@@ -2564,7 +2950,7 @@ function applyAdmissibleLinesModal(){
 }
 function updateSkuCounts(){var lib=STATE.skuLibrary,k=Object.keys(lib).filter(function(x){return !lib[x].pending;});var pend=Object.keys(lib).filter(function(x){return !!lib[x].pending;});var pEl=document.getElementById('sc-pending');if(pEl)pEl.textContent=pend.length?String(pend.length):'0';document.getElementById('sc-capper').textContent=k.filter(function(x){return lib[x].capper;}).length;document.getElementById('sc-night').textContent=k.filter(function(x){return lib[x].nightShift;}).length;document.getElementById('sc-preproc').textContent=k.filter(function(x){return lib[x].preProcessed;}).length;document.getElementById('sc-active').textContent=k.filter(function(x){return lib[x].active!==false;}).length;document.getElementById('sc-total').textContent=k.length;}
 function saveSkuLibrary(isAutoSave){var el=document.getElementById('skuLibStatus');if(el)el.innerHTML='<div class="status status-info"><span class="spinner"></span>Saving…</div>';google.script.run.withSuccessHandler(function(){if(el){el.innerHTML='<div class="status status-ok">✓ Saved'+(isAutoSave?' (auto)':'')+'</div>';setTimeout(function(){if(el.innerHTML.indexOf('Saved')!==-1)el.innerHTML='';},3000);}}).withFailureHandler(function(err){if(el)el.innerHTML='<div class="status status-err">⚠ SAVE FAILED: '+err.message+'</div>';}).saveSkuLibrary(STATE.skuLibrary);}
-function importSkusFromForecast(){var allSkuNamesSet={};Object.keys(STATE.demand).forEach(function(wk){Object.keys(STATE.demand[wk]).forEach(function(day){Object.keys(STATE.demand[wk][day].skus||{}).forEach(function(sku){allSkuNamesSet[sku]=true;});});});Object.keys(STATE.skuLibrary).forEach(function(key){allSkuNamesSet[key]=true;});var allSkuNames=Object.keys(allSkuNamesSet),el=document.getElementById('skuLibStatus');if(!allSkuNames.length){el.innerHTML='<div class="status status-warn">No demand loaded yet — load demand first.</div>';return;}el.innerHTML='<div class="status status-info"><span class="spinner"></span>Pulling attributes…</div>';google.script.run.withSuccessHandler(function(result){var attributes=result.attributes,notFound=result.notFound,added=0,updated=0;allSkuNames.forEach(function(sku){var key=sku.toUpperCase(),normKey=key.replace(/[^A-Z0-9]/g,''),attrs=attributes[normKey];if(!STATE.skuLibrary[key]){STATE.skuLibrary[key]={active:true,category:'',packageType:'',upm:'',allergens:'',capper:false,nightShift:false,preProcessed:false};added++;}if(attrs){if(attrs.category)STATE.skuLibrary[key].category=attrs.category;if(attrs.packageType)STATE.skuLibrary[key].packageType=attrs.packageType;if(attrs.allergens)STATE.skuLibrary[key].allergens=attrs.allergens;if(attrs.upm)STATE.skuLibrary[key].upm=attrs.upm;updated++;}});renderSkuLibrary();var nfMsg=notFound.length?('<br><span style="color:var(--amber)">⚠ '+notFound.length+' not found: '+notFound.slice(0,10).join(', ')+(notFound.length>10?'…':'')+'</span>'):'';el.innerHTML='<div class="status status-info"><span class="spinner"></span>'+added+' new, '+updated+' matched — saving…</div>';google.script.run.withSuccessHandler(function(){el.innerHTML='<div class="status status-ok">✓ Saved — '+added+' new, '+updated+' matched'+nfMsg+'</div>';}).withFailureHandler(function(err){el.innerHTML='<div class="status status-err">⚠ Pull ok, SAVE FAILED: '+err.message+'</div>';}).saveSkuLibrary(STATE.skuLibrary);}).withFailureHandler(function(err){el.innerHTML='<div class="status status-err">'+err.message+'</div>';}).fetchSkuAttributesFor(allSkuNames);}
+function importSkusFromForecast(){var allSkuNamesSet={};Object.keys(STATE.demand).forEach(function(wk){Object.keys(STATE.demand[wk]).forEach(function(day){Object.keys(STATE.demand[wk][day].skus||{}).forEach(function(sku){allSkuNamesSet[sku]=true;});});});Object.keys(STATE.skuLibrary).forEach(function(key){allSkuNamesSet[key]=true;});var allSkuNames=Object.keys(allSkuNamesSet),el=document.getElementById('skuLibStatus');if(!allSkuNames.length){el.innerHTML='<div class="status status-warn">No demand loaded yet — load demand first.</div>';return;}el.innerHTML='<div class="status status-info"><span class="spinner"></span>Pulling attributes…</div>';google.script.run.withSuccessHandler(function(result){var attributes=result.attributes,notFound=result.notFound,added=0,updated=0;allSkuNames.forEach(function(sku){var key=sku.toUpperCase(),normKey=key.replace(/[^A-Z0-9]/g,''),attrs=attributes[normKey];if(!STATE.skuLibrary[key]){STATE.skuLibrary[key]={active:true,category:'',packageType:'',unitsPerTote:'',upm:'',allergens:'',capper:false,nightShift:false,preProcessed:false};added++;}if(attrs){if(attrs.category)STATE.skuLibrary[key].category=attrs.category;if(attrs.packageType)STATE.skuLibrary[key].packageType=attrs.packageType;if(attrs.allergens)STATE.skuLibrary[key].allergens=attrs.allergens;if(attrs.upm)STATE.skuLibrary[key].upm=attrs.upm;updated++;}});renderSkuLibrary();var nfMsg=notFound.length?('<br><span style="color:var(--amber)">⚠ '+notFound.length+' not found: '+notFound.slice(0,10).join(', ')+(notFound.length>10?'…':'')+'</span>'):'';el.innerHTML='<div class="status status-info"><span class="spinner"></span>'+added+' new, '+updated+' matched — saving…</div>';google.script.run.withSuccessHandler(function(){el.innerHTML='<div class="status status-ok">✓ Saved — '+added+' new, '+updated+' matched'+nfMsg+'</div>';}).withFailureHandler(function(err){el.innerHTML='<div class="status status-err">⚠ Pull ok, SAVE FAILED: '+err.message+'</div>';}).saveSkuLibrary(STATE.skuLibrary);}).withFailureHandler(function(err){el.innerHTML='<div class="status status-err">'+err.message+'</div>';}).fetchSkuAttributesFor(allSkuNames);}
 
 // v0.5.58: rules consolidation — line seeds moved into the Active Lines table
 // (per-line attribute, natural home) and category home lines moved to their
@@ -2588,7 +2974,7 @@ function autoSaveRulesDebounced(){
     }).saveSequencingRules(getRules());
   },1500);
 }
-function renderLineConfig(){var lines=STATE.lineConfig||DEFAULT_LINE_CONFIG,seeds=(getRules().lineSeeds||{}),days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];document.getElementById('lineConfigBody').innerHTML=lines.map(function(l,i){var dc=days.map(function(d){return'<td style="text-align:center"><input type="checkbox" '+(l.days[d]?'checked':'')+' style="accent-color:var(--teal)" onchange="updateLineDay('+i+',\''+d+'\',this.checked)"></td>';}).join('');var tc=l.type==='night'?'var(--purple)':l.type==='capper'?'var(--blue)':'var(--teal)';var caps=lineCaps(l);function capChk(cap){return'<td style="text-align:center"><input type="checkbox" '+(caps[cap]?'checked':'')+' style="accent-color:var(--teal)" onchange="updateLineCap('+i+',\''+cap+'\',this.checked)"></td>';}var seedVal=seeds[l.id]||'';var seedCell='<td><input class="inline-input" value="'+seedVal+'" onchange="updateLineSeed(\''+l.id+'\',this.value);autoSaveRulesDebounced()" style="width:180px" placeholder="(none)" title="SKU that starts this line as slot 0"></td>';return'<tr><td>'+l.label+'</td><td><span style="color:'+tc+'">'+l.type+'</span></td><td style="text-align:right"><input class="inline-input" type="number" value="'+l.hc+'" onchange="updateLineHC('+i+',this.value)" style="width:45px;text-align:right"></td><td><input class="inline-input" value="'+l.pool+'" onchange="updateLinePool('+i+',this.value)" style="width:80px"></td>'+seedCell+capChk('capper')+capChk('smallCup')+capChk('usdaApproved')+capChk('night')+'<td><input class="inline-input" type="time" value="'+(l.startTime||'06:00')+'" onchange="updateLineStartTime('+i+',this.value)" style="width:100px"></td>'+dc+'</tr>';}).join('');renderHomeLines();}
+function renderLineConfig(){var lines=STATE.lineConfig||DEFAULT_LINE_CONFIG,seeds=(getRules().lineSeeds||{}),days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];document.getElementById('lineConfigBody').innerHTML=lines.map(function(l,i){var dc=days.map(function(d){return'<td style="text-align:center"><input type="checkbox" '+(l.days[d]?'checked':'')+' style="accent-color:var(--teal)" onchange="updateLineDay('+i+',\''+d+'\',this.checked)"></td>';}).join('');var tc=l.type==='night'?'var(--purple)':l.type==='capper'?'var(--blue)':'var(--teal)';var caps=lineCaps(l);function capChk(cap){return'<td style="text-align:center"><input type="checkbox" '+(caps[cap]?'checked':'')+' style="accent-color:var(--teal)" onchange="updateLineCap('+i+',\''+cap+'\',this.checked)"></td>';}var seedVal=seeds[l.id]||'';var seedCell='<td><input class="inline-input" value="'+seedVal+'" onchange="updateLineSeed(\''+l.id+'\',this.value);autoSaveRulesDebounced()" style="width:180px" placeholder="(none)" title="SKU that starts this line as slot 0"></td>';return'<tr><td>'+l.label+'</td><td><span style="color:'+tc+'">'+l.type+'</span></td><td><input class="inline-input" value="'+escHtml(l.room||'')+'" onchange="updateLineRoom('+i+',this.value)" style="width:100px" placeholder="Room W"></td><td style="text-align:right"><input class="inline-input" type="number" value="'+l.hc+'" onchange="updateLineHC('+i+',this.value)" style="width:45px;text-align:right"></td><td style="text-align:right"><input class="inline-input" type="number" min="0" value="'+(Number(l.lineLead)||0)+'" onchange="updateLineLead('+i+',this.value)" style="width:45px;text-align:right"></td><td><input class="inline-input" value="'+l.pool+'" onchange="updateLinePool('+i+',this.value)" style="width:80px"></td>'+seedCell+capChk('capper')+capChk('smallCup')+capChk('usdaApproved')+capChk('night')+'<td><input class="inline-input" type="time" value="'+(l.startTime||'06:00')+'" onchange="updateLineStartTime('+i+',this.value)" style="width:100px"></td>'+dc+'</tr>';}).join('');renderHomeLines();}
 function renderHomeLines(){
   var el=document.getElementById('homeLinesBody');if(!el)return;
   var ce=!!window._canEditRules,hl=getHomeLines();
@@ -2598,12 +2984,106 @@ function renderHomeLines(){
 function updateLineCap(i,cap,val){var l=STATE.lineConfig||DEFAULT_LINE_CONFIG;if(!l[i].caps)l[i].caps=lineCaps(l[i]);l[i].caps[cap]=val;STATE.lineConfig=l;}
 function updateLineDay(i,d,val){var l=STATE.lineConfig||DEFAULT_LINE_CONFIG;l[i].days[d]=val;STATE.lineConfig=l;}
 function updateLineHC(i,val){var l=STATE.lineConfig||DEFAULT_LINE_CONFIG;l[i].hc=parseInt(val)||0;STATE.lineConfig=l;}
+function updateLineLead(i,val){var l=STATE.lineConfig||DEFAULT_LINE_CONFIG;l[i].lineLead=parseInt(val,10)||0;STATE.lineConfig=l;}
 function updateLinePool(i,val){var l=STATE.lineConfig||DEFAULT_LINE_CONFIG;l[i].pool=val;STATE.lineConfig=l;}
+function updateLineRoom(i,val){var l=STATE.lineConfig||DEFAULT_LINE_CONFIG;l[i].room=String(val||'').trim();STATE.lineConfig=l;}
 function updateLineStartTime(i,val){var l=STATE.lineConfig||DEFAULT_LINE_CONFIG;l[i].startTime=val;STATE.lineConfig=l;}
 var _lcTimer=null;
 function saveLineConfig(isAutoSave){var lines=STATE.lineConfig||DEFAULT_LINE_CONFIG,btn=document.getElementById('saveLineConfigBtn'),el=document.getElementById('lineConfigStatus'),orig=btn?btn.textContent:'';if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Saving…';}if(el)el.innerHTML='<div class="status status-info"><span class="spinner"></span>Saving…</div>';google.script.run.withSuccessHandler(function(){STATE.lineConfig=lines;renderLineConfig();renderSequence();renderWorkbench();renderDayStrip('seqDayStrip');renderDayStrip('wbDayStrip');if(btn){btn.disabled=false;btn.textContent='✓ Saved';setTimeout(function(){btn.textContent=orig||'Save changes';},2000);}if(el){el.innerHTML='<div class="status status-ok">✓ Saved'+(isAutoSave?' (auto)':'')+'</div>';setTimeout(function(){el.innerHTML='';},3000);}}).withFailureHandler(function(err){if(btn){btn.disabled=false;btn.textContent=orig||'Save changes';}if(el)el.innerHTML='<div class="status status-err">⚠ SAVE FAILED: '+err.message+'</div>';}).saveLineConfig(lines);}
 
-function renderRulesAccess(){var ce=!!window._canEditRules,sb=document.getElementById('saveRulesBtn'),lb=document.getElementById('saveLineConfigBtn'),mb=document.getElementById('migrateCapsBtn');if(sb)sb.style.display=ce?'':'none';if(lb)lb.style.display=ce?'':'none';if(mb)mb.style.display=ce?'':'none';}
+// ── Add a line (v0.5.111) ──
+// Line config is already a plain stored array that the engine reads and
+// saveLineConfig persists — nothing about a line lives in the code except the
+// DEFAULT_LINE_CONFIG fallback used before anything has ever been saved. So
+// adding a line is just appending a record in the same shape the table edits
+// and calling the same save. No engine change, no deploy.
+// Days are the on/off switch: a line with no days checked is stored and shown
+// but filtered out of every plan (see sequence()), which is how a line is
+// staged ahead of go-live or parked. Nothing here deletes.
+function currentLines_(){
+  // Clone the default rather than handing back the shared literal, so a line
+  // added before anything was ever saved doesn't mutate the fallback in place.
+  if(STATE.lineConfig)return STATE.lineConfig;
+  return JSON.parse(JSON.stringify(DEFAULT_LINE_CONFIG));
+}
+function toggleAddLine(show){
+  var p=document.getElementById('addLinePanel');if(!p)return;
+  var open=(show===undefined)?(p.style.display==='none'):!!show;
+  p.style.display=open?'':'none';
+  var st=document.getElementById('addLineStatus');if(st)st.innerHTML='';
+  if(open){var f=document.getElementById('alId');if(f)f.focus();}
+}
+function alIdTyped(){
+  var el=document.getElementById('alId');if(!el)return;
+  var v=el.value.toUpperCase().replace(/[^A-Z0-9\-_ ]/g,'');
+  if(v!==el.value)el.value=v;
+}
+function alTypeChanged(){
+  // Prefill capabilities to match the type — the same defaults the derivation
+  // in lineCaps() would have produced. Every box stays editable afterwards.
+  var t=document.getElementById('alType').value;
+  document.getElementById('alCapNight').checked=(t==='night');
+  document.getElementById('alCapCapper').checked=(t==='capper');
+  document.getElementById('alCapUsda').checked=(t!=='night');
+  if(t==='night'){document.getElementById('alPool').value='night';document.getElementById('alStart').value='00:20';}
+  else if(t==='capper'){document.getElementById('alPool').value='capper';}
+}
+function submitAddLine(){
+  var st=document.getElementById('addLineStatus');
+  function err(m){if(st)st.innerHTML='<div class="status status-err">\u26a0 '+m+'</div>';}
+  var id=(document.getElementById('alId').value||'').toUpperCase().trim();
+  if(!id)return err('Line ID is required.');
+  var lines=currentLines_();
+  var clash=null;
+  lines.forEach(function(l){if(String(l.id).toUpperCase().trim()===id)clash=l.id;});
+  if(clash)return err(clash+' already exists. Edit it in the table below, or pick a different ID.');
+  var hc=parseInt(document.getElementById('alHc').value,10);if(isNaN(hc)||hc<0)hc=0;
+  var lead=parseInt(document.getElementById('alLead').value,10);if(isNaN(lead)||lead<0)lead=0;
+  var line={
+    id:id,
+    label:(document.getElementById('alLabel').value||'').trim()||id,
+    type:document.getElementById('alType').value,
+    hc:hc,
+    lineLead:lead,
+    pool:document.getElementById('alPool').value,
+    startTime:document.getElementById('alStart').value||'06:00',
+    room:(document.getElementById('alRoom').value||'').trim(),
+    caps:{
+      capper:document.getElementById('alCapCapper').checked,
+      smallCup:document.getElementById('alCapSmallCup').checked,
+      usdaApproved:document.getElementById('alCapUsda').checked,
+      night:document.getElementById('alCapNight').checked
+    },
+    days:{
+      Mon:document.getElementById('alDayMon').checked,
+      Tue:document.getElementById('alDayTue').checked,
+      Wed:document.getElementById('alDayWed').checked,
+      Thu:document.getElementById('alDayThu').checked,
+      Fri:document.getElementById('alDayFri').checked,
+      Sat:document.getElementById('alDaySat').checked,
+      Sun:document.getElementById('alDaySun').checked
+    }
+  };
+  var runDays=[];['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach(function(d){if(line.days[d])runDays.push(d);});
+  lines.push(line);
+  var btn=document.getElementById('alSubmitBtn'),orig=btn?btn.textContent:'';
+  if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Adding\u2026';}
+  if(st)st.innerHTML='<div class="status status-info"><span class="spinner"></span>Adding '+line.id+'\u2026</div>';
+  google.script.run.withSuccessHandler(function(){
+    STATE.lineConfig=lines;
+    if(btn){btn.disabled=false;btn.textContent=orig||'Add line';}
+    renderLineConfig();renderSequence();renderWorkbench();renderDayStrip('seqDayStrip');renderDayStrip('wbDayStrip');
+    toggleAddLine(false);
+    var el=document.getElementById('lineConfigStatus');
+    if(el)el.innerHTML='<div class="status status-ok">\u2713 Added '+line.id+' \u2014 '+(runDays.length?('runs '+runDays.join(', ')):'no run days yet, so it stays out of every plan until you check one')+'.</div>';
+  }).withFailureHandler(function(e){
+    lines.pop(); // save failed — don't leave a phantom line in the browser's copy
+    if(btn){btn.disabled=false;btn.textContent=orig||'Add line';}
+    err('ADD FAILED, nothing saved: '+e.message);
+  }).saveLineConfig(lines);
+}
+
+function renderRulesAccess(){var ce=!!window._canEditRules,sb=document.getElementById('saveRulesBtn'),lb=document.getElementById('saveLineConfigBtn'),mb=document.getElementById('migrateCapsBtn'),ab=document.getElementById('addLineBtn');if(sb)sb.style.display=ce?'':'none';if(lb)lb.style.display=ce?'':'none';if(mb)mb.style.display=ce?'':'none';if(ab)ab.style.display=ce?'':'none';if(!ce)toggleAddLine(false);}
 // ── One-time capability anchor (v0.5.61) ──
 // lineCaps() answers from l.caps when the line has one and otherwise falls back
 // to the Sequencing Rules line lists (capperLines / noUsdaLines / greenBeltLine).
@@ -2648,8 +3128,15 @@ function renderRules(){
     field('Green Belt packages','greenBeltPackages',rules.greenBeltPackages,'list'),
     field('Sausage/sesame rule','sausageSesameRule',rules.sausageSesameRule,'bool'),
     hdr('Timing & labor'),
-    field('Target runtime (min)','targetRuntimeMin',rules.targetRuntimeMin,'num'),field('Slot cap (SKUs/line)','slotCap',rules.slotCap,'num'),field('Night shift unit cap','nightShiftUnitCap',rules.nightShiftUnitCap,'num'),field('Changeover time (min)','changeoverMin',rules.changeoverMin,'num'),field('Hourly labor rate ($)','hourlyRate',rules.hourlyRate,'num'),field('Min runtime for breaks (min)','breakMinRuntimeMin',rules.breakMinRuntimeMin,'num'),field('30m break offset (min into shift)','break30OffsetMin',rules.break30OffsetMin,'num'),field('30m break duration (min)','break30DurationMin',rules.break30DurationMin,'num'),field('15m break offset (min into shift)','break15OffsetMin',rules.break15OffsetMin,'num'),field('15m break duration (min)','break15DurationMin',rules.break15DurationMin,'num'),
+    field('Target runtime (min)','targetRuntimeMin',rules.targetRuntimeMin,'num'),field('Slot cap (SKUs/line)','slotCap',rules.slotCap,'num'),field('Night shift unit cap','nightShiftUnitCap',rules.nightShiftUnitCap,'num'),field('Changeover time (min)','changeoverMin',rules.changeoverMin,'num'),field('Hourly labor rate ($)','hourlyRate',rules.hourlyRate,'num'),field('Offline labor (water spiders)','offlineLaborHeadcount',ruleNum_(rules,'offlineLaborHeadcount'),'num'),field('Min runtime for breaks (min)','breakMinRuntimeMin',rules.breakMinRuntimeMin,'num'),field('30m break offset (min into shift)','break30OffsetMin',rules.break30OffsetMin,'num'),field('30m break duration (min)','break30DurationMin',rules.break30DurationMin,'num'),field('15m break offset (min into shift)','break15OffsetMin',rules.break15OffsetMin,'num'),field('15m break duration (min)','break15DurationMin',rules.break15DurationMin,'num'),
+    note('Offline labor is line-support headcount that isn\u2019t on a line \u2014 charged across the day-shift span (earliest day start to last day end) in the War Room $/unit figure only. It does not affect sequencing, Per-Line Summary or Labor Hrs.'),
     note('Paid breaks count toward Labor Hrs, UPLH and $/Unit. Unpaid ones still sit in the schedule and still move the line\u2019s end time \u2014 they just aren\u2019t billed.'),
+    field('Processing static ($/unit)','processingStaticPerUnit',ruleNum_(rules,'processingStaticPerUnit'),'num'),
+    hdr('Assembly plan email'),
+    note('Publishing arms the email; someone still has to click Send. Recipients need Sequins access to open the plan link \u2014 a distribution address can\u2019t.'),
+    field('Recipients','planEmailRecipients',rules.planEmailRecipients||'','text'),
+    field('CC','planEmailCc',rules.planEmailCc||'','text'),
+    hdr('Breaks'),
     field('30m break is paid','break30Paid',breakPaidRule_('b30',rules),'bool'),
     field('15m break is paid','break15Paid',breakPaidRule_('b15',rules),'bool')
   ].join('');
@@ -2660,11 +3147,56 @@ function updateRule(key,val){if(!STATE.sequencingRules)STATE.sequencingRules=JSO
 function updateRuleList(key,val){if(!STATE.sequencingRules)STATE.sequencingRules=JSON.parse(JSON.stringify(DEFAULT_RULES));STATE.sequencingRules[key]=val.split(',').map(function(s){return s.trim();}).filter(function(s){return!!s;});}
 function saveSequencingRules(){var el=document.getElementById('saveRulesBtn');if(el){el.disabled=true;el.innerHTML='<span class="spinner"></span>Saving…';}google.script.run.withSuccessHandler(function(){if(el){el.disabled=false;el.textContent='Save rules';}renderSequence();}).withFailureHandler(function(){if(el){el.disabled=false;el.textContent='Save rules';}}).saveSequencingRules(getRules());}
 
-function renderUsers(){google.script.run.withSuccessHandler(function(list){document.getElementById('adminList').innerHTML=list.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removeAdmin(\''+email+'\')">✕</button></div>';}).join('');}).withFailureHandler(function(){}).getAdminListForClient();var planners=STATE.planners||[];document.getElementById('plannerList').innerHTML=planners.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removePlanner(\''+email+'\')">✕</button></div>';}).join('');var floorViewers=STATE.floorViewers||[];document.getElementById('floorViewerList').innerHTML=floorViewers.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removeFloorViewer(\''+email+'\')">✕</button></div>';}).join('');}
+function renderUsers(){google.script.run.withSuccessHandler(function(list){document.getElementById('adminList').innerHTML=list.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removeAdmin(\''+email+'\')">✕</button></div>';}).join('');}).withFailureHandler(function(){}).getAdminListForClient();var planners=STATE.planners||[];document.getElementById('plannerList').innerHTML=planners.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removePlanner(\''+email+'\')">✕</button></div>';}).join('');var floorViewers=STATE.floorViewers||[];document.getElementById('floorViewerList').innerHTML=floorViewers.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removeFloorViewer(\''+email+'\')">✕</button></div>';}).join('');renderExternalViewers();}
 function addAdmin(){var email=document.getElementById('newAdminEmail').value.trim().toLowerCase(),el=document.getElementById('adminStatus');if(email.indexOf('@')===-1)return;google.script.run.withSuccessHandler(function(){document.getElementById('newAdminEmail').value='';renderUsers();el.innerHTML='<div class="status status-ok">✓ Added '+email+'</div>';setTimeout(function(){el.innerHTML='';},3000);}).withFailureHandler(function(err){el.innerHTML='<div class="status status-err">'+err.message+'</div>';}).addAdmin(email);}
 function removeAdmin(email){google.script.run.withSuccessHandler(renderUsers).withFailureHandler(function(){}).removeAdmin(email);}
 function addPlanner(){var email=document.getElementById('newPlannerEmail').value.trim().toLowerCase();if(email.indexOf('@')===-1)return;if(STATE.planners.indexOf(email)===-1)STATE.planners.push(email);google.script.run.withSuccessHandler(function(){document.getElementById('newPlannerEmail').value='';renderUsers();}).withFailureHandler(function(){}).savePlanners(STATE.planners);}
 function removePlanner(email){STATE.planners=STATE.planners.filter(function(e){return e!==email;});google.script.run.withSuccessHandler(renderUsers).withFailureHandler(function(){}).savePlanners(STATE.planners);}
+function renderExternalViewers(){
+  var el=document.getElementById('externalLinkBody');if(!el)return;
+  google.script.run.withSuccessHandler(function(r){
+    if(!r||!r.enabled){
+      el.innerHTML='<div style="color:var(--muted);font-size:11px;margin-bottom:8px">External viewing is off \u2014 no link exists.</div>'
+        +'<button class="btn btn-teal btn-sm" onclick="regenExternalLink(true)">Create link</button>';
+      return;
+    }
+    var seen=r.lastSeenAt?('opened '+r.uses+'\u00d7, last '+String(r.lastSeenAt).slice(0,10)):'never opened';
+    el.innerHTML='<div style="background:var(--surface2);border-radius:5px;padding:8px 10px;margin-bottom:8px">'
+      +'<div style="font-family:var(--mono);font-size:10px;color:var(--muted);word-break:break-all">'+r.url+'</div>'
+      +'<div style="color:var(--muted);font-size:10px;font-family:var(--mono);margin-top:4px">'+seen+'</div></div>'
+      +'<div style="display:flex;gap:6px"><button class="btn btn-teal btn-sm" onclick="copyExternalLink()">Copy link</button>'
+      +'<button class="btn btn-sm" onclick="regenExternalLink(false)">Regenerate</button>'
+      +'<button class="btn btn-danger btn-sm" onclick="turnOffExternalLink()">Turn off</button></div>';
+    window._externalUrl=r.url;
+  }).withFailureHandler(function(){el.innerHTML='<div style="color:var(--muted);font-size:11px">Admins and planners only.</div>';}).getExternalLink();
+}
+function copyExternalLink(){
+  var url=window._externalUrl||'',el=document.getElementById('externalViewerStatus');
+  if(!url)return;
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(function(){
+      el.innerHTML='<div class="status status-ok">\u2713 Link copied</div>';
+      setTimeout(function(){el.innerHTML='';},3000);
+    });
+  } else { prompt('Copy this link:',url); }
+}
+function regenExternalLink(isNew){
+  if(!isNew&&!confirm('Regenerate the link? The current one stops working immediately and anyone using it loses access until you send the new one.'))return;
+  var el=document.getElementById('externalViewerStatus');
+  google.script.run.withSuccessHandler(function(){
+    renderExternalViewers();
+    el.innerHTML='<div class="status status-ok">\u2713 '+(isNew?'Link created':'New link issued \u2014 the old one is dead')+'</div>';
+  }).withFailureHandler(function(err){
+    el.innerHTML='<div class="status status-err">'+((err&&err.message)?err.message:String(err))+'</div>';
+  }).regenerateExternalLink();
+}
+function turnOffExternalLink(){
+  if(!confirm('Turn off external viewing? The link stops working immediately.'))return;
+  google.script.run.withSuccessHandler(function(){renderExternalViewers();})
+    .withFailureHandler(function(err){
+      document.getElementById('externalViewerStatus').innerHTML='<div class="status status-err">'+((err&&err.message)?err.message:String(err))+'</div>';
+    }).disableExternalLink();
+}
 function addFloorViewer(){var email=document.getElementById('newFloorViewerEmail').value.trim().toLowerCase();if(email.indexOf('@')===-1)return;if(!STATE.floorViewers)STATE.floorViewers=[];if(STATE.floorViewers.indexOf(email)===-1)STATE.floorViewers.push(email);google.script.run.withSuccessHandler(function(){document.getElementById('newFloorViewerEmail').value='';renderUsers();}).withFailureHandler(function(){}).saveFloorViewers(STATE.floorViewers);}
 function removeFloorViewer(email){STATE.floorViewers=(STATE.floorViewers||[]).filter(function(e){return e!==email;});google.script.run.withSuccessHandler(renderUsers).withFailureHandler(function(){}).saveFloorViewers(STATE.floorViewers);}
 
@@ -2740,6 +3272,11 @@ function checkPushedDemand(force){
             if(wks.length){CURRENT_WEEK=wks[0];var ds=getDays(CURRENT_WEEK);CURRENT_DAY=ds[0]||null;}
           }
           renderSequence();renderDayStrip('seqDayStrip');renderDayStrip('wbDayStrip');renderWeekDropdowns();
+          // v0.5.111: the Loaded Demand table is rendered from STATE.demand and
+          // was never re-rendered here, so a day that HAD imported still showed
+          // the pre-import units and publish stamp — which reads as the import
+          // having done nothing.
+          renderLoadedDemand();
         }
         renderPushedDemandStatus_(res.items,res.imported||0);
       }).withFailureHandler(function(){
@@ -2945,7 +3482,12 @@ function slimPublishSnapshot_(result,scn){
   });
   return{
     lineState:sls,
-    lines:(result.lines||[]).map(function(l){return{id:l.id,label:l.label,startTime:l.startTime,hc:l.hc,type:l.type};}),
+    // v0.5.107: lineLead and caps join the snapshot. The War Room $/unit is
+    // computed from the published record, so the lead that was set at publish
+    // time has to be frozen with it. caps rides along so lineCaps() reads the
+    // real night flag instead of re-deriving it from `type`. Neither is shown
+    // to the floor; older snapshots without them read 0 / derive as before.
+    lines:(result.lines||[]).map(function(l){return{id:l.id,label:l.label,startTime:l.startTime,hc:l.hc,type:l.type,lineLead:Number(l.lineLead)||0,caps:l.caps||null,room:l.room||''};}),
     jobs:(result.jobs||[]).map(function(j){return{sku:j.sku,qty:j.qty,hasAttrs:j.hasAttrs};}),
     unplaced:trueUnplaced(result.unplaced).map(function(j){return{sku:j.sku,qty:j.qty,pool:j.pool,unplacedReason:j.unplacedReason||''};}),
     mode:(dd&&dd.mode)||'',date:(dd&&dd.date)||'',
@@ -2960,6 +3502,11 @@ function doPublishPlan(){
   applyLineBreaks(result.lineState,result.lines,result.rules,getBreakOverridesForDay());
   var scn=getActiveScenario();
   var snap=slimPublishSnapshot_(result,scn);
+  // v0.5.108: the War Room $/unit is computed here, from the same result the
+  // snapshot is built from, and travels with it. Code.js writes it to row 91
+  // of New Ops. Metrics; it is not recomputed server-side, so what lands in
+  // War Room is exactly the figure this published plan shows.
+  snap.warRoomPerUnit=warRoomCost_(result.lineState,result.lines).perUnit;
   if(!STATE.publishedPlans)STATE.publishedPlans={};
   if(!STATE.publishedPlans[CURRENT_WEEK])STATE.publishedPlans[CURRENT_WEEK]={};
   // Remember prior state so a FAILED save can be rolled back — otherwise the
@@ -2970,9 +3517,24 @@ function doPublishPlan(){
   var _pubWk=CURRENT_WEEK,_pubDy=CURRENT_DAY,_pubPrev=STATE.publishedPlans[_pubWk][_pubDy];
   STATE.publishedPlans[CURRENT_WEEK][CURRENT_DAY]=snap;
   var btn=document.getElementById('publishPlanBtn');if(btn){btn.disabled=true;btn.textContent='Publishing...';}
-  google.script.run.withSuccessHandler(function(){
+  google.script.run.withSuccessHandler(function(res){
     if(btn){btn.disabled=false;btn.textContent='🚀 Publish Plan';}
     renderSequence();renderDayStrip('seqDayStrip');renderDayStrip('wbDayStrip');renderWorkbench();
+    // The plan is saved either way by the time we get here. Only speak up when
+    // the War Room cell did NOT get written, or was written by position off a
+    // typo'd header — a clean write needs no announcement.
+    var wr=res&&res.warRoom,a20=res&&res.asm20,msgs=[];
+    if(wr&&(!wr.ok||wr.byPosition))msgs.push(wr.message);
+    if(a20&&!a20.ok)msgs.push(a20.message);
+    if(msgs.length)alert('Plan published.\n\n'+msgs.join('\n\n'));
+    // Publishing arms the email. Mirror the server's state locally so the pill
+    // appears without a reload, then open the preview straight away.
+    if(!STATE.planEmail)STATE.planEmail={};
+    if(!STATE.planEmail[_pubWk])STATE.planEmail[_pubWk]={};
+    STATE.planEmail[_pubWk][_pubDy]={status:'pending',date:snap.date||''};
+    PLAN_EMAIL_CTX={week:_pubWk,day:_pubDy,snap:snap,
+      subject:planEmailSubject_(snap),html:planEmailHtml_(snap)};
+    showPlanEmailModal_();renderPlanEmailPill();
   }).withFailureHandler(function(err){
     if(btn){btn.disabled=false;btn.textContent='🚀 Publish Plan';}
     // Roll back the phantom so the UI honestly shows the plan is NOT saved.
@@ -3921,7 +4483,24 @@ function runSandbox(){
   });
 }
 
+// Which roles may reach which view. Mirrors the sidebar wrappers AND the
+// server-side guards, so hiding a button is never the only thing standing
+// between a role and a view — switchView('workbench') from the console lands
+// back on Line Sequence like any other unentitled route.
+function viewAllowed_(name){
+  var u=CURRENT_USER||{};
+  switch(name){
+    case 'workbench': return !!(u.isAdmin||u.isPlanner||u.canEditRules);
+    case 'sandbox':   return !!(u.isAdmin||u.canEditRules);
+    case 'myline':    return !!(u.isAdmin||u.isFloorViewer);
+    case 'demand': case 'skus': case 'lines': case 'users':
+                      return !!(u.isAdmin||u.isPlanner||u.canEditRules);
+    default:          return true;   // Line Sequence is open to everyone
+  }
+}
+
 function switchView(name,btn){
+  if(!viewAllowed_(name)){name='sequence';btn=document.querySelector('.nav-item');}
   var views=document.querySelectorAll('.view');for(var i=0;i<views.length;i++)views[i].classList.remove('active');
   var navs=document.querySelectorAll('.nav-item');for(var i=0;i<navs.length;i++)navs[i].classList.remove('active');
   document.getElementById('view-'+name).classList.add('active');
@@ -4107,7 +4686,7 @@ function renderMyLine(){
   if(!hasDemand){document.getElementById('myLineNoPlan').style.display='none';document.getElementById('myLineContent').style.display='none';return;}
   var wd=myLineTodayWeekDay_();
   var npc=document.getElementById('myLineNoPlan'),content=document.getElementById('myLineContent');
-  if(!wd){npc.style.display='';content.style.display='none';document.getElementById('myLineSubtitle').textContent="What's running and when";return;}
+  if(!wd){npc.style.display='';content.style.display='none';mlClearRunHeader_();document.getElementById('myLineSubtitle').textContent="What's running and when";return;}
   var mlErr=planLoadError_(wd.week,wd.day);
   if(!planCached_(wd.week,wd.day)&&!mlErr){
     ensurePlanLoaded(wd.week,wd.day,renderMyLine);
@@ -4116,11 +4695,17 @@ function renderMyLine(){
   }
   var pub=STATE.publishedPlans&&STATE.publishedPlans[wd.week]&&STATE.publishedPlans[wd.week][wd.day];
   document.getElementById('myLineSubtitle').textContent=wd.day+' — today\'s published plan';
-  if(mlErr){npc.style.display='';npc.style.borderColor='rgba(239,68,68,.45)';npc.innerHTML=planReadErrorHtml_(mlErr,wd.week,wd.day);content.style.display='none';return;}
-  if(!pub){npc.style.display='';npc.style.borderColor='rgba(245,158,11,.25)';npc.innerHTML=MYLINE_NOPLAN_HTML;content.style.display='none';return;}
+  if(mlErr){npc.style.display='';npc.style.borderColor='rgba(239,68,68,.45)';npc.innerHTML=planReadErrorHtml_(mlErr,wd.week,wd.day);content.style.display='none';mlClearRunHeader_();return;}
+  if(!pub){npc.style.display='';npc.style.borderColor='rgba(245,158,11,.25)';npc.innerHTML=MYLINE_NOPLAN_HTML;content.style.display='none';mlClearRunHeader_();return;}
   npc.style.display='none';content.style.display='';
   var lineId=document.getElementById('myLineSel').value;
   var line=(pub.lines||[]).filter(function(l){return l.id===lineId;})[0];
+  renderMyLineRunHeader_(pub,wd,lineId,line);
+  var _lsCtx=pub.lineState&&pub.lineState[lineId];
+  _mlSaveCtx={week:wd.week,day:wd.day,date:pub.date||'',room:mlLineRoom_(lineId,line),
+              line:lineId,lineLabel:(line&&line.label)||lineId,slots:(_lsCtx&&_lsCtx.slots)||[]};
+  var _fetchKey=(pub.date||wd.day)+'|'+lineId;
+  if(pub.date&&_mlFetched!==_fetchKey){_mlFetched=_fetchKey;mlLoadActuals_(_mlSaveCtx);}
   var ls=pub.lineState&&pub.lineState[lineId];
   var slots=(ls&&ls.slots)||[];
   var listEl=document.getElementById('myLineList');
@@ -4175,6 +4760,7 @@ function renderMyLine(){
   var timeline=slots.map(function(j){return{t:j.startClockMin,kind:'job',d:j};})
     .concat(breaks.map(function(b){return{t:b.startClockMin,kind:'break',d:b};}))
     .sort(function(a,b){return a.t-b.t;});
+  var _seqN=0;
   listEl.innerHTML=timeline.map(function(item){
     if(item.kind==='break'){
       var b=item.d;
@@ -4185,14 +4771,237 @@ function renderMyLine(){
         +'</div>';
     }
     var job=item.d,lv=(job.labelVersion||(lib[(job.sku||'').toUpperCase()]||{}).labelNumberVersion);
+    _seqN++;  // products are numbered; breaks are not, exactly as the run sheet prints it
     var labelHtml=(lv==='NO ACTIVE LABEL')?'<div style="font-size:11px;color:var(--red);margin-top:6px;font-weight:600">&#9888; NO ACTIVE LABEL</div>':(lv?'<div style="font-size:11px;color:var(--muted);margin-top:6px;font-family:var(--mono)">Label '+lv+'</div>':'');
-    return'<div class="line-card" style="padding:16px 20px">'
-      +'<div style="display:flex;align-items:center;flex-wrap:wrap;margin-bottom:6px"><span style="font-size:18px;color:var(--text);font-weight:600">'+job.sku+'</span>'+tags(job)+'</div>'
-      +'<div style="font-size:16px;color:var(--teal);font-weight:700">'+fmtClock(job.startClockMin)+' – '+fmtClock(job.endClockMin)+'</div>'
-      +'<div style="margin-top:8px">'+chips(job)+'</div>'
-      +labelHtml
+    return'<div class="line-card ml-card" style="padding:16px 20px">'
+      +'<div class="ml-main">'
+        +'<div style="display:flex;align-items:center;flex-wrap:wrap;margin-bottom:6px;gap:10px"><span class="ml-seq">'+_seqN+'</span><span style="font-size:18px;color:var(--text);font-weight:600">'+job.sku+'</span>'+tags(job)+'</div>'
+        +'<div style="font-size:16px;color:var(--teal);font-weight:700">'+fmtClock(job.startClockMin)+' – '+fmtClock(job.endClockMin)+'</div>'
+        +'<div style="margin-top:8px">'+chips(job)+'</div>'
+        +labelHtml
+      +'</div>'
+      +mlPlanBlock_(job,lib)
+      +mlEntryBlock_(lineId,job)
       +'</div>';
   }).join('');
+}
+
+// ─── RUN-SHEET COLUMNS ON MY LINE (v0.5.112) ─────────────────────────────────
+// The floor kept filling out the legacy "New Assembly Run Sheet" tab because it
+// carried three things this view didn't: the planned unit count and the tote
+// split. Tote math is lifted straight off that sheet so the numbers match what
+// the line leads are already used to reading:
+//     # Full Totes            = FLOOR(qty / unitsPerTote)
+//     # Units in Partial Tote = qty - (fullTotes * unitsPerTote)
+// unitsPerTote is read live from the SKU Library rather than frozen into the
+// published snapshot the way labelNumberVersion is. A label genuinely changes
+// under a plan and QA needs to know what was current at publish; a tote is a
+// physical packaging fact that doesn't move. A SKU with no tote size on file
+// shows "—" — never a guessed divisor.
+function mlToteSplit_(qty,per){
+  if(!(per>0)||!(qty>0))return null;
+  var full=Math.floor(qty/per);
+  return{full:full,part:qty-(full*per)};
+}
+function mlPlanBlock_(job,lib){
+  var meta=lib[(job.sku||'').toUpperCase()]||{},per=parseFloat(meta.unitsPerTote),t=mlToteSplit_(job.qty,per);
+  function stat(label,val,dim){
+    return'<div class="ml-stat"><div class="ml-stat-l">'+label+'</div>'
+      +'<div class="ml-stat-v'+(dim?' dim':'')+'">'+val+'</div></div>';
+  }
+  return'<div class="ml-plan">'
+    +stat('PLAN',fmtUnits(job.qty),false)
+    +stat('FULL TOTES',t?String(t.full):'\u2014',!t)
+    +stat('PARTIAL',t?String(t.part):'\u2014',!t)
+    +'</div>';
+}
+// Entry panel. Deliberately inert — no save handler, no server call. Line leads
+// are not entering actuals yet; this is the layout so it can be opened on a
+// tablet and tried. Typed values are held in memory only so a poll-driven
+// re-render doesn't wipe what someone is mid-way through typing. They do not
+// survive a reload, and that is correct until there's somewhere real to put
+// them.
+var _mlEntry={};
+var _mlEntryOpen=false;
+function mlEntryVal_(lineId,sku,field){
+  var v=_mlEntry[lineId+'|'+sku+'|'+field];
+  return v==null?'':String(v);
+}
+function mlSetEntry(lineId,sku,field,val){_mlEntry[lineId+'|'+sku+'|'+field]=val;mlQueueSave_();}
+function mlEntryBlock_(lineId,job){
+  var sku=(job.sku||''),li=lineId.replace(/'/g,"\\'"),sk=sku.replace(/'/g,"\\'");
+  function f(label,field,ph){
+    return'<div class="ml-f"><label>'+label+'</label>'
+      +'<input type="text" placeholder="'+ph+'" value="'+escHtml(mlEntryVal_(lineId,sku,field))+'" '
+      +'oninput="mlSetEntry(\''+li+'\',\''+sk+'\',\''+field+'\',this.value)"></div>';
+  }
+  return'<div class="ml-entry'+(_mlEntryOpen?'':' collapsed')+'">'
+    +f('START TIME','start','--:--')
+    +f('END TIME','end','--:--')
+    +f('# PEOPLE','people','\u2014')
+    +f('ACTUAL UNITS','actual','\u2014')
+    +'</div>';
+}
+// ─── PERSISTING WHAT THE FLOOR ENTERS (v0.5.117) ─────────────────────────────
+// Debounced upsert to the "Run Sheet Actuals" / "Run Sheet Shift" tabs. Every
+// keystroke restarts a 1.5s timer and one save goes up when typing settles, so
+// a lead filling four fields on eight SKUs doesn't generate thirty round trips.
+//
+// The planned figures ride along with each row. The plan under a day can be
+// republished, and an actual stored on its own would quietly start being
+// measured against a plan that isn't the one that ran.
+//
+// Failures are surfaced, not swallowed: a tablet that has silently stopped
+// saving is worse than one that says so, because the lead keeps typing into it.
+var _mlSaveTimer=null,_mlSaveCtx=null,_mlFetched=null;
+function mlQueueSave_(){
+  if(_mlSaveTimer)clearTimeout(_mlSaveTimer);
+  mlSaveStatus_('pending');
+  _mlSaveTimer=setTimeout(mlFlushSave_,1500);
+}
+function mlSaveStatus_(state,msg){
+  var el=document.getElementById('myLineSaveStatus');if(!el)return;
+  if(state==='pending'){el.style.color='var(--muted)';el.textContent='\u00b7 unsaved\u2026';}
+  else if(state==='saving'){el.style.color='var(--muted)';el.textContent='\u00b7 saving\u2026';}
+  else if(state==='ok'){el.style.color='var(--teal)';el.textContent='\u2713 saved '+new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});}
+  else{el.style.color='var(--red)';el.textContent='\u26a0 not saved: '+(msg||'unknown error');}
+}
+function mlFlushSave_(){
+  var ctx=_mlSaveCtx;if(!ctx)return;
+  var lib=STATE.skuLibrary||{};
+  var rows=(ctx.slots||[]).map(function(j,idx){
+    var per=parseFloat((lib[(j.sku||'').toUpperCase()]||{}).unitsPerTote),t=mlToteSplit_(j.qty,per);
+    return{
+      seqPos:idx+1,sku:j.sku,plannedUnits:j.qty,
+      plannedFullTotes:t?t.full:null,plannedPartialUnits:t?t.part:null,
+      labelVersion:j.labelVersion||((lib[(j.sku||'').toUpperCase()]||{}).labelNumberVersion)||'',
+      start:mlEntryVal_(ctx.line,j.sku,'start'),end:mlEntryVal_(ctx.line,j.sku,'end'),
+      people:mlEntryVal_(ctx.line,j.sku,'people'),units:mlEntryVal_(ctx.line,j.sku,'actual')
+    };
+  });
+  mlSaveStatus_('saving');
+  google.script.run.withSuccessHandler(function(){mlSaveStatus_('ok');})
+    .withFailureHandler(function(err){mlSaveStatus_('err',err&&err.message);})
+    .saveRunSheetActuals({
+      week:ctx.week,day:ctx.day,date:ctx.date,room:ctx.room,line:ctx.line,lineLabel:ctx.lineLabel,
+      leadName:mlHeaderVal_('name|'+ctx.line+'|'+(ctx.date||ctx.day)),
+      heldOverTotes:mlHeaderVal_('heldover|'+(ctx.date||ctx.day)),
+      rows:rows
+    });
+}
+// Pull back anything already recorded, so a tablet reopened mid-shift shows
+// what was entered rather than an empty sheet inviting a second pass.
+function mlLoadActuals_(ctx){
+  google.script.run.withSuccessHandler(function(res){
+    if(!res)return;
+    var dk=ctx.date||ctx.day;
+    if(res.leadName)_mlHeaderEntry['name|'+ctx.line+'|'+dk]=res.leadName;
+    if(res.heldOverTotes!=='')_mlHeaderEntry['heldover|'+dk]=res.heldOverTotes;
+    Object.keys(res.rows||{}).forEach(function(sku){
+      var r=res.rows[sku];
+      ['start','end','people'].forEach(function(f){if(r[f]!=='')_mlEntry[ctx.line+'|'+sku+'|'+f]=r[f];});
+      if(r.units!=='')_mlEntry[ctx.line+'|'+sku+'|actual']=r.units;
+    });
+    renderMyLine();
+  }).withFailureHandler(function(){}).getRunSheetActuals(ctx.date,ctx.line);
+}
+function toggleMyLineEntry(){
+  _mlEntryOpen=!_mlEntryOpen;
+  var els=document.querySelectorAll('#myLineList .ml-entry');
+  for(var i=0;i<els.length;i++)els[i].classList.toggle('collapsed',!_mlEntryOpen);
+  var a=document.getElementById('myLineEntryArrow');
+  if(a)a.style.transform=_mlEntryOpen?'rotate(0deg)':'rotate(-90deg)';
+}
+
+// ─── RUN HEADER (v0.5.114) ───────────────────────────────────────────────────
+// The run sheet prints four things above the sequence that this view never
+// said out loud: the date, the assembly room, who is running the line, and the
+// held-over tote count. A tablet that has been awake since Friday looks
+// identical on Monday, so stating the date is a correctness check, not
+// decoration — if the plan on screen isn't today's, the floor should be able
+// to see that without trusting the app.
+//
+// Room comes from Line Config (frozen into the published snapshot, with a
+// live-config fallback for plans published before the field existed).
+//
+// Name and held-over totes are entry fields and save nothing yet, matching the
+// Entry panel. Name is per line per day; held-over is one number for the day.
+// The roster dropdown replaces the free-text name later.
+var _mlHeaderEntry={};
+function mlHeaderVal_(k){var v=_mlHeaderEntry[k];return v==null?'':String(v);}
+function mlSetHeader(k,val){_mlHeaderEntry[k]=val;mlQueueSave_();}
+function mlClearRunHeader_(){var el=document.getElementById('myLineRunHeader');if(el)el.innerHTML='';}
+function mlLineRoom_(lineId,line){
+  if(line&&line.room)return line.room;
+  var live=(STATE.lineConfig||DEFAULT_LINE_CONFIG||[]).filter(function(l){return l.id===lineId;})[0];
+  return (live&&live.room)||'';
+}
+// ─── DAILY TOTE TOTAL (v0.5.116) ─────────────────────────────────────────────
+// The run sheet's headline tote number. Its formula there was
+//     sum(I6:I1090) - sum(I93:I100) + 20
+// which is three separate problems: rows 93-100 is the LINE-0 (green) block
+// identified by POSITION, so the exclusion silently moves the first time a
+// line is added or a block grows past eight rows; the +20 is unexplained; and
+// it counts full totes only.
+//
+// Rebuilt here as: full totes summed across every line whose smallCup
+// capability is off. Green is excluded because it's green, not because of
+// where it sits on a sheet. The +20 is deliberately NOT carried — it can't be
+// reproduced from the data, and Samad hasn't been asked yet. On 8/17 that
+// makes this 1053 where the sheet printed 1073; the whole difference is the
+// twenty.
+//
+// Partials are excluded, matching the sheet. A partial tote is still a
+// physical tote on the floor, so this may be undercounting by roughly the
+// number of SKUs running — flagged, not decided.
+function mlToteTotals_(pub,lib,lineId){
+  var day=0,mine=0,unknown=0;
+  var byId={};(pub.lines||[]).forEach(function(l){byId[l.id]=l;});
+  var ls=pub.lineState||{};
+  Object.keys(ls).forEach(function(lid){
+    var lc=byId[lid]||(STATE.lineConfig||DEFAULT_LINE_CONFIG||[]).filter(function(l){return l.id===lid;})[0];
+    var green=lineCaps(lc||{}).smallCup;
+    ((ls[lid]||{}).slots||[]).forEach(function(j){
+      var per=parseFloat((lib[(j.sku||'').toUpperCase()]||{}).unitsPerTote),t=mlToteSplit_(j.qty,per);
+      if(!t){unknown++;return;}
+      if(!green)day+=t.full;
+      if(lid===lineId)mine+=t.full;
+    });
+  });
+  return{day:day,mine:mine,unknown:unknown};
+}
+function renderMyLineRunHeader_(pub,wd,lineId,line){
+  var el=document.getElementById('myLineRunHeader');if(!el)return;
+  var todayStr=new Date().toISOString().slice(0,10);
+  var d=pub.date||'';
+  var dateTxt=d?new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'}):(wd.day+' \u2014 date not recorded');
+  // myLineTodayWeekDay_ only ever selects a day whose date equals today, so a
+  // mismatch here means the snapshot disagrees with the demand row it was
+  // published against. Say so rather than quietly printing the wrong day.
+  var stale=!!(d&&d!==todayStr);
+  var room=mlLineRoom_(lineId,line);
+  var nameKey='name|'+lineId+'|'+(d||wd.day),toteKey='heldover|'+(d||wd.day);
+  function fact(label,val,color,extra){
+    return'<div style="min-width:0"><div class="ml-stat-l">'+label+'</div>'
+      +'<div style="font-family:var(--mono);font-size:15px;font-weight:700;color:'+color+';line-height:1.3;white-space:nowrap">'+val+'</div>'
+      +(extra||'')+'</div>';
+  }
+  el.innerHTML='<div class="ml-runhdr'+(stale?' stale':'')+'">'
+    +fact('DATE',escHtml(dateTxt),stale?'var(--amber)':'var(--teal)',
+        stale?'<div style="font-family:var(--mono);font-size:10px;color:var(--amber);margin-top:1px;white-space:nowrap">\u26a0 not today\u2019s date \u2014 refresh</div>':'')
+    +fact('ASSEMBLY',room?escHtml(room):'<span style="color:var(--muted);font-weight:400">\u2014 set in Line Config</span>','var(--text)')
+    +(function(){
+      var t=mlToteTotals_(pub,STATE.skuLibrary||{},lineId);
+      var warn=t.unknown?'<div style="font-family:var(--mono);font-size:10px;color:var(--amber);margin-top:1px;white-space:nowrap">\u26a0 '+t.unknown+' SKU'+(t.unknown===1?'':'s')+' with no tote size</div>':'';
+      return fact('FULL TOTES','<span title="This line">'+t.mine+'</span><span style="color:var(--muted);font-weight:400"> / '+t.day+' day</span>','var(--text)',warn);
+    })()
+    +'<div class="ml-f"><label>NAME</label>'
+      +'<input type="text" style="width:150px;text-align:left;padding:5px 8px;font-size:12px" placeholder="who\u2019s running this line" '
+      +'value="'+escHtml(mlHeaderVal_(nameKey))+'" oninput="mlSetHeader(\''+nameKey.replace(/'/g,"\\'")+'\',this.value)"></div>'
+    +'<div class="ml-f"><label>HELD-OVER TOTES</label>'
+      +'<input type="text" style="width:92px;padding:5px 8px;font-size:12px" placeholder="\u2014" '
+      +'value="'+escHtml(mlHeaderVal_(toteKey))+'" oninput="mlSetHeader(\''+toteKey.replace(/'/g,"\\'")+'\',this.value)"></div>'
+    +'</div>';
 }
 
 function refreshMyLine(btn){
@@ -4207,6 +5016,7 @@ function refreshMyLine(btn){
       if(s.lineConfig)STATE.lineConfig=s.lineConfig;
     }
     document.getElementById('myLineRefreshedAt').textContent='Last refreshed: '+new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+    _mlFetched=null;  // re-pull recorded actuals — another tablet may have written since
     renderMyLine();
   }).withFailureHandler(function(err){
     if(btn){btn.disabled=false;btn.textContent='↻ Refresh';}
@@ -4289,7 +5099,9 @@ function setPreviewRole(role){
   if(!def)return;
   CURRENT_USER={email:window._realUser.email,name:window._realUser.name,isAdmin:def.isAdmin,isPlanner:def.isPlanner,canEditRules:def.canEditRules,isFloorViewer:def.isFloorViewer};
   window._canEditRules=!!CURRENT_USER.canEditRules;
+  window._canPublish=!!(CURRENT_USER.isAdmin||CURRENT_USER.isPlanner);renderPlanEmailPill();
   document.getElementById('adminNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.isPlanner||CURRENT_USER.canEditRules)?'':'none';
+  document.getElementById('workbenchNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.isPlanner||CURRENT_USER.canEditRules)?'':'none';
   document.getElementById('sandboxNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.canEditRules)?'':'none';
   document.getElementById('myLineNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.isFloorViewer)?'':'none';
   renderRulesAccess();
@@ -4303,7 +5115,9 @@ function exitPreviewRole(){
   if(!window._realUser)return;
   CURRENT_USER=window._realUser;
   window._canEditRules=!!(CURRENT_USER.isAdmin||CURRENT_USER.canEditRules);
+  window._canPublish=!!(CURRENT_USER.isAdmin||CURRENT_USER.isPlanner);renderPlanEmailPill();
   document.getElementById('adminNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.isPlanner||CURRENT_USER.canEditRules)?'':'none';
+  document.getElementById('workbenchNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.isPlanner||CURRENT_USER.canEditRules)?'':'none';
   document.getElementById('sandboxNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.canEditRules)?'':'none';
   document.getElementById('myLineNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.isFloorViewer)?'':'none';
   var sel=document.getElementById('previewRoleSel');if(sel)sel.value='';
@@ -4327,11 +5141,13 @@ window.onload=function(){
     window._realUser=user;
     document.getElementById('userDisplay').textContent=user.name;
     if(user.isAdmin||user.isPlanner||user.canEditRules)document.getElementById('adminNav').style.display='';
+    if(user.isAdmin||user.isPlanner||user.canEditRules)document.getElementById('workbenchNav').style.display='';
     if(user.isAdmin||user.canEditRules)document.getElementById('sandboxNav').style.display='';
     if(user.isAdmin||user.isFloorViewer)document.getElementById('myLineNav').style.display='';
     if(user.isAdmin)document.getElementById('previewNav').style.display='';
     window._canEditRules=!!(user.isAdmin||user.canEditRules);
-    renderRulesAccess();
+    window._canPublish=!!(user.isAdmin||user.isPlanner);
+    renderRulesAccess();renderPlanEmailPill();
   }).withFailureHandler(function(){}).getCurrentUser();
 
   google.script.run.withSuccessHandler(function(s){
@@ -4347,6 +5163,7 @@ window.onload=function(){
       if(s.scenarios)STATE.scenarios=s.scenarios;
       if(s.floorViewers)STATE.floorViewers=s.floorViewers;
       if(s.finishBy)STATE.finishBy=s.finishBy;
+      if(s.planEmail)STATE.planEmail=s.planEmail;
       // v0.5.73 BUGFIX: sandboxes were written but never read back. This
       // assignment was missing, so every page load left STATE.sandboxes as the
       // empty init value, and the next newSandbox() persisted a one-item list
@@ -4355,6 +5172,11 @@ window.onload=function(){
       if(Array.isArray(s.sandboxes))STATE.sandboxes=s.sandboxes;
       _lastModified=s.lastModified||null;
     }
+    renderPlanEmailPill();loadWebAppUrl_();
+    // Cached at load so the plan email can carry the external link even if
+    // nobody has opened the Users page this session.
+    google.script.run.withSuccessHandler(function(r){window._externalUrl=(r&&r.enabled)?r.url:'';})
+      .withFailureHandler(function(){}).getExternalLink();
     var weeks=getWeeks();
     if(weeks.length){
       var todayStr=new Date().toISOString().slice(0,10),todayName=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()],foundWeek=null,foundDay=null;
@@ -4367,6 +5189,7 @@ window.onload=function(){
     // render so the app is usable immediately and this fills in behind it, and
     // it self-gates on isAdmin inside checkPushedDemand.
     checkPushedDemand(false);
+    checkDemandMigration();
   }).withFailureHandler(function(err){document.getElementById('seqNoDataSub').textContent='Error loading state: '+err.message;}).getState();
 
   var today=new Date(),plus2=new Date(today);plus2.setDate(plus2.getDate()+2);

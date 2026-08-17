@@ -1,121 +1,19 @@
 /**
- * Sequins ✨ — Code.js    v0.4.47 — 2026-08-12    (pairs with Index.html v0.5.95)
- * Full history: git log. Recent changes only, newest first.
+ * Sequins ✨ — Code.js    v0.4.59 — 2026-08-17    (pairs with Index.html v0.5.117)
+ * Full history: git log.
  *
- * v0.4.47  pushedDemandTrigger + installPushedDemandTrigger/remove. Imports on a
- *          15-minute timer so an already-open tab fills in without a refresh:
- *          setDemandDay_ bumps lastModified, and the client's existing 8-second
- *          poll re-pulls state when it changes. No client change needed.
- *          Not installed by anything — run installPushedDemandTrigger() once.
- *
- * v0.4.46  Demand-tab dates read from DISPLAY values. Sheets coerces the pushed
- *          'yyyy-MM-dd' string into a Date at midnight in the SPREADSHEET's
- *          timezone; reformatting that in the SCRIPT's timezone moved it back a
- *          day, so the first real push (53 rows, 08-12) read back as 08-11. The
- *          actuals guard refused it, so nothing was written wrong.
- *          importPushedDemand() also runs from the editor now — getActiveUser()
- *          needs a scope the editor lacks, and editor access already outranks
- *          the admin list.
- *
- * v0.4.45  Pushed demand. The planner writes Assembly Summary A:C into a Demand
- *          tab in the archive Sheet; importPushedDemand() files those rows into
- *          the same per-day storage the manual fetch uses. Date -> week/day is
- *          resolved from the Compiled Forecast header, not recomputed, so the
- *          week label can't disagree with the manual path. Never overwrites an
- *          actual, never reaches into a loaded past day, and a re-push with an
- *          unchanged PushedAt is a no-op. previewPushedDemand() shows the plan
- *          without writing. Manual fetches untouched.
- *
- * v0.4.44  Actuals freeze is date-aware. A captured day is only frozen if it is
- *          in the PAST; today or later re-fetches and is returned in `refreshed`.
- *          The old test froze on membership alone, so tomorrow was as immutable
- *          as last month and a late order could never be picked up. Today is
- *          re-fetchable on purpose. Date comes from the script timezone, never
- *          the client. Past days are untouched — still never re-read.
- *
- * v0.4.43  previewArchiveOldDemand() + archiveOldDemand(). No arguments — the
- *          current week is derived from stored dates. Everything older is
- *          written to a Demand Archive tab (Environment = TEST) and only then
- *          removed from Script Properties, with a verify pass in between that
- *          refuses to delete if any day failed to land. A day already in the
- *          archive is not written twice, so a retry stays clean.
- *
- * v0.4.42  previewRetireDemandBefore(year, week) + retireDemandBefore(year, week).
- *          Demand day keys are ~3.5KB each and are the real budget consumer;
- *          history keys are ~175 bytes and pruning them alone is not enough.
- *          Retiring a PAST week is recoverable — actuals re-fetch from Demands
- *          2025, plans live in the archive. Refuses anything at or after the
- *          cutoff, requires an explicit cutoff, updates the demand index.
- *
- * v0.4.41  previewPruneDemandHistory() + pruneDemandHistory(). Manual, two-step,
- *          run from the editor only — no trigger, no button, nothing else calls
- *          them. Clears sequins_demand_hist__* (publish metadata, no SKU maps)
- *          to get back under the property quota that is currently blocking Load
- *          Demand. Refuses any key without the history prefix.
- *
- * v0.4.40  debugPropertySizes() — read-only breakdown of Script Properties usage
- *          by group, largest keys, and bytes per demand week. Deletes nothing;
- *          exists so pruning targets the right thing rather than the obvious one.
- *
- * v0.4.39  Sandboxes moved OUT of Script Properties into a Sandboxes tab in the
- *          archive spreadsheet — adding one hit the shared ~500KB property quota.
- *          Same move published plans made, same reason. Existing sandboxes are
- *          COPIED on first read; the old key is left alone until you explicitly
- *          run reclaimSandboxProperty(), which refuses unless every sandbox is
- *          verified present in the sheet. debugSandboxState() reports both.
- *
- * v0.4.38  getSandboxes() — small dedicated read. Sandboxes previously reached
- *          the client only as one field of getState()'s large payload; if that
- *          didn't land the view reported none over intact storage.
- *
- * v0.4.37  Sandboxes UPSERT instead of whole-list replace. saveSandboxes(list)
- *          is gone — it let any client with a stale or empty in-memory list
- *          destroy every stored sandbox. Now saveSandbox(one) merges by id and
- *          deleteSandboxById(id) is the only removal path. Both audited.
- *          debugSandboxState() reports what is actually stored.
- *
- * v0.4.36  Non-assembly match widened to ^(beverage|cpg|bev) — 9 older items
- *          carry a bare 'CPG' package that ^cpg_ missed.
- *
- * v0.4.35  Non-assembly SKUs (beverages, packaged CPG) excluded at the DOOR —
- *          both demand fetches skip them, so they never enter Sequins at all.
- *          Identified by Menu Library's Package column (Beverage_* / CPG_*),
- *          not a hardcoded list. Fails open: unreadable Menu Library excludes
- *          nothing rather than silently dropping demand. Both fetches return
- *          an `excluded` list for the status line.
- *
- * v0.4.34  syncAllergens_ skips SKUs flagged pending or locallyAuthored. They
- *          are absent from Menu Library by definition, so the sync would have
- *          overwritten hand-entered allergens and deactivated them overnight.
- *          Reported as `skipped` in the result.
- *
- * v0.4.33  Sandbox storage: sequins_sandboxes key, returned by getState,
- *          written by saveSandboxes (admin or rules-editor, capped at 20).
- *          Inputs only — sandbox runs are never stored, and nothing here
- *          touches SKU Library, Line Config, demand or the plan archive.
- *
- * v0.4.32  Break position archived in the SeqPos column and read back, so the
- *          published Line Sequence view shows breaks. buildLineCards places
- *          breaks by index; position was never written, so they were read back
- *          and silently dropped. Blank SeqPos (plans published before this) stays
- *          null, not 0 — no backfill, those plans keep showing no breaks.
- *          Break id restored from the label too, so 30m gets the lunch icon.
- *
- * v0.4.31  Finish goal read with NO timezone conversion (getUTCHours). A Sheets
- *          time-of-day is a timestamp on 1899-12-30 UTC, so the digits are
- *          already right; converting gave 9:30 AM and then 7:30 AM for 15:30.
- * v0.4.29  Active status follows Menu Library, GUARDED so a SKU with demand is
- *          never auto-deactivated. LabelVersion archive column, frozen at publish.
- * v0.4.28  Allergen sync from Menu Library (source of truth, overwrites). Blank
- *          and "No import" become NO ALLERGEN DATA; None/N/A/No Allergens kept.
- * v0.4.27  FinishBy stored as minutes, not 'HH:MM' — Sheets coerced the text to
- *          a time value and it read back as a Date.
- * v0.4.26  Finish-by storage + saveFinishBy + FinishBy archive column.
- * v0.4.25  Archive read: narrow index scan, version-keyed cache, block read
- *          instead of scanning the whole tab on every call.
- * v0.4.24  getPublishedPlan returns a JSON string with rounded clock values —
- *          the deep object graph was dying in transit, silently.
- * v0.4.23  Archive read restores the `pool` field it was dropping.
+ * v0.4.59  Run-sheet actuals get somewhere to land. Two new tabs in the plan
+ *          archive — "Run Sheet Actuals" (one row per SKU per line per day:
+ *          start, end, people, units) and "Run Sheet Shift" (one row per line
+ *          per day: who ran it, held-over totes). Both upsert on their natural
+ *          key so a shift's worth of edits doesn't append a shift's worth of
+ *          rows, and both carry the plan alongside the actual so planned-vs-
+ *          actual is a column subtraction in Snowflake rather than a join.
+ *          Write access is floor viewers and admins. Nothing is ever deleted:
+ *          a blanked field writes empty, the row stays.
+ *          ActualFullTotes / ActualPartialUnits exist in the schema and are
+ *          written empty — that's the tote-by-tote counting idea, so when it
+ *          gets built it's a UI change and not a migration.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -138,9 +36,40 @@ const LABEL_LOG_TAB         = 'Label Version Log'; // A=SKU, B=SKU Name, C=Versi
 // publish — frozen at publish time, versioned per week/day. This is the
 // durable record AND the planned-vs-actual fact table for Snowflake/Hex.
 const PLAN_ARCHIVE_SHEET_ID = '1oB70aPTc2SkJYA-LEXgCm7tMWOHxDzFGt39pXIkR2L0';
+// War Room Metrics Database — the plant-wide metrics book other teams read.
+// Row 91 of New Ops. Metrics is 'Assembly $ / unit plan'; row 1 is a date
+// header, one column per calendar day, maintained ~2 weeks ahead by another
+// team. Row 3 carries the weekday, which is what lets a typo'd date cell be
+// caught rather than written into blindly.
+const WAR_ROOM_SHEET_ID   = '1zwYuaxcIVjSixea0s2JfxWlClr4xLjeSn3aOPj6Kqlk';
+const WAR_ROOM_TAB        = 'New Ops. Metrics';
+const WAR_ROOM_COST_ROW   = 91;
+const WAR_ROOM_DATE_ROW   = 1;
+const WAR_ROOM_DOW_ROW    = 3;
+// Assembly Sequencing 2.0 — the Google Sheets tool Sequins replaces. Publishing
+// drops the plan into a dated copy of its template tab as a fallback: if Sequins
+// is ever unavailable, the old tool still has the day's sequence and computes
+// everything else off its own formulas. Sequins writes only the two input
+// columns — SKU and Units — plus the date and each line's start time.
+const ASM20_SHEET_ID      = '1FRJ77-304M51SLwxrmljjZlrqv3YGMO_DRVrGu0pDBQ';
+const ASM20_TEMPLATE_TAB  = 'Main Sequencing Sheet';
+const ASM20_COL_SLOT = 3, ASM20_COL_SKU = 4, ASM20_COL_UNITS = 5, ASM20_COL_START = 12;
+const ASM20_DATE_CELL     = 'E4';
+// Sequins line ids → the block labels used in that sheet.
+const ASM20_LINE_ALIASES  = { 'NIGHT-1': 'NIGHT SHIFT LINE-1', 'NIGHT-2': 'NIGHT SHIFT LINE-2' };
 const PLAN_ARCHIVE_TAB      = 'Published Plans';
+const RUN_ACTUALS_TAB       = 'Run Sheet Actuals';  // same spreadsheet as PLAN_ARCHIVE_SHEET_ID
+const RUN_SHIFT_TAB         = 'Run Sheet Shift';    // same spreadsheet as PLAN_ARCHIVE_SHEET_ID
 const SANDBOX_TAB           = 'Sandboxes';  // same spreadsheet — see SANDBOXES below
 const DEMAND_ARCHIVE_TAB    = 'Demand Archive';  // same spreadsheet — see ARCHIVE OLD DEMAND
+const DEMAND_STORE_TAB     = 'Demand Store';    // same spreadsheet — see DEMAND STORE below
+const DEMAND_STORE_HEADER  = ['Week','Day','Payload','History','UpdatedAt'];
+const STATE_STORE_TAB      = 'State Store';     // same spreadsheet — see STATE STORE below
+const STATE_STORE_HEADER   = ['Name','Week','Day','Payload','UpdatedAt'];
+// The date-keyed state that used to live in Script Properties. Anything keyed
+// by week/day belongs here, not there — properties are for config sized by the
+// menu and the staff list, never by the calendar.
+const STATE_STORE_NAMES    = ['overrides','finishBy','breakOverrides','scenarios'];
 const PLAN_ARCHIVE_HEADER   = ['PublishedAt','PublishedBy','Version','Week','Day','Date','Mode','Scenario','Line','Type','SeqPos','SKU','Qty','StartMin','EndMin','DurationMin','Allergens','USDA','Seed','PreProcessed','Overridden','OverrideBy','Note','HasAttrs','Blocking','FinishBy','LabelVersion'];
 
 // ─── STORAGE ──────────────────────────────────────────────────────────────────
@@ -189,10 +118,197 @@ const DEFAULT_RULES_EDITORS = [
 
 // ─── SERVE UI ─────────────────────────────────────────────────────────────────
 function doGet(e) {
+  // A token in the URL routes to the external read-only page instead of the
+  // app. That page is rendered server-side with the week's plans already
+  // embedded — it makes no google.script.run calls at all. That matters:
+  // opening web app access up to ANYONE makes every server function reachable
+  // from this URL, and getState() is not role-gated. A page with no callbacks
+  // has no reach back into Sequins, so the surface does not widen.
+  const token = e && e.parameter ? String(e.parameter.token || '').trim() : '';
+  if (token) {
+    return HtmlService.createHtmlOutput(buildExternalViewPage_(token))
+      .setTitle('Sequins ✨ — Assembly Plan')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  }
   return HtmlService
     .createHtmlOutputFromFile('Index')
     .setTitle('Sequins ✨')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+// ─── EXTERNAL VIEWERS (v0.4.53) ──────────────────────────────────────
+// People outside farmersfridge.com — the on-site USDA counterpart, for
+// instance. Google returns no email for a non-domain account, so they cannot
+// be identified the way every other role is; a token in the URL is the only
+// mechanism available. The email on the record is the label, the audit trail
+// and the revoke handle, not an authentication factor.
+//
+// A token is a URL. Anyone it is forwarded to has the same view, and nothing
+// can tell them apart. That is why these are labelled, logged on every use,
+// and revocable one at a time.
+const EXTERNAL_LINK_KEY = 'sequins_external_link';
+
+// One shared link, not one per person. The people who need it — the USDA
+// inspectors on site — already receive the daily plan email, so the link rides
+// in that email and they click through. Per-person tokens were the safer
+// design on paper and the wrong one in practice: nobody is going to maintain a
+// roster to hand out URLs.
+//
+// The trade is explicit: this link works for anyone who has it, and the audit
+// log can only record that it was opened, never by whom. Regenerate kills the
+// old one instantly; that is the only control, and it is enough because the
+// page is read-only and shows a production schedule, not anything sensitive.
+function getExternalLink_() {
+  const raw = PropertiesService.getScriptProperties().getProperty(EXTERNAL_LINK_KEY);
+  try { return raw ? JSON.parse(raw) : null; }
+  catch (e) { return null; }
+}
+function getExternalLink() {
+  const user = getCurrentUser();
+  if (!user.isAdmin && !user.isPlanner) throw new Error('Not authorized');
+  const rec = getExternalLink_();
+  if (!rec || !rec.token) return { enabled: false };
+  return { enabled: true, token: rec.token, url: getPublicWebAppUrl() + '?token=' + rec.token,
+           createdBy: rec.createdBy || '', createdAt: rec.createdAt || '',
+           uses: rec.uses || 0, lastSeenAt: rec.lastSeenAt || '' };
+}
+function regenerateExternalLink() {
+  const user = getCurrentUser();
+  if (!user.isAdmin) throw new Error('Not authorized');
+  // Utilities.getUuid, not Math.random — this string is the only thing between
+  // a URL and the plan.
+  const token = Utilities.getUuid().replace(/-/g, '') + Utilities.getUuid().split('-')[0];
+  const rec = { token: token, createdBy: user.email, createdAt: new Date().toISOString(),
+                uses: 0, lastSeenAt: '' };
+  safeSetProperty_(EXTERNAL_LINK_KEY, JSON.stringify(rec));
+  writeAuditLog_(user.email, 'external_link_new', '', '', 'previous link revoked');
+  return { ok: true, token: token, url: getPublicWebAppUrl() + '?token=' + token };
+}
+function disableExternalLink() {
+  const user = getCurrentUser();
+  if (!user.isAdmin) throw new Error('Not authorized');
+  safeSetProperty_(EXTERNAL_LINK_KEY, JSON.stringify({}));
+  writeAuditLog_(user.email, 'external_link_off', '', '', 'external viewing turned off');
+  return { ok: true };
+}
+// Returns true and records the hit, or false. An invalid token gets the same
+// flat refusal regardless of why it failed.
+function _resolveExternalToken_(token) {
+  const t = String(token || '').trim();
+  if (t.length < 20) return false;
+  const rec = getExternalLink_();
+  if (!rec || !rec.token || String(rec.token) !== t) return false;
+  rec.uses = (rec.uses || 0) + 1;
+  rec.lastSeenAt = new Date().toISOString();
+  try { safeSetProperty_(EXTERNAL_LINK_KEY, JSON.stringify(rec)); } catch (e) {}
+  try { writeAuditLog_('(external link)', 'external_view', '', '', 'plan opened'); } catch (e) {}
+  return true;
+}
+
+function _extEsc_(t) {
+  return String(t == null ? '' : t)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function _extClock_(m) {
+  const v = Number(m);
+  if (!isFinite(v)) return '—';
+  let h = Math.floor(v / 60) % 24, mm = Math.round(v % 60);
+  if (mm === 60) { mm = 0; h = (h + 1) % 24; }
+  const ap = h >= 12 ? 'PM' : 'AM', h12 = (h % 12) || 12;
+  return h12 + ':' + ('0' + mm).slice(-2) + ' ' + ap;
+}
+function buildExternalViewPage_(token) {
+  if (!_resolveExternalToken_(token)) {
+    return '<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<div style="font-family:system-ui,sans-serif;max-width:520px;margin:14vh auto;padding:0 24px;' +
+      'text-align:center;color:#333"><div style="font-size:40px">🔒</div>' +
+      '<h2 style="font-weight:600">This link is not valid</h2>' +
+      '<p style="color:#666;line-height:1.6">It may have been revoked, or the address may be incomplete. ' +
+      'Ask whoever sent it to issue a new one.</p></div>';
+  }
+
+  const wk = currentDemandWeek_();
+  const days = [];
+  if (wk) {
+    ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'].forEach(function(day) {
+      let snap = null;
+      try { snap = getPublishedPlan(wk.label, day); } catch (e) { snap = null; }
+      if (!snap) return;
+      const parsed = (typeof snap === 'string') ? JSON.parse(snap) : snap;
+      if (!parsed || !parsed.lineState) return;
+      const lines = [];
+      (parsed.lines || []).forEach(function(line) {
+        const ls = parsed.lineState[line.id];
+        if (!ls || !(ls.slots || []).length) return;
+        lines.push({
+          label: line.label || line.id,
+          start: _extClock_(ls.startMin),
+          end: _extClock_((ls.startMin || 0) + (ls.totalMin || 0)),
+          units: ls.totalUnits || 0,
+          slots: (ls.slots || []).map(function(j) {
+            return { sku: j.sku, qty: j.qty,
+                     start: _extClock_(j.startClockMin), end: _extClock_(j.endClockMin),
+                     usda: !!j.isUSDA,
+                     label: j.labelVersion || '',
+                     allergens: (j.allergenSet || []).join(', '),
+                     unknown: !!j.allergenUnknown };
+          }),
+          breaks: (ls.breaks || []).map(function(b) {
+            return { label: b.label, start: _extClock_(b.startClockMin), end: _extClock_(b.endClockMin) };
+          })
+        });
+      });
+      if (lines.length) days.push({ day: day, date: parsed.date || '', lines: lines });
+    });
+  }
+
+  const payload = JSON.stringify({ week: wk ? wk.label : '', days: days })
+    .replace(/</g, '\\u003c');   // never let plan text close the script tag
+
+  return '<!doctype html><html><head><meta charset="utf-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>Sequins \u2728 \u2014 Assembly Plan</title><style>' +
+    'body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;margin:0;background:#f6f7f9;color:#1c1f23}' +
+    '.wrap{max-width:1080px;margin:0 auto;padding:18px 16px 60px}' +
+    'h1{font-size:17px;margin:0 0 2px}.sub{color:#6b7280;font-size:12px;margin-bottom:16px}' +
+    '.days{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}' +
+    '.day{border:1px solid #d7dae0;background:#fff;border-radius:8px;padding:8px 14px;cursor:pointer;' +
+    'font-size:13px;line-height:1.3;text-align:center;min-width:82px}' +
+    '.day.on{background:#0f766e;border-color:#0f766e;color:#fff}' +
+    '.day small{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.05em;opacity:.75}' +
+    '.line{background:#fff;border:1px solid #e3e5e9;border-radius:10px;margin-bottom:14px;overflow:hidden}' +
+    '.lh{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:10px 14px;' +
+    'background:#f0f2f5;border-bottom:1px solid #e3e5e9;font-weight:600;font-size:14px;flex-wrap:wrap}' +
+    '.lh span{font-weight:400;color:#6b7280;font-size:12px}' +
+    'table{width:100%;border-collapse:collapse}td{padding:7px 14px;border-top:1px solid #eef0f3;font-size:13px;vertical-align:top}' +
+    '.q{text-align:right;white-space:nowrap;color:#374151}.t{white-space:nowrap;color:#6b7280;font-size:12px}' +
+    '.tag{display:inline-block;font-size:10px;padding:1px 6px;border-radius:4px;background:#e0e7ff;color:#3730a3;margin-left:6px}' +
+    '.al{color:#6b7280;font-size:11px;display:block;margin-top:2px}' +
+    '.no{color:#b91c1c;font-size:11px;display:block;margin-top:2px;font-weight:600}' +
+    '.br{background:#fffbeb;color:#92400e;font-size:12px}' +
+    '.empty{background:#fff;border:1px dashed #d7dae0;border-radius:10px;padding:38px;text-align:center;color:#6b7280}' +
+    '</style></head><body><div class="wrap">' +
+    '<h1>Assembly Plan</h1>' +
+    '<div class="sub">Read-only' + (wk ? ' \u00b7 ' + _extEsc_(wk.label) : '') +
+    ' \u00b7 published plans only</div>' +
+    '<div class="days" id="days"></div><div id="body"></div>' +
+    '<div class="sub" style="margin-top:24px">Reload the page to pick up newly published days.</div>' +
+    '</div><script>var D=' + payload + ';' +
+    'function esc(t){return String(t==null?"":t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}' +
+    'function draw(i){' +
+    'var ds=document.getElementById("days"),b=document.getElementById("body");' +
+    'ds.innerHTML=D.days.map(function(d,n){return \'<div class="day\'+(n===i?" on":"")+\'" onclick="draw(\'+n+\')">\'' +
+    '+"<small>"+esc(d.day)+"</small>"+esc(d.date||"")+"</div>";}).join("");' +
+    'if(!D.days.length){b.innerHTML=\'<div class="empty">No published plans for this week yet.</div>\';return;}' +
+    'var d=D.days[i];b.innerHTML=d.lines.map(function(L){' +
+    'var rows=L.slots.map(function(s){return "<tr><td>"+esc(s.sku)+(s.usda?\'<span class="tag">USDA</span>\':"")' +
+    '+(s.unknown?\'<span class="no">NO ALLERGEN DATA</span>\':(s.allergens?\'<span class="al">\'+esc(s.allergens)+"</span>":""))+(s.label==="NO ACTIVE LABEL"?\'<span class="no">NO ACTIVE LABEL</span>\':(s.label?\'<span class="al">Label \'+esc(s.label)+"</span>":""))' +
+    '+\'</td><td class="q">\'+Number(s.qty||0).toLocaleString()+\'</td><td class="t">\'+esc(s.start)+" \\u2013 "+esc(s.end)+"</td></tr>";}).join("");' +
+    'var brs=(L.breaks||[]).map(function(x){return \'<tr class="br"><td>\'+esc(x.label)+\'</td><td class="q"></td><td class="t">\'+esc(x.start)+" \\u2013 "+esc(x.end)+"</td></tr>";}).join("");' +
+    'return \'<div class="line"><div class="lh"><div>\'+esc(L.label)+"</div><span>"+esc(L.start)+" \\u2013 "+esc(L.end)' +
+    '+" \\u00b7 "+Number(L.units||0).toLocaleString()+\' units</span></div><table>\'+rows+brs+"</table></div>";}).join("");}' +
+    'draw(0);<\/script></body></html>';
 }
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
@@ -322,35 +438,232 @@ function slimHistoryEntry_(dayLike) {
   };
 }
 
+// ─── DEMAND STORE ──────────────────────────────────────────────
+// Demand is Sheet rows, not Script Properties. One row per week/day in the
+// 'Demand Store' tab of the archive spreadsheet. There is no ceiling here,
+// nothing to prune, and nothing to run on a schedule. Published plans made
+// this same move and stopped being a source of failures the day they did.
+function demandStoreSheet_() {
+  const ss = SpreadsheetApp.openById(PLAN_ARCHIVE_SHEET_ID);
+  let sheet = ss.getSheetByName(DEMAND_STORE_TAB);
+  if (!sheet) {
+    sheet = ss.insertSheet(DEMAND_STORE_TAB);
+    sheet.getRange(1, 1, 1, DEMAND_STORE_HEADER.length).setValues([DEMAND_STORE_HEADER]);
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+// Per-execution cache. getState() calls getAllDemand_ once and the fetch and
+// publish paths call getDemandWeek_/getDemandDay_ repeatedly, so this is one
+// getValues() per execution rather than one per lookup. Cleared on every write.
+var DEMAND_STORE_CACHE_ = null;
+
+function demandStoreRead_() {
+  if (DEMAND_STORE_CACHE_) return DEMAND_STORE_CACHE_;
+  const sheet = demandStoreSheet_();
+  const last = sheet.getLastRow();
+  const map = {};
+  if (last > 1) {
+    const vals = sheet.getRange(2, 1, last - 1, DEMAND_STORE_HEADER.length).getValues();
+    for (let i = 0; i < vals.length; i++) {
+      const wk = String(vals[i][0] || ''), day = String(vals[i][1] || '');
+      if (!wk || !day) continue;
+      map[demandStoreKey_(wk, day)] = { row: i + 2, payload: vals[i][2], history: vals[i][3] };
+    }
+  }
+  DEMAND_STORE_CACHE_ = map;
+  return map;
+}
+
+function demandStoreKey_(weekLabel, day) { return String(weekLabel) + '\u0000' + String(day); }
+
+function demandStoreParse_(cell) {
+  if (!cell) return null;
+  try { return JSON.parse(cell); } catch (e) { return null; }
+}
+
+// Upsert one row. Returns the parsed-back payload so callers can verify.
+function demandStoreWrite_(weekLabel, day, dayData, history) {
+  const sheet = demandStoreSheet_();
+  const map = demandStoreRead_();
+  const k = demandStoreKey_(weekLabel, day);
+  const row = [weekLabel, day, JSON.stringify(dayData), JSON.stringify(history || []), new Date().toISOString()];
+  if (map[k]) sheet.getRange(map[k].row, 1, 1, row.length).setValues([row]);
+  else        sheet.appendRow(row);
+  DEMAND_STORE_CACHE_ = null;
+  return true;
+}
+
+// Sheet first, legacy property second. The fallback is what makes this
+// deployable before the migration has been run — a day that has not moved
+// yet still reads correctly.
 function getDemandDay_(weekLabel, day) {
+  const hit = demandStoreRead_()[demandStoreKey_(weekLabel, day)];
+  if (hit) {
+    const parsed = demandStoreParse_(hit.payload);
+    if (parsed) return parsed;
+  }
   return getSection_(demandDayKey_(weekLabel, day));
 }
 
 function getDemandHistory_(weekLabel, day) {
+  const hit = demandStoreRead_()[demandStoreKey_(weekLabel, day)];
+  if (hit) return demandStoreParse_(hit.history) || [];
   return getSection_(demandHistoryKey_(weekLabel, day)) || [];
+}
+
+// ─── STATE STORE ───────────────────────────────────────────────
+// overrides / finishBy / breakOverrides / scenarios. All four are [week][day]
+// shaped and none was ever pruned, so in properties they only grew. One row
+// per name/week/day here instead.
+function stateStoreSheet_() {
+  const ss = SpreadsheetApp.openById(PLAN_ARCHIVE_SHEET_ID);
+  let sheet = ss.getSheetByName(STATE_STORE_TAB);
+  if (!sheet) {
+    sheet = ss.insertSheet(STATE_STORE_TAB);
+    sheet.getRange(1, 1, 1, STATE_STORE_HEADER.length).setValues([STATE_STORE_HEADER]);
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+var STATE_STORE_CACHE_ = null;
+
+function stateStoreRead_() {
+  if (STATE_STORE_CACHE_) return STATE_STORE_CACHE_;
+  const sheet = stateStoreSheet_();
+  const last = sheet.getLastRow();
+  const map = {};
+  if (last > 1) {
+    const vals = sheet.getRange(2, 1, last - 1, STATE_STORE_HEADER.length).getValues();
+    for (let i = 0; i < vals.length; i++) {
+      const name = String(vals[i][0] || ''), wk = String(vals[i][1] || ''), day = String(vals[i][2] || '');
+      if (!name || !wk || !day) continue;
+      let payload = null;
+      try { payload = JSON.parse(vals[i][3]); } catch (e) { continue; }
+      if (!map[name]) map[name] = {};
+      if (!map[name][wk]) map[name][wk] = {};
+      map[name][wk][day] = { row: i + 2, payload: payload };
+    }
+  }
+  STATE_STORE_CACHE_ = map;
+  return map;
+}
+
+// Legacy property first, Sheet on top. Same fallback shape demand uses, so this
+// is correct before, during and after migration.
+function stateStoreGet_(name) {
+  const out = {};
+  const legacy = getSection_(STATE_KEYS[name]) || {};
+  Object.keys(legacy).forEach(function(wk) {
+    out[wk] = {};
+    Object.keys(legacy[wk] || {}).forEach(function(d) { out[wk][d] = legacy[wk][d]; });
+  });
+  const rows = stateStoreRead_()[name] || {};
+  Object.keys(rows).forEach(function(wk) {
+    if (!out[wk]) out[wk] = {};
+    Object.keys(rows[wk]).forEach(function(d) { out[wk][d] = rows[wk][d].payload; });
+  });
+  return out;
+}
+
+function stateStorePut_(name, weekLabel, day, payload) {
+  const sheet = stateStoreSheet_();
+  const hit = (stateStoreRead_()[name] || {})[weekLabel];
+  const cell = hit && hit[day];
+  const row = [name, weekLabel, day, JSON.stringify(payload), new Date().toISOString()];
+  if (cell) sheet.getRange(cell.row, 1, 1, row.length).setValues([row]);
+  else      sheet.appendRow(row);
+  STATE_STORE_CACHE_ = null;
+  try { touchLastModified_(); }
+  catch (e) { Logger.log('lastModified bump failed after ' + name + ' write (non-fatal, data is in the Sheet): ' + e.message); }
+}
+
+function stateStoreDelete_(name, weekLabel, day) {
+  const hit = (stateStoreRead_()[name] || {})[weekLabel];
+  const cell = hit && hit[day];
+  if (!cell) return false;
+  stateStoreSheet_().deleteRow(cell.row);
+  STATE_STORE_CACHE_ = null;
+  return true;
+}
+
+function parseWeekLabel_(label) {
+  const m = String(label || '').match(/Wk\s*(\d+)\s*\u00b7\s*(\d+)/);
+  return m ? { wk: Number(m[1]), yr: Number(m[2]) } : null;
+}
+
+// Workbench overrides are kept for the current and upcoming weeks only. This is
+// safe to drop rather than archive because writeSkuMoveLog_ has appended every
+// single move to the 'SKU Moves' tab since day one, and published plans bake
+// Overridden/OverrideBy into the archive rows — so the permanent record of what
+// was moved and what shipped both survive. What is dropped is only the live pin
+// for a week already in the past, which nothing re-renders.
+// Runs as housekeeping inside a move the user just made. Never on a timer.
+function pruneOverridesBeforeCurrentWeek_() {
+  const cur = currentDemandWeek_();
+  if (!cur) return 0;
+  const cutoff = weekRank_(cur.wk, cur.yr);
+  const rows = stateStoreRead_()['overrides'] || {};
+  const doomed = [];
+  Object.keys(rows).forEach(function(wk) {
+    const parsed = parseWeekLabel_(wk);
+    if (!parsed || weekRank_(parsed.wk, parsed.yr) >= cutoff) return;
+    Object.keys(rows[wk]).forEach(function(d) { doomed.push({ row: rows[wk][d].row, label: wk + ' / ' + d }); });
+  });
+  if (!doomed.length) return 0;
+  const sheet = stateStoreSheet_();
+  // Bottom-up: deleting a row shifts every row beneath it.
+  doomed.sort(function(a, b) { return b.row - a.row; });
+  doomed.forEach(function(x) { sheet.deleteRow(x.row); });
+  STATE_STORE_CACHE_ = null;
+  Logger.log('Pruned ' + doomed.length + ' override row(s) older than ' + cur.label + ': ' +
+             doomed.map(function(x) { return x.label; }).join(', '));
+  return doomed.length;
+}
+
+// Union of what is in the Sheet and what is still in the legacy index, so
+// the day list is complete mid-migration.
+function demandIndex_() {
+  const idx = {};
+  const map = demandStoreRead_();
+  Object.keys(map).forEach(function(k) {
+    const parts = k.split('\u0000');
+    if (!idx[parts[0]]) idx[parts[0]] = [];
+    if (idx[parts[0]].indexOf(parts[1]) === -1) idx[parts[0]].push(parts[1]);
+  });
+  const legacy = getSection_(DEMAND_INDEX_KEY) || {};
+  Object.keys(legacy).forEach(function(wk) {
+    if (!idx[wk]) idx[wk] = [];
+    (legacy[wk] || []).forEach(function(d) { if (idx[wk].indexOf(d) === -1) idx[wk].push(d); });
+  });
+  return idx;
 }
 
 // dayData is the live day (skus/mode/date/publishedBy/publishedAt), no
 // embedded history. prevDay (optional) is the live day being replaced — if
 // present, it's slimmed and pushed onto that day's history key, capped at 5.
 function setDemandDay_(weekLabel, day, dayData, prevDay) {
-  setSection_(demandDayKey_(weekLabel, day), dayData);
-  if (prevDay) {
-    const hist = [slimHistoryEntry_(prevDay)].concat(getDemandHistory_(weekLabel, day)).slice(0, 5);
-    setSection_(demandHistoryKey_(weekLabel, day), hist);
-  }
-  const idx = getSection_(DEMAND_INDEX_KEY) || {};
-  if (!idx[weekLabel]) idx[weekLabel] = [];
-  if (idx[weekLabel].indexOf(day) === -1) {
-    idx[weekLabel].push(day);
-    safeSetProperty_(DEMAND_INDEX_KEY, JSON.stringify(idx));
+  let hist = getDemandHistory_(weekLabel, day);
+  if (prevDay) hist = [slimHistoryEntry_(prevDay)].concat(hist).slice(0, 5);
+  demandStoreWrite_(weekLabel, day, dayData, hist);
+  // Bumps sequins_meta so the client's 8-second poll notices. Deliberately
+  // non-fatal: the demand is already committed to the Sheet, and a full
+  // property store must never again be able to fail a demand write. If this
+  // is the line that throws, the data is safe and the tab is one refresh
+  // behind — which is a nuisance, not a data loss.
+  try {
+    touchLastModified_();
+  } catch (e) {
+    Logger.log('lastModified bump failed after demand write (non-fatal, data is in the Sheet): ' + e.message);
   }
 }
 
 // Returns { day: liveDayData } for a week — no history embedded, matching
 // what the mode/date checks in publish/fetch functions actually need.
 function getDemandWeek_(weekLabel) {
-  const idx = getSection_(DEMAND_INDEX_KEY) || {};
+  const idx = demandIndex_();
   const days = idx[weekLabel] || [];
   const weekData = {};
   days.forEach(function(day) {
@@ -364,7 +677,7 @@ function getDemandWeek_(weekLabel) {
 // separate key. Confirmed working, confirmed present, this is the format
 // your data has actually been sitting in correctly all along.
 function getAllDemand_() {
-  const idx = getSection_(DEMAND_INDEX_KEY) || {};
+  const idx = demandIndex_();
   const demand = {};
   Object.keys(idx).forEach(function(weekLabel) {
     demand[weekLabel] = {};
@@ -389,6 +702,12 @@ function clearDemandDay(weekLabel, day) {
   if (!user.isAdmin) throw new Error('Not authorized');
   const props = PropertiesService.getScriptProperties();
   const existed = getDemandDay_(weekLabel, day) !== null;
+  // Sheet row first, then the legacy keys if this day never migrated.
+  const hit = demandStoreRead_()[demandStoreKey_(weekLabel, day)];
+  if (hit) {
+    demandStoreSheet_().deleteRow(hit.row);
+    DEMAND_STORE_CACHE_ = null;
+  }
   props.deleteProperty(demandDayKey_(weekLabel, day));
   props.deleteProperty(demandHistoryKey_(weekLabel, day));
   const idx = getSection_(DEMAND_INDEX_KEY) || {};
@@ -490,12 +809,13 @@ function getState() {
     // caused runSequencer to crash on `rules.greenBeltPackages.indexOf(...)`
     // whenever sequencingRules resolved to [] instead of the real rules object.
     lineConfig:      getSection_(STATE_KEYS.lineConfig),
-    overrides:       getSection_(STATE_KEYS.overrides) || {},
-    finishBy:        getSection_(STATE_KEYS.finishBy) || {},
+    overrides:       stateStoreGet_('overrides'),
+    finishBy:        stateStoreGet_('finishBy'),
     publishedPlans:  {}, // v0.5.33: published plans now live in the archive Sheet, not Script Properties. Client lazy-loads per day via getPublishedPlan(). Kept as {} so nothing downstream breaks.
     planners:        getSection_(STATE_KEYS.planners) || [],
-    breakOverrides:  getSection_(STATE_KEYS.breakOverrides) || {},
-    scenarios:       getSection_(STATE_KEYS.scenarios) || {},
+    breakOverrides:  stateStoreGet_('breakOverrides'),
+    scenarios:       stateStoreGet_('scenarios'),
+    planEmail:       planEmailAll_(),
     sandboxes:       getSection_(STATE_KEYS.sandboxes) || [],
     floorViewers:    getSection_(STATE_KEYS.floorViewers) || [],
     sequencingRules: getSection_(STATE_KEYS.sequencingRules),
@@ -832,6 +1152,9 @@ function publishActualDays(entries) {
 // is read from the same Compiled Forecast rows the manual fetch reads, so the
 // two can't disagree about what a week is called.
 const PUSHED_DEMAND_TAB = 'Demand';  // same spreadsheet as PLAN_ARCHIVE_SHEET_ID
+// Stamped onto every day this importer writes. It is what separates a pushed
+// day from a Demands 2025 actual now that both carry mode 'actual'.
+const PUSHED_SOURCE     = 'assembly_summary';
 
 // Resolves a Demand-tab date cell to 'yyyy-MM-dd'. Display value first (already
 // correct in the spreadsheet's own timezone), then the raw Date as a last resort.
@@ -934,6 +1257,22 @@ function readPushedDemandRows_() {
   return { days: days, missing: false, excluded: excluded, skippedRows: skippedRows };
 }
 
+// True when two per-SKU demand maps are the same set of SKUs at the same
+// quantities. Order-independent; quantities compared as rounded numbers because
+// the pushed side is rounded on read and the stored side may have been written
+// by a different fetch.
+function sameDemandSkus_(a, b) {
+  a = a || {}; b = b || {};
+  const ka = Object.keys(a), kb = Object.keys(b);
+  if (ka.length !== kb.length) return false;
+  for (let i = 0; i < ka.length; i++) {
+    const k = ka[i];
+    if (!Object.prototype.hasOwnProperty.call(b, k)) return false;
+    if (Math.round(Number(a[k]) || 0) !== Math.round(Number(b[k]) || 0)) return false;
+  }
+  return true;
+}
+
 // Decides, per pushed date, whether it should land — without writing anything.
 // Both the preview and the importer run through this, so what you're shown and
 // what happens can't drift apart.
@@ -963,15 +1302,30 @@ function planPushedDemandImport_() {
     const existing = getDemandDay_(loc.weekLabel, loc.day);
     const item = Object.assign({}, base, { weekLabel: loc.weekLabel, day: loc.day });
 
-    if (existing && existing.mode === 'actual') {
-      // Same rule publishForecastWeek already enforces: a plan never overwrites
-      // a captured actual.
-      items.push(Object.assign({}, item, { action: 'skip', reason: 'day already captured as actual' }));
-    } else if (existing && existing.pushedAt === pd.pushedAt) {
-      items.push(Object.assign({}, item, { action: 'skip', reason: 'already imported (same push)' }));
+    if (existing && existing.mode === 'actual' && existing.source !== PUSHED_SOURCE) {
+      // A Demands 2025 actual is the floor's own record and outranks a push.
+      // A pushed day is itself stored as an actual now, so the test is the
+      // SOURCE, not the mode — otherwise the first push would lock the day
+      // against every push after it.
+      items.push(Object.assign({}, item, { action: 'skip', reason: 'day already captured as a Demands 2025 actual' }));
     } else if (existing && dateStr < today) {
       // Past days are evidence. Nothing automatic reaches backwards.
       items.push(Object.assign({}, item, { action: 'skip', reason: 'past day already loaded — left alone' }));
+    } else if (existing && sameDemandSkus_(existing.skus, pd.skus) &&
+               existing.mode === 'actual' && existing.source === PUSHED_SOURCE) {
+      // Idempotency is decided by the DATA, not by the PushedAt stamp. The stamp
+      // only says a push happened; it says nothing about whether what is stored
+      // matches it, so a mismatch could sit there reported as "already
+      // imported" with the old numbers still on screen. Comparing the per-SKU
+      // quantities converges instead: different means replace, and it stops
+      // replacing the moment the two agree.
+      // The mode/source test is part of "nothing to do", not decoration. A day
+      // imported by an older build carries the same quantities but mode
+      // 'forecast', and a quantities-only test skipped it as identical — which
+      // left the badge stuck on forecast with no way to ever correct it. Any
+      // stored day that does not already look like a pushed day gets rewritten
+      // even when the numbers match.
+      items.push(Object.assign({}, item, { action: 'skip', reason: 'identical to what is already loaded' }));
     } else {
       items.push(Object.assign({}, item, {
         action: existing ? 'replace' : 'add',
@@ -1033,17 +1387,21 @@ function importPushedDemand() {
     const existing = getDemandDay_(item.weekLabel, item.day);
     const newDay = {
       skus: pushed.skus,
-      mode: 'forecast',           // deliberately NOT a new mode value — see below
+      mode: 'actual',             // v0.4.56 — see below
       date: item.date,
       publishedBy: user.email,
       publishedAt: new Date().toISOString(),
-      pushedAt: pushed.pushedAt,  // additive: how a re-import knows it's a no-op
-      source: 'assembly_summary'  // additive: which fetch produced this day
+      pushedAt: pushed.pushedAt,  // which push produced this day
+      source: PUSHED_SOURCE       // which fetch produced this day
     };
-    // mode stays 'forecast' on purpose. A new mode string would have to be
-    // taught to the mode badge CSS, the actual-vs-forecast guards in
-    // publishForecastWeek/fetchActualDemand, and the archive's Mode column. The
-    // source field carries the distinction without touching any of that.
+    // mode is 'actual' as of v0.4.56. The planner push IS the committed build
+    // quantity, not a projection, and storing it as 'forecast' meant the floor
+    // read a committed number wearing a forecast badge with nothing on the row
+    // to say otherwise. Two consequences, both wanted: publishForecastWeek now
+    // leaves these days alone (it skips actuals), so a Compiled Forecast pull
+    // cannot walk back a pushed day; and publishActualDays still overwrites
+    // freely, so the real Demands 2025 numbers replace this once the day has
+    // actually run.
     setDemandDay_(item.weekLabel, item.day, newDay, existing);
     imported++;
   });
@@ -1212,11 +1570,276 @@ function normalizeSku_(s) {
 }
 
 
+// ─── RUN SHEET ACTUALS (v0.4.59) ─────────────────────────────────────────────
+/**
+ * Where the floor's entries land. Two tabs in the plan archive, alongside
+ * Published Plans, because that spreadsheet is already the fact table for the
+ * Snowflake/Hex planned-vs-actual work and actuals belong next to the plan
+ * they're measured against.
+ *
+ *   Run Sheet Actuals — one row per SKU, per line, per day.
+ *   Run Sheet Shift   — one row per line, per day (who ran it, held-over totes).
+ *
+ * Both carry the PLANNED figures next to the actual ones. That's deliberate
+ * denormalization: the plan can be republished under a day, and an actual that
+ * only stored "1,125 units" would silently start being measured against a
+ * different plan. Freezing the planned value on the row makes the variance a
+ * subtraction between two columns rather than a join back to a moving target.
+ *
+ * Upsert, not append. A line lead editing a start time six times over a shift
+ * should leave one row, not six. The natural keys are Date+Line+SKU and
+ * Date+Line respectively.
+ *
+ * Nothing here deletes. Clearing a field on the tablet writes an empty cell and
+ * the row stays — a blank is a fact about what was recorded, and reclaiming the
+ * row would destroy the rest of it.
+ */
+const RUN_ACTUALS_HEADER = ['UpdatedAt','UpdatedBy','Week','Day','Date','Room','Line','LineLabel','SeqPos','SKU',
+                            'PlannedUnits','PlannedFullTotes','PlannedPartialUnits','LabelVersion',
+                            'ActualStart','ActualEnd','ActualPeople','ActualUnits',
+                            'ActualFullTotes','ActualPartialUnits'];
+const RUN_SHIFT_HEADER   = ['UpdatedAt','UpdatedBy','Week','Day','Date','Room','Line','LineLabel','LineLeadName','HeldOverTotes'];
+
+function runSheetTab_(name, header) {
+  const ss = SpreadsheetApp.openById(PLAN_ARCHIVE_SHEET_ID);
+  let sheet = ss.getSheetByName(name);
+  if (!sheet) {
+    sheet = ss.insertSheet(name);
+    sheet.getRange(1, 1, 1, header.length).setValues([header]);
+    sheet.setFrozenRows(1);
+    Logger.log('runSheetTab_: created "' + name + '".');
+  }
+  return sheet;
+}
+
+// Shared upsert. keyCols are 0-based indices whose combined value identifies a
+// row. Writes are batched — one setValues per changed row, one appendRow-free
+// block write for new rows — per the no-setValue house rule.
+function runSheetUpsert_(sheet, header, rows, keyCols) {
+  if (!rows.length) return { updated: 0, added: 0 };
+  const lastRow = sheet.getLastRow();
+  const existing = lastRow > 1 ? sheet.getRange(2, 1, lastRow - 1, header.length).getValues() : [];
+  const index = {};
+  existing.forEach(function(r, i) {
+    index[keyCols.map(function(c) { return String(r[c] || '').trim().toUpperCase(); }).join('\u0001')] = i;
+  });
+
+  const appends = [];
+  let updated = 0;
+  rows.forEach(function(row) {
+    const key = keyCols.map(function(c) { return String(row[c] || '').trim().toUpperCase(); }).join('\u0001');
+    if (index.hasOwnProperty(key)) {
+      sheet.getRange(index[key] + 2, 1, 1, header.length).setValues([row]);
+      updated++;
+    } else {
+      appends.push(row);
+      index[key] = existing.length + appends.length - 1;
+    }
+  });
+  if (appends.length) {
+    sheet.getRange(sheet.getLastRow() + 1, 1, appends.length, header.length).setValues(appends);
+  }
+  return { updated: updated, added: appends.length };
+}
+
+/**
+ * Called from My Line. payload:
+ *   { week, day, date, room, line, lineLabel, leadName, heldOverTotes,
+ *     rows:[{ seqPos, sku, plannedUnits, plannedFullTotes, plannedPartialUnits,
+ *              labelVersion, start, end, people, units }] }
+ *
+ * Floor viewers and admins only. A planner with no floor role has no business
+ * recording what a line actually did.
+ */
+function saveRunSheetActuals(payload) {
+  const user = getCurrentUser();
+  if (!user.isAdmin && !user.isFloorViewer) throw new Error('Not authorized');
+  if (!payload || !payload.date || !payload.line) throw new Error('Missing date or line');
+
+  const now  = new Date().toISOString();
+  const week = payload.week || '';
+  const day  = payload.day || '';
+  const date = String(payload.date);
+  const line = String(payload.line);
+  const room = payload.room || '';
+  const lbl  = payload.lineLabel || line;
+
+  const shiftRow = [now, user.email, week, day, date, room, line, lbl,
+                    payload.leadName || '', payload.heldOverTotes || ''];
+  runSheetUpsert_(runSheetTab_(RUN_SHIFT_TAB, RUN_SHIFT_HEADER), RUN_SHIFT_HEADER, [shiftRow], [4, 6]);
+
+  const rows = (payload.rows || []).map(function(r) {
+    return [now, user.email, week, day, date, room, line, lbl,
+            r.seqPos || '', String(r.sku || ''),
+            r.plannedUnits || '', r.plannedFullTotes === null || r.plannedFullTotes === undefined ? '' : r.plannedFullTotes,
+            r.plannedPartialUnits === null || r.plannedPartialUnits === undefined ? '' : r.plannedPartialUnits,
+            r.labelVersion || '',
+            r.start || '', r.end || '', r.people || '', r.units || '',
+            '', ''];  // ActualFullTotes / ActualPartialUnits — reserved, see header
+  });
+  const res = rows.length
+    ? runSheetUpsert_(runSheetTab_(RUN_ACTUALS_TAB, RUN_ACTUALS_HEADER), RUN_ACTUALS_HEADER, rows, [4, 6, 9])
+    : { updated: 0, added: 0 };
+
+  Logger.log('saveRunSheetActuals: ' + date + ' ' + line + ' — ' + res.updated + ' updated, ' + res.added + ' added, by ' + user.email);
+  return { ok: true, updated: res.updated, added: res.added, savedAt: now };
+}
+
+/** Reads back what's already recorded, so a tablet reopened mid-shift shows it. */
+function getRunSheetActuals(date, line) {
+  const user = getCurrentUser();
+  if (!user.isAdmin && !user.isFloorViewer) throw new Error('Not authorized');
+  const out = { rows: {}, leadName: '', heldOverTotes: '' };
+  const d = String(date || '').trim().toUpperCase(), l = String(line || '').trim().toUpperCase();
+  if (!d || !l) return out;
+
+  const sh = runSheetTab_(RUN_SHIFT_TAB, RUN_SHIFT_HEADER);
+  if (sh.getLastRow() > 1) {
+    sh.getRange(2, 1, sh.getLastRow() - 1, RUN_SHIFT_HEADER.length).getValues().forEach(function(r) {
+      if (String(r[4]).trim().toUpperCase() === d && String(r[6]).trim().toUpperCase() === l) {
+        out.leadName = r[8] || ''; out.heldOverTotes = r[9] === 0 ? '0' : (r[9] || '');
+      }
+    });
+  }
+  const sa = runSheetTab_(RUN_ACTUALS_TAB, RUN_ACTUALS_HEADER);
+  if (sa.getLastRow() > 1) {
+    sa.getRange(2, 1, sa.getLastRow() - 1, RUN_ACTUALS_HEADER.length).getValues().forEach(function(r) {
+      if (String(r[4]).trim().toUpperCase() !== d || String(r[6]).trim().toUpperCase() !== l) return;
+      out.rows[String(r[9]).toUpperCase()] = {
+        start: r[14] || '', end: r[15] || '',
+        people: r[16] === 0 ? '0' : (r[16] || ''), units: r[17] === 0 ? '0' : (r[17] || '')
+      };
+    });
+  }
+  return out;
+}
+
 function saveSkuLibrary(library) {
   const user = getCurrentUser();
   if (!user.isAdmin) throw new Error('Not authorized');
   setSection_(STATE_KEYS.skuLibrary, library);
   return { ok: true };
+}
+
+// ─── UNITS PER TOTE (ported out of Assembly Sequencing 2.0) ──────────────────
+/**
+ * The tote count the floor reads off the legacy "New Assembly Run Sheet".
+ * Ported here as data rather than fetched, because the 2.0 workbook is being
+ * retired and the SKU Library is the tool's own source of truth for SKU facts.
+ *
+ * Tote size is per-SKU and cannot be derived from packageType — the same
+ * package carries different counts (Wrap Box 28/32/54, 4oz Jar 140/162,
+ * 16oz Jar 24/48, 32oz 12/18/23), which is exactly why it needs its own field.
+ *
+ * Lifted from that workbook's static "Pkging Types" tab (col A / col C) and
+ * cross-checked against the 8/17 run sheet: every SKU running that day
+ * reproduces its printed # Full Totes and # Units in Partial Tote exactly.
+ */
+const UNITS_PER_TOTE_SEED = {
+  ALFREDO_CHIX_PROTEIN_BOWL:23, ALMOND_BUTTER_OATMEAL:48, APPLE_CINNAMON_OATS:48,
+  APPLE_PECAN_CHICKEN_SALAD:23, APPLE_PECAN_SALAD:23, ASIAN_CHOPPED_SALAD:23,
+  BACON_SANDWICH_BREAKFAST:54, BAJA_BOWL:48, BAJA_BOWL_042026:48, BAJA_CHICKEN_WRAP_202209:54,
+  BBQ_CHIX_PROTEIN_BOWL:23, BBQ_RANCH_SALAD:23, BERRY_GRANOLA_YOGURT:48,
+  BEYOND_BREAKFAST_BOWL:48, BILL_KIM_BOWL:48, BLACKENED_CHICKEN:140, BLUEBERRY_CHIA_OATS:48,
+  BRAISED_CHICKEN_HEAT:24, BUFFALO_CHICKEN_SALAD:23, BUFFALO_MAC_HEAT:24,
+  BURRATA_CAPRESE_SALAD:23, BURRITO_BOWL:48, BURRITO_BOWL_202501:48,
+  BURRITO_CHIX_PROTEIN_BOWL:23, BUTTERNUT_FARRO_BOWL:48, CAPRESE_SALAD:23,
+  CAPRESE_SALAD_202305:23, CAULI_SHAWARMA_SALAD:23, CHEDDAR_CHEESE:140, CHICKEN_BACON_SALAD:23,
+  CHICKEN_CAESAR_SALAD:23, CHICKEN_CAPRESE_BOWL:24, CHICKEN_DUMPLING_HEAT:48,
+  CHICKEN_MIXED_GREENS_SALAD:23, CHICKEN_SALAD_WRAP_TWO:32, CHICKEN_TIKKA_HEAT:48,
+  CHILE_LIME_CAESAR_SALAD:23, CHILI_BRAISED_PORK:48, CHIMICHURRI_STEAK_BOWL_202601:23,
+  CHIMICHURRI_STEAK_PROTEIN_BOWL:23, CHIPOTLE_TURKEY_SANDWICH_202501:36,
+  CHIPOTLE_TURKEY_SANDWICH_FULL:32, CHIPS_GUAC:28, CHIX_BREAKFAST_BOWL:48,
+  CHIX_CLUB_SANDWICH:36, CHOCOLATE_CHIA_PUDDING:48, CHOCOLATE_CHIA_PUDDING_072023:48,
+  CHOCOLATE_PRETZELS:140, CHOCOLATE_TRAIL_MIX:140, CHOCOLATE_TRAIL_MIX_BIG:48,
+  CLASSIC_CHIX_SALAD_BOWL:48, COOKIE_DOUGH_BITES:140, COOKIE_DOUGH_BITES_BIG:48,
+  COSTCO_APPLE_PECAN_SALAD:12, COSTCO_BAJA_BOWL:12, COSTCO_BERRY_YOGURT_1OF2:36,
+  COSTCO_CAPRESE_PASTA_BOWL:12, COSTCO_CAPRESE_SALAD:12, COSTCO_DILL_PICKLE_SALAD:12,
+  COSTCO_GREEN_GODDESS_SALAD:12, COSTCO_HARVEST_GRAIN_BOWL:12, COSTCO_MEDITERRANEAN_SALAD:18,
+  COSTCO_MEDITERRANEAN_SALAD_1OF2:18, COSTCO_MEX_STREET_CORN_SALAD:12,
+  COSTCO_NORTH_NAPA_SALAD:12, COSTCO_PINEAPPLE_CHIA_1OF2:36, COSTCO_SOUTHWEST_SALAD:12,
+  COSTCO_SW_RANCH_SALAD:12, COSTCO_TRUFFLE_COUSCOUS:12, COSTCO_USDA_CHIX_CAESAR_SALAD:12,
+  COSTCO_USDA_SW_CHILI_CHIX_SALAD:18, CPK_BBQ_SALAD:23, CRUNCHY_THAI_BOWL:48,
+  DILL_PICKLE_SALAD:23, ELIS_CHEESECAKE_CUP:140, ELOTE_SALAD:23, ELOTE_SALAD_202201:23,
+  ENCHILADA_ROJA_BOWL:48, ENCHILADA_ROJA_HEAT:24, FAJITA_GROATS_BOWL:48, FALAFEL_BITES:140,
+  FALAFEL_BOWL:48, FRUIT_CUP:48, FUJI_APPLE_CHIX_SALAD:23, GREEK_SALAD_202510:23,
+  GREEK_SALAD_NEW:23, GREEN_GODDESS_SALAD:23, GRILLED_CHICKEN:140, GRILLED_CHICKEN_BIG:48,
+  GRILLED_CHIX_VEG_BOWL:48, HAM_SANDWICH:36, HAM_SANDWICH_RETAIL:27, HARD_BOILED_EGGS:162,
+  HARVEST_GRAIN_BOWL:24, HARVEST_SALAD:23, HONG_KONG_BOWL:48, HP_GRILLED_CHIX_VEG_BOWL:23,
+  HUEVOS_RANCHEROS_BOWL:48, ITALIAN_CHOPPED_SALAD:23, ITALIAN_CHOPPED_SALAD_202209:23,
+  ITALIAN_WRAP:54, ITALIAN_WRAP_202502:54, KIMCHI_BOWL:48, LARGE_GRILLED_CHICKEN:79,
+  MEDI_BOWL:48, MEDI_CHIX_PROTEIN_BOWL:23, MEXICAN_CAESAR_SALAD:23, NAPA_CHICKPEA_WRAP:54,
+  NORTH_NAPA_SALAD:23, PECAN_PIE_BITES:140, PERSIAN_GODDESS_SALAD:23,
+  PESTO_CHICKEN_SALAD_SANDWICH:36, PESTO_CHICKEN_SALAD_WRAP:54, PESTO_CHICKEN_WRAP:54,
+  PESTO_CHIX_PROTEIN_BOWL_MOZZ:23, PESTO_CHIX_PROTEIN_BOWL_PARM:23, PESTO_PASTA_BOWL:48,
+  PESTO_PASTA_SAMPLE:48, PESTO_TURKEY_WRAP:54, PINEAPPLE_CHIA_BIG:48,
+  PINEAPPLE_CHIA_PUDDING:162, PROTEIN_CHIX_COBB_SALAD:23, PROTEIN_TURKEY_WRAP:54,
+  SAUSAGE_BURRITO_BREAKFAST:54, SESAME_GINGER_CHOPPED_SALAD:23, SHAWARMA_CHIX_PROTEIN_BOWL:23,
+  SIDE_SALAD:32, SMOKED_CHEDDAR_COBB:23, SNACK_BOX_CHARCUTERIE:36, SNACK_BOX_MEDITERRANEAN:36,
+  SONOMA_SALAD:23, SONOMA_SALAD_VALUE:24, SOUTHWEST_CHIX_SALAD:23, SOUTHWEST_SALAD:23,
+  STEAKHOUSE_CHOPPED_SALAD:23, STEAK_CUP:140, STEAK_SOUTHWEST_SALAD:23,
+  STRAWBERRY_CREAM_CHIA:48, STRAWBERRY_SALAD:23, SW_CHIPOTLE_SALAD:23, SW_RANCH_VALUE:24,
+  TACO_CHIX_PROTEIN_BOWL:23, THAI_CRUNCH_SALAD:23, THAI_NOODLE_BOWL:48, TRUFFLE_COUSCOUS:48,
+  TRUFFLE_COUSCOUS_202201:24, TRUFFLE_COUSCOUS_202309:48, TURKEY_APPLE_WRAP:54,
+  TURKEY_CLUB_SANDWICH:36, TURKEY_COBB_SALAD:23, TURKEY_COBB_SALAD_202501:23,
+  TURKEY_HARVEST_BOWL:24, TURKEY_SANDWICH:36, TURKEY_SANDWICH_RETAIL:27,
+  TURKEY_SANDWICH_VALUE:36, TUSCAN_ROTINI_SAUSAGE:48, TUSCN_CHIX_SANDWICH:36,
+  USDA_BAJA_CHIC_WRAP:54, USDA_CAESAR_CHIC_SALAD:23, USDA_CHEF_SALAD_TURKEY:23,
+  USDA_CHICKEN_BACON_SALAD:23, USDA_HP_TURKEY_WRAP:54, USDA_HUMMUS_PROTEIN_BOWL:23,
+  USDA_ITALIAN_TURKEY_WRAP:54, USDA_PESTO_CHIX_PROTEIN_BOWL:23,
+  USDA_PESTO_CHIX_PROTEIN_BOWL_042026:23, USDA_PESTO_CHIX_WRAP_052026:54,
+  USDA_PESTO_TURKEY_WRAP:54, USDA_RANCH_BBQ_CHIC_SALAD:23, USDA_SANTA_FE_SALAD:23,
+  USDA_SOUTHWESTERN_VALUE_SALAD:23, USDA_SW_CHILI_CHIX_SALAD:23,
+  USDA_TACO_CHIX_PROTEIN_BOWL:23, USDA_TURKEY_APPLE_WRAP:54, USDA_TURKEY_COBB_SALAD:23,
+  USDA_VALUE_CSR_CHIC:23, VEGGIE_TIKKA_HEAT:48, VEG_BREAKFAST_BOWL:48, VEG_COBB_SALAD:23,
+  VEG_HUMMUS:48, WRAP_SHAWARMA_CHICKPEA:54
+};
+
+/**
+ * One-time port. Writes unitsPerTote onto matching SKU Library entries.
+ *
+ * Fills blanks ONLY. A value already sitting in the library — whether typed by
+ * a planner or seeded by an earlier run — is left alone and reported, never
+ * overwritten. Nothing is deleted. Re-running is therefore safe, and after the
+ * first run the library, not this table, is where the number lives.
+ *
+ * Run from the editor. Logger.log only, per house convention.
+ */
+function seedUnitsPerTote() {
+  const library = getSection_(STATE_KEYS.skuLibrary) || {};
+  const keys = Object.keys(library);
+  if (!keys.length) {
+    Logger.log('seedUnitsPerTote: SKU Library is empty — nothing to seed.');
+    return;
+  }
+
+  // Match on the same normalized key the rest of the attribute plumbing uses,
+  // so punctuation drift between the two systems can't cause a silent miss.
+  const seedByNorm = {};
+  Object.keys(UNITS_PER_TOTE_SEED).forEach(function(sku) {
+    seedByNorm[normalizeSku_(sku)] = UNITS_PER_TOTE_SEED[sku];
+  });
+
+  const filled = [], kept = [], missing = [];
+  keys.forEach(function(key) {
+    const rec = library[key] || {};
+    const val = seedByNorm[normalizeSku_(key)];
+    if (!(val > 0)) { missing.push(key); return; }
+    const existing = parseFloat(rec.unitsPerTote);
+    if (isFinite(existing) && existing > 0) {
+      if (existing !== val) kept.push(key + ' (library ' + existing + ', seed ' + val + ')');
+      return;
+    }
+    rec.unitsPerTote = val;
+    library[key] = rec;
+    filled.push(key);
+  });
+
+  if (filled.length) setSection_(STATE_KEYS.skuLibrary, library);
+
+  Logger.log('seedUnitsPerTote: filled ' + filled.length + ', already set ' + (keys.length - filled.length - missing.length) + ', no seed row ' + missing.length + '.');
+  if (kept.length)    Logger.log('  kept existing (seed differs): ' + kept.join('; '));
+  if (missing.length) Logger.log('  no tote size on file: ' + missing.join(', '));
 }
 
 // ─── LABEL VERSION SYNC (from Label Versions & Updates sheet) ────────────────
@@ -1497,14 +2120,14 @@ function saveSequencingRules(rules) {
 function saveBreakOverride(weekLabel, day, lineId, brk, field, val) {
   const user = getCurrentUser();
   if (!user.isAdmin && !user.canEditRules) throw new Error('Not authorized');
-  const overrides = getSection_(STATE_KEYS.breakOverrides) || {};
+  const overrides = stateStoreGet_('breakOverrides');
   if (!overrides[weekLabel]) overrides[weekLabel] = {};
   if (!overrides[weekLabel][day]) overrides[weekLabel][day] = { lines: {} };
   if (!overrides[weekLabel][day].lines) overrides[weekLabel][day].lines = {};
   if (!overrides[weekLabel][day].lines[lineId]) overrides[weekLabel][day].lines[lineId] = {};
   if (!overrides[weekLabel][day].lines[lineId][brk]) overrides[weekLabel][day].lines[lineId][brk] = {};
   overrides[weekLabel][day].lines[lineId][brk][field] = val;
-  setSection_(STATE_KEYS.breakOverrides, overrides);
+  stateStorePut_('breakOverrides', weekLabel, day, overrides[weekLabel][day]);
   writeAuditLog_(user.email, 'save_break_override', weekLabel, day, lineId + ' ' + brk + '.' + field + '=' + val);
   return { ok: true };
 }
@@ -1512,11 +2135,11 @@ function saveBreakOverride(weekLabel, day, lineId, brk, field, val) {
 function setDayFloatingTeam(weekLabel, day, val) {
   const user = getCurrentUser();
   if (!user.isAdmin && !user.canEditRules) throw new Error('Not authorized');
-  const overrides = getSection_(STATE_KEYS.breakOverrides) || {};
+  const overrides = stateStoreGet_('breakOverrides');
   if (!overrides[weekLabel]) overrides[weekLabel] = {};
   if (!overrides[weekLabel][day]) overrides[weekLabel][day] = { lines: {} };
   overrides[weekLabel][day].floatingTeam = !!val;
-  setSection_(STATE_KEYS.breakOverrides, overrides);
+  stateStorePut_('breakOverrides', weekLabel, day, overrides[weekLabel][day]);
   writeAuditLog_(user.email, 'set_floating_team', weekLabel, day, String(!!val));
   return { ok: true };
 }
@@ -1552,10 +2175,7 @@ function saveFloorViewers(list) {
 function saveScenarios(weekLabel, day, dayScenarios) {
   const user = getCurrentUser();
   if (!user.isAdmin && !user.isPlanner) throw new Error('Not authorized');
-  const scenarios = getSection_(STATE_KEYS.scenarios) || {};
-  if (!scenarios[weekLabel]) scenarios[weekLabel] = {};
-  scenarios[weekLabel][day] = dayScenarios;
-  setSection_(STATE_KEYS.scenarios, scenarios);
+  stateStorePut_('scenarios', weekLabel, day, dayScenarios);
   writeAuditLog_(user.email, 'save_scenarios', weekLabel, day, (dayScenarios.list || []).length + ' scenarios');
   return { ok: true };
 }
@@ -1791,19 +2411,21 @@ function demandArchiveSheet_() {
 // computed, so the honest signal is the dates already stored: the current week is
 // the one whose date span contains today. Falls back to the latest week that has
 // already started, and returns null rather than guessing if neither holds.
+// Reads the Demand Store tab. It used to scan Script Properties for
+// sequins_demand__* keys, which the v0.4.48 migration deletes — so after
+// migrating it returned null and silently disabled everything downstream of it.
 function currentDemandWeek_() {
-  const props = PropertiesService.getScriptProperties().getProperties();
   const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
   const spans = {};
-  Object.keys(props).forEach(function(k) {
-    const m = k.match(/^sequins_demand__Wk_(\d+)_(\d+)__(.+)$/);
-    if (!m) return;
-    let d = null;
-    try { d = JSON.parse(props[k]); } catch (e) { return; }
+  const store = demandStoreRead_();
+  Object.keys(store).forEach(function(k) {
+    const label = k.split('\u0000')[0];
+    const parsed = parseWeekLabel_(label);
+    if (!parsed) return;
+    const d = demandStoreParse_(store[k].payload);
     const dt = d && d.date ? String(d.date).slice(0, 10) : '';
     if (!dt) return;
-    const label = 'Wk ' + Number(m[1]) + ' \u00b7 ' + Number(m[2]);
-    if (!spans[label]) spans[label] = { label: label, wk: Number(m[1]), yr: Number(m[2]), min: dt, max: dt };
+    if (!spans[label]) spans[label] = { label: label, wk: parsed.wk, yr: parsed.yr, min: dt, max: dt };
     if (dt < spans[label].min) spans[label].min = dt;
     if (dt > spans[label].max) spans[label].max = dt;
   });
@@ -1833,7 +2455,156 @@ function collectArchivable_(props, cutoff) {
   });
   return hit;
 }
+// ─── DEMAND MIGRATION ─────────────────────────────────────────
+// Read-only. Drives the banner in Load Demand so the migration is something
+// you can see and click, not something you have to remember to run.
+function demandMigrationStatus() {
+  const props = PropertiesService.getScriptProperties();
+  const legacy = getSection_(DEMAND_INDEX_KEY) || {};
+  let days = 0, bytes = 0;
+  Object.keys(legacy).forEach(function(wk) {
+    (legacy[wk] || []).forEach(function(day) {
+      const raw = props.getProperty(demandDayKey_(wk, day));
+      if (!raw) return;
+      days++;
+      bytes += raw.length + (props.getProperty(demandHistoryKey_(wk, day)) || '').length;
+    });
+  });
+  let inSheet = 0;
+  Object.keys(demandStoreRead_()).forEach(function() { inSheet++; });
+  // The four date-keyed state keys. Reported alongside demand so one card and
+  // one button cover everything that does not belong in properties.
+  let stateKeys = 0, stateBytes = 0;
+  STATE_STORE_NAMES.forEach(function(name) {
+    const raw = props.getProperty(STATE_KEYS[name]);
+    if (!raw || raw === '{}') return;
+    stateKeys++;
+    stateBytes += raw.length;
+  });
+  const sbRaw = props.getProperty(STATE_KEYS.sandboxes);
+  if (sbRaw && sbRaw !== '[]') { stateKeys++; stateBytes += sbRaw.length; }
+  return { ok: true, legacyDays: days, legacyKB: Math.round(bytes / 1024), sheetDays: inSheet,
+           stateKeys: stateKeys, stateKB: Math.round(stateBytes / 1024) };
+}
+
+// Moves every legacy demand day into the Demand Store tab and frees the
+// property bytes. Verifies each day landed in the Sheet BEFORE deleting its
+// keys; a day that fails verification keeps its keys and is reported as
+// skipped. The legacy index is only removed when nothing was skipped, so a
+// partial run is safe to re-run. Admin only, explicit click, never automatic.
+// Moves overrides / finishBy / breakOverrides / scenarios into the State Store
+// tab and deletes the property keys. Verifies each name landed before deleting.
+// Same rules as the demand migration: explicit click, never automatic, and a
+// key that fails verification is left exactly where it is.
+function migrateStateToSheet() {
+  const user = getCurrentUser();
+  if (!user.isAdmin) throw new Error('Not authorized');
+  const props = PropertiesService.getScriptProperties();
+  let moved = 0, skipped = 0, freed = 0;
+  for (let n = 0; n < STATE_STORE_NAMES.length; n++) {
+    const name = STATE_STORE_NAMES[n], key = STATE_KEYS[name];
+    const legacy = getSection_(key);
+    if (!legacy || !Object.keys(legacy).length) continue;
+    const raw = props.getProperty(key) || '';
+    let wrote = 0, failed = 0;
+    Object.keys(legacy).forEach(function(wk) {
+      Object.keys(legacy[wk] || {}).forEach(function(day) {
+        stateStorePut_(name, wk, day, legacy[wk][day]);
+        wrote++;
+      });
+    });
+    SpreadsheetApp.flush();
+    STATE_STORE_CACHE_ = null;
+    const back = stateStoreRead_()[name] || {};
+    Object.keys(legacy).forEach(function(wk) {
+      Object.keys(legacy[wk] || {}).forEach(function(day) {
+        if (!back[wk] || !back[wk][day]) failed++;
+      });
+    });
+    if (failed) {
+      Logger.log('Verify FAILED for ' + name + ': ' + failed + ' of ' + wrote +
+                 ' day(s) not readable back \u2014 property key LEFT IN PLACE.');
+      skipped++;
+      continue;
+    }
+    freed += raw.length + key.length;
+    props.deleteProperty(key);
+    moved += wrote;
+  }
+  // The legacy sandbox blob is the last non-config key. Folded in here so this
+  // is genuinely the final click rather than setting up another one.
+  // reclaimSandboxProperty verifies every sandbox is in the Sandboxes tab first
+  // and refuses outright if any is missing, so this cannot lose one.
+  try {
+    const sb = reclaimSandboxProperty();
+    if (sb && sb.ok && sb.freed) freed += sb.freed;
+    else if (sb && sb.refused) { skipped++; Logger.log('Legacy sandbox key left in place \u2014 open Sandbox once, then re-run.'); }
+  } catch (e) {
+    Logger.log('Sandbox reclaim failed (non-fatal): ' + e.message);
+  }
+  const freedKB = Math.round(freed / 1024);
+  writeAuditLog_(user.email, 'migrate_state_to_sheet', '', '',
+                 moved + ' day-row(s) moved, ' + skipped + ' key(s) skipped, ~' + freedKB + 'KB freed');
+  Logger.log('State migration: ' + moved + ' day-row(s) moved, ' + skipped + ' skipped, ~' + freedKB + 'KB freed.');
+  return { ok: true, moved: moved, skipped: skipped, freedKB: freedKB };
+}
+
+function migrateDemandToSheet() {
+  const user = getCurrentUser();
+  if (!user.isAdmin) throw new Error('Not authorized');
+  const props = PropertiesService.getScriptProperties();
+  const legacy = getSection_(DEMAND_INDEX_KEY) || {};
+  let moved = 0, skipped = 0, freed = 0;
+  const weeks = Object.keys(legacy);
+  for (let w = 0; w < weeks.length; w++) {
+    const wk = weeks[w], days = legacy[wk] || [];
+    for (let d = 0; d < days.length; d++) {
+      const day = days[d];
+      const dayKey = demandDayKey_(wk, day), histKey = demandHistoryKey_(wk, day);
+      const payload = getSection_(dayKey);
+      if (!payload) continue;                       // already gone, nothing to move
+      const hist = getSection_(histKey) || [];
+      demandStoreWrite_(wk, day, payload, hist);
+      SpreadsheetApp.flush();
+      const back = demandStoreRead_()[demandStoreKey_(wk, day)];
+      const parsed = back ? demandStoreParse_(back.payload) : null;
+      const wantSkus = Object.keys((payload && payload.skus) || {}).length;
+      const gotSkus  = Object.keys((parsed  && parsed.skus)  || {}).length;
+      if (!parsed || gotSkus !== wantSkus) {
+        Logger.log('Verify FAILED for ' + wk + ' / ' + day + ' (' + gotSkus + ' of ' + wantSkus +
+                   ' SKUs read back) — legacy keys LEFT IN PLACE.');
+        skipped++;
+        continue;
+      }
+      freed += (props.getProperty(dayKey) || '').length + (props.getProperty(histKey) || '').length;
+      props.deleteProperty(dayKey);
+      props.deleteProperty(histKey);
+      moved++;
+    }
+  }
+  if (skipped === 0) props.deleteProperty(DEMAND_INDEX_KEY);
+  const freedKB = Math.round(freed / 1024);
+  writeAuditLog_(user.email, 'migrate_demand_to_sheet', '', '',
+                 moved + ' day(s) moved, ' + skipped + ' skipped, ~' + freedKB + 'KB freed');
+  Logger.log('Demand migration: ' + moved + ' moved, ' + skipped + ' skipped, ~' + freedKB + 'KB freed.');
+  return { ok: true, moved: moved, skipped: skipped, freedKB: freedKB };
+}
+
+// OBSOLETE as of v0.4.49. These existed only to relieve pressure on the Script
+// Properties store, which demand no longer uses — it lives in the Demand Store
+// tab, which has no ceiling worth pruning against. Kept as no-ops rather than
+// deleted so an old bookmark or editor run says so instead of throwing.
 function previewArchiveOldDemand() {
+  Logger.log('previewArchiveOldDemand is obsolete — demand lives in the "' + DEMAND_STORE_TAB +
+             '" tab now, not Script Properties. Nothing to archive.');
+  return { ok: true, obsolete: true };
+}
+function archiveOldDemand() {
+  Logger.log('archiveOldDemand is obsolete — demand lives in the "' + DEMAND_STORE_TAB +
+             '" tab now, not Script Properties. Nothing to archive.');
+  return { ok: true, obsolete: true };
+}
+function previewArchiveOldDemand_LEGACY_() {
   const cur = currentDemandWeek_();
   if (!cur) { Logger.log('previewArchiveOldDemand: could not identify the current week from stored dates.'); return { ok: false }; }
   const props = PropertiesService.getScriptProperties().getProperties();
@@ -1859,7 +2630,7 @@ function previewArchiveOldDemand() {
   Logger.log('If that looks right, run archiveOldDemand().');
   return { ok: true, currentWeek: cur.label, days: days, bytes: bytes, byWeek: byWeek, totalAfter: total - bytes };
 }
-function archiveOldDemand(environment) {
+function archiveOldDemand_LEGACY_(environment) {
   const env = environment || 'TEST';
   const cur = currentDemandWeek_();
   if (!cur) throw new Error('Could not identify the current week from stored dates — aborting rather than guessing.');
@@ -2110,10 +2881,9 @@ function reclaimSandboxProperty() {
 function saveFinishBy(weekLabel, day, obj) {
   const user = getCurrentUser();
   if (!user.isAdmin && !user.isPlanner && !user.canEditRules) throw new Error('Not authorized');
-  const all = getSection_(STATE_KEYS.finishBy) || {};
-  if (!all[weekLabel]) all[weekLabel] = {};
-  all[weekLabel][day] = { enabled: !!(obj && obj.enabled), time: (obj && obj.time) || '' };
-  setSection_(STATE_KEYS.finishBy, all);
+  const entry = { enabled: !!(obj && obj.enabled), time: (obj && obj.time) || '' };
+  stateStorePut_('finishBy', weekLabel, day, entry);
+  const all = {}; all[weekLabel] = {}; all[weekLabel][day] = entry;
   writeAuditLog_(user.email, 'save_finish_by', weekLabel, day, all[weekLabel][day].enabled ? all[weekLabel][day].time : 'off');
   return { ok: true };
 }
@@ -2244,7 +3014,353 @@ function savePublishedPlan(weekLabel, day, snap) {
     sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, PLAN_ARCHIVE_HEADER.length).setValues(rows);
   }
   writeAuditLog_(user.email, 'publish_plan', weekLabel, day, 'v' + version + ' · ' + rows.length + ' rows');
-  return { ok: true, version: version };
+  // War Room write is deliberately AFTER the archive write and deliberately
+  // cannot fail the publish. The plan is the record; the metrics cell is a
+  // downstream courtesy. Anything that goes wrong comes back as a message the
+  // client shows next to the publish result.
+  let warRoom = null;
+  try {
+    warRoom = writeWarRoomPlanCost_(date, Number(snap.warRoomPerUnit));
+  } catch (e) {
+    warRoom = { ok: false, message: 'War Room: unexpected error — ' + e.message + '. Plan published; nothing written.' };
+  }
+  if (warRoom) writeAuditLog_(user.email, 'war_room_write', weekLabel, day, warRoom.message);
+  // Arm the email. Deliberately last and deliberately non-fatal — an armed
+  // flag is a reminder, not a record, and must never cost a published plan.
+  try { armPlanEmail_(weekLabel, day, date); }
+  catch (e) { Logger.log('plan email arm failed (non-fatal): ' + e.message); }
+  let asm20 = null;
+  try { asm20 = writeAssemblySequencing20_(snap, date); }
+  catch (e) { asm20 = { ok: false, message: 'Assembly Sequencing 2.0: unexpected error — ' + e.message }; }
+  if (asm20) writeAuditLog_(user.email, 'asm20_backup', weekLabel, day, asm20.message);
+  return { ok: true, version: version, warRoom: warRoom, asm20: asm20 };
+}
+// ─── WAR ROOM: Assembly $ / unit plan (v0.4.51) ──────────────────────────────
+// Replaces loadDailyEmailToRow91, which searched Gmail for the daily Assembly
+// Plan email and scraped the first $0.xxx out of the body. That approach only
+// ever worked when the plan's date was TODAY and when the mail came from one
+// specific sender; publishing writes the cell directly instead, keyed off the
+// plan's own date, so a Friday plan published on Thursday lands correctly.
+//
+// Column matching, in order of preference:
+//   1. exact date match in row 1 whose row 3 weekday agrees  → write
+//   2. no match, or weekday disagrees → derive the column arithmetically from
+//      a verified anchor and confirm the neighbours read date−1 and date+1
+//   3. neighbours disagree too → refuse, and say why
+// Step 2 exists because the header has been a perfectly contiguous daily
+// sequence for its whole life (259 columns, no gaps, no duplicates), so a
+// single mistyped cell is recoverable from its surroundings. Step 3 is for
+// when the structure itself has changed, which is not a typo.
+function _wrParseDate_(v) {
+  if (v instanceof Date && !isNaN(v.getTime())) {
+    return new Date(v.getFullYear(), v.getMonth(), v.getDate());
+  }
+  const m = String(v == null ? '' : v).trim().match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/);
+  if (m) {
+    const d = new Date(Number(m[3]), Number(m[1]) - 1, Number(m[2]));
+    return (d.getMonth() === Number(m[1]) - 1 && d.getDate() === Number(m[2])) ? d : null;
+  }
+  const iso = String(v == null ? '' : v).trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
+  return null;
+}
+function _wrDayNum_(d) { return Math.round(d.getTime() / 86400000); }
+function _wrFmt_(d) { return (d.getMonth() + 1) + '/' + d.getDate() + '/' + d.getFullYear(); }
+
+function writeWarRoomPlanCost_(planDateRaw, perUnit) {
+  const planDate = _wrParseDate_(planDateRaw);
+  if (!planDate) return { ok: false, message: 'War Room: plan has no usable date, nothing written.' };
+  if (!(typeof perUnit === 'number' && isFinite(perUnit) && perUnit > 0)) {
+    return { ok: false, message: 'War Room: no $/unit to write (plan has no units?), nothing written.' };
+  }
+  let sheet;
+  try {
+    sheet = SpreadsheetApp.openById(WAR_ROOM_SHEET_ID).getSheetByName(WAR_ROOM_TAB);
+  } catch (e) {
+    return { ok: false, message: 'War Room: cannot open the sheet — ' + e.message + '. Plan published; row ' + WAR_ROOM_COST_ROW + ' not written.' };
+  }
+  if (!sheet) return { ok: false, message: 'War Room: tab "' + WAR_ROOM_TAB + '" not found. Plan published; nothing written.' };
+
+  const lastCol = sheet.getLastColumn();
+  if (lastCol < 2) return { ok: false, message: 'War Room: date header row is empty.' };
+  const hdr = sheet.getRange(WAR_ROOM_DATE_ROW, 1, 1, lastCol).getValues()[0];
+  const dow = sheet.getRange(WAR_ROOM_DOW_ROW, 1, 1, lastCol).getDisplayValues()[0];
+  const DOW = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const wantDow = DOW[planDate.getDay()];
+  const parsed = hdr.map(_wrParseDate_);
+  const target = _wrDayNum_(planDate);
+
+  // 1 — exact match, weekday agreeing. More than one such column is refused
+  // rather than resolved: the old loader took the first and could be silently
+  // wrong, and writing another team's column is worse than writing nothing.
+  const exact = [];
+  for (let i = 0; i < parsed.length; i++) {
+    if (parsed[i] && _wrDayNum_(parsed[i]) === target) exact.push(i + 1);
+  }
+  const clean = exact.filter(function(c) {
+    const w = String(dow[c - 1] || '').trim();
+    return !w || w === wantDow;
+  });
+  if (clean.length === 1) {
+    sheet.getRange(WAR_ROOM_COST_ROW, clean[0]).setValue(perUnit);
+    return { ok: true, column: clean[0],
+      message: 'War Room: wrote $' + perUnit.toFixed(3) + ' to row ' + WAR_ROOM_COST_ROW +
+               ', column ' + _wrColName_(clean[0]) + ' (' + _wrFmt_(planDate) + ').' };
+  }
+  if (clean.length > 1) {
+    return { ok: false, message: 'War Room: ' + clean.length + ' columns in row 1 read ' + _wrFmt_(planDate) +
+      '. Refusing to guess which one — fix the duplicate header and republish. Nothing written.' };
+  }
+
+  // 2 — derive by position. Anchor on the nearest column whose date parses,
+  // whose weekday agrees, and whose own neighbours are one day either side.
+  let anchor = -1, anchorDay = 0;
+  for (let i = 0; i < parsed.length; i++) {
+    if (!parsed[i]) continue;
+    const w = String(dow[i] || '').trim();
+    if (w && w !== DOW[parsed[i].getDay()]) continue;
+    const dn = _wrDayNum_(parsed[i]);
+    const L = parsed[i - 1], R = parsed[i + 1];
+    const okL = !L || _wrDayNum_(L) === dn - 1, okR = !R || _wrDayNum_(R) === dn + 1;
+    if (!okL || !okR) continue;
+    if (anchor === -1 || Math.abs(dn - target) < Math.abs(anchorDay - target)) { anchor = i; anchorDay = dn; }
+  }
+  if (anchor === -1) {
+    return { ok: false, message: 'War Room: no column for ' + _wrFmt_(planDate) +
+      ' and the header is too irregular to derive one. Nothing written.' };
+  }
+  const idx = anchor + (target - anchorDay);
+  if (idx < 0 || idx >= parsed.length) {
+    return { ok: false, message: 'War Room: ' + _wrFmt_(planDate) +
+      ' falls outside the date header (it runs to ' +
+      (parsed[parsed.length - 1] ? _wrFmt_(parsed[parsed.length - 1]) : '?') + '). Nothing written.' };
+  }
+  const L2 = parsed[idx - 1], R2 = parsed[idx + 1];
+  const bracketed = (L2 && _wrDayNum_(L2) === target - 1) || (R2 && _wrDayNum_(R2) === target + 1);
+  const dowOk = !String(dow[idx] || '').trim() || String(dow[idx]).trim() === wantDow;
+  if (!bracketed || !dowOk) {
+    return { ok: false, message: 'War Room: no column reads ' + _wrFmt_(planDate) +
+      ' and position ' + _wrColName_(idx + 1) + ' does not check out against its neighbours. Nothing written.' };
+  }
+  sheet.getRange(WAR_ROOM_COST_ROW, idx + 1).setValue(perUnit);
+  return { ok: true, column: idx + 1, byPosition: true,
+    message: 'War Room: wrote $' + perUnit.toFixed(3) + ' to row ' + WAR_ROOM_COST_ROW + ', column ' +
+             _wrColName_(idx + 1) + ' BY POSITION — that header cell reads "' +
+             String(hdr[idx] == null ? '(blank)' : hdr[idx]) + '" but its neighbours confirm ' +
+             _wrFmt_(planDate) + '. Worth fixing the header.' };
+}
+function _wrColName_(n) {
+  let s = '';
+  while (n > 0) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); }
+  return s;
+}
+// ─── ASSEMBLY PLAN EMAIL (v0.4.51) ───────────────────────────────────────────
+// The daily plan email used to be hand-written off a spreadsheet. It now
+// renders from the published snapshot, but sending stays a deliberate human
+// act: publishing ARMS the email, a person sends it. The armed/sent state is
+// keyed by week/day in the State Store rather than held in the session, so an
+// unsent plan keeps nagging across reloads and across people until someone
+// actually sends it. Body HTML is NOT stored — it is re-rendered from the
+// published plan on demand, so a stored email can never drift from the plan
+// it describes.
+// The deployed web-app URL, for the "open the plan" link in the email. Only
+// the server can resolve it; the client caches it after load.
+function getWebAppUrl() {
+  try { return ScriptApp.getService().getUrl() || ''; }
+  catch (e) { return ''; }
+}
+// The same URL with the Workspace domain segment stripped. getUrl() returns
+// script.google.com/a/farmersfridge.com/macros/s/.../exec, and that /a/<domain>/
+// prefix forces a Workspace sign-in no matter what the deployment's access is
+// set to — so an external viewer following it lands on "unable to open the
+// file" rather than the plan. The plain /macros/s/.../exec form is the one that
+// honours "Anyone". Internal links keep using getWebAppUrl(); only the external
+// link needs this.
+function getPublicWebAppUrl() {
+  return String(getWebAppUrl() || '').replace(/\/a\/[^\/]+\/macros\//, '/macros/');
+}
+function planEmailAll_() {
+  const rows = stateStoreRead_()['planEmail'] || {};
+  const out = {};
+  Object.keys(rows).forEach(function(wk) {
+    out[wk] = {};
+    Object.keys(rows[wk]).forEach(function(d) { out[wk][d] = rows[wk][d].payload; });
+  });
+  return out;
+}
+function armPlanEmail_(weekLabel, day, dateStr) {
+  stateStorePut_('planEmail', weekLabel, day, {
+    status: 'pending', date: dateStr || '', armedAt: new Date().toISOString()
+  });
+}
+// Publishing again re-arms: the numbers moved, so a previously-sent email is
+// now stale and someone needs to send the new one.
+function sendAssemblyPlanEmail(weekLabel, day, subject, htmlBody) {
+  const user = getCurrentUser();
+  if (!user.isAdmin && !user.isPlanner) throw new Error('Not authorized');
+  const rules = getSection_(STATE_KEYS.sequencingRules) || {};
+  const to = String(rules.planEmailRecipients || '').split(/[,;\s]+/)
+    .filter(function(a) { return a.indexOf('@') > 0; }).join(',');
+  if (!to) throw new Error('No recipients set. Sequencing Rules \u2192 Assembly plan email \u2192 Recipients.');
+  if (!subject) throw new Error('No subject line \u2014 refusing to send.');
+  if (!htmlBody) throw new Error('No email body \u2014 refusing to send.');
+  const cc = String(rules.planEmailCc || '').split(/[,;\s]+/)
+    .filter(function(a) { return a.indexOf('@') > 0; }).join(',');
+  const opts = { to: to, subject: subject, htmlBody: htmlBody, name: 'Sequins \u2728' };
+  if (cc) opts.cc = cc;
+  MailApp.sendEmail(opts);
+  stateStorePut_('planEmail', weekLabel, day, {
+    status: 'sent', subject: subject, sentBy: user.email,
+    sentAt: new Date().toISOString(), to: to, cc: cc || ''
+  });
+  writeAuditLog_(user.email, 'send_plan_email', weekLabel, day, subject + ' \u2192 ' + to);
+  return { ok: true, to: to, cc: cc || '', sentBy: user.email };
+}
+// Dismissing is NOT sending. It clears the nag for a day that genuinely does
+// not need an email (a republish to fix a typo, a scenario nobody acts on).
+// Recorded so it is visible who decided that.
+function dismissPlanEmail(weekLabel, day, reason) {
+  const user = getCurrentUser();
+  if (!user.isAdmin && !user.isPlanner) throw new Error('Not authorized');
+  stateStorePut_('planEmail', weekLabel, day, {
+    status: 'dismissed', dismissedBy: user.email,
+    dismissedAt: new Date().toISOString(), reason: String(reason || '')
+  });
+  writeAuditLog_(user.email, 'dismiss_plan_email', weekLabel, day, String(reason || ''));
+  return { ok: true };
+}
+// ─── ASSEMBLY SEQUENCING 2.0 BACKUP WRITE (v0.4.51) ──────────────────────────
+// Duplicates the template tab, names it after the plan date, and writes the
+// sequence into the two input columns. Everything else on that tab is formulas
+// and is left strictly alone — the old tool recalculates the plan itself, which
+// is the point: it proves the fallback still works end to end.
+//
+// Units are written as VALUES, deliberately overwriting the array formula that
+// pulls from CMS Demands. That decouples the backup from a feed that may stop.
+//
+// Refuses rather than half-writes. A backup that looks complete but isn't is
+// worse than none, so a line with no block, or a sequence longer than its
+// block, aborts the whole thing and reports which line.
+function _asm20Blocks_(sheet) {
+  const lastRow = Math.min(sheet.getLastRow(), 400);
+  const col = sheet.getRange(1, 1, lastRow, 12).getDisplayValues();
+  const blocks = {};
+  for (let i = 0; i < col.length; i++) {
+    if (String(col[i][4] || '').trim() !== '# Units') continue;   // col E marks a header
+    const name = String(col[i][2] || '').trim();                  // col C holds the line
+    if (!name) continue;
+    const rows = [];
+    for (let j = i + 1; j < col.length && j < i + 40; j++) {
+      const slot = String(col[j][2] || '').trim();
+      if (/^\d+$/.test(slot)) rows.push(j + 1);
+      else if (String(col[j][3] || '').trim() === 'Total') break;
+    }
+    if (rows.length) blocks[name.toUpperCase()] = { first: rows[0], last: rows[rows.length - 1], cap: rows.length };
+  }
+  return blocks;
+}
+function _asm20TabName_(d, ss) {
+  const base = (d.getMonth() + 1) + '.' + d.getDate() + '.' + d.getFullYear();
+  if (!ss.getSheetByName(base)) return base;
+  for (let n = 2; n < 40; n++) {
+    const nm = base + ' (' + n + ')';
+    if (!ss.getSheetByName(nm)) return nm;
+  }
+  return base + ' (' + new Date().getTime() + ')';
+}
+function writeAssemblySequencing20_(snap, planDateRaw) {
+  const d = _wrParseDate_(planDateRaw);
+  if (!d) return { ok: false, message: 'Assembly Sequencing 2.0: plan has no usable date, nothing written.' };
+  let ss, tpl;
+  try {
+    ss  = SpreadsheetApp.openById(ASM20_SHEET_ID);
+    tpl = ss.getSheetByName(ASM20_TEMPLATE_TAB);
+  } catch (e) {
+    return { ok: false, message: 'Assembly Sequencing 2.0: cannot open the sheet — ' + e.message + '. Nothing written.' };
+  }
+  if (!tpl) return { ok: false, message: 'Assembly Sequencing 2.0: tab "' + ASM20_TEMPLATE_TAB + '" not found. Nothing written.' };
+
+  const blocks = _asm20Blocks_(tpl);
+  // Validate EVERYTHING before touching the spreadsheet.
+  const plan = [], problems = [];
+  (snap.lines || []).forEach(function(line) {
+    const ls = (snap.lineState || {})[line.id];
+    const slots = (ls && ls.slots) || [];
+    if (!slots.length) return;
+    const key = String(ASM20_LINE_ALIASES[line.id] || line.id).toUpperCase();
+    const b = blocks[key];
+    if (!b) { problems.push('no block for ' + line.id); return; }
+    if (slots.length > b.cap) {
+      problems.push(line.id + ' has ' + slots.length + ' SKUs but its block holds ' + b.cap);
+      return;
+    }
+    plan.push({ block: b, slots: slots, startMin: ls.startMin });
+  });
+  if (problems.length) {
+    return { ok: false, message: 'Assembly Sequencing 2.0: not written — ' + problems.join('; ') +
+      '. Add the block in ' + ASM20_TEMPLATE_TAB + ' and republish.' };
+  }
+  if (!plan.length) return { ok: false, message: 'Assembly Sequencing 2.0: nothing sequenced, no tab created.' };
+
+  const name = _asm20TabName_(d, ss);
+  let tab;
+  try {
+    tab = tpl.copyTo(ss).setName(name);
+    ss.setActiveSheet(tab); ss.moveActiveSheet(2);
+  } catch (e) {
+    return { ok: false, message: 'Assembly Sequencing 2.0: could not create tab "' + name + '" — ' + e.message };
+  }
+  try {
+    tab.getRange(ASM20_DATE_CELL).setValue(d);
+    plan.forEach(function(p) {
+      const cap = p.block.cap, sku = [], qty = [];
+      for (let i = 0; i < cap; i++) {
+        sku.push([i < p.slots.length ? p.slots[i].sku : '']);
+        qty.push([i < p.slots.length ? (p.slots[i].qty || 0) : '']);
+      }
+      tab.getRange(p.block.first, ASM20_COL_SKU,   cap, 1).setValues(sku);
+      tab.getRange(p.block.first, ASM20_COL_UNITS, cap, 1).setValues(qty);
+      if (p.startMin != null) {
+        tab.getRange(p.block.first, ASM20_COL_START)
+           .setValue(Utilities.formatDate(
+             new Date(2000, 0, 1, Math.floor(p.startMin / 60), Math.round(p.startMin % 60)),
+             Session.getScriptTimeZone(), 'HH:mm:ss'));
+      }
+    });
+    // Blank any block the plan did not use, so a copied template never shows
+    // yesterday's SKUs sitting there looking like today's plan.
+    const used = {};
+    plan.forEach(function(p) { used[p.block.first] = true; });
+    Object.keys(blocks).forEach(function(k) {
+      const b = blocks[k];
+      if (used[b.first]) return;
+      const blank = [];
+      for (let i = 0; i < b.cap; i++) blank.push(['', '']);
+      tab.getRange(b.first, ASM20_COL_SKU, b.cap, 2).setValues(blank);
+    });
+  } catch (e) {
+    return { ok: false, message: 'Assembly Sequencing 2.0: tab "' + name + '" was created but the write failed — ' +
+      e.message + '. Check it before relying on it.' };
+  }
+  return { ok: true, tab: name,
+    message: 'Assembly Sequencing 2.0: wrote ' + plan.length + ' lines to tab "' + name + '".' };
+}
+// Hide dated tabs older than the cutoff. HIDE, never delete — these are the
+// fallback record and deleting them is not this function's business.
+function hideOldAssembly20Tabs(daysOld) {
+  const keep = Number(daysOld) || 3;
+  const ss = SpreadsheetApp.openById(ASM20_SHEET_ID);
+  const cutoff = new Date(); cutoff.setHours(0, 0, 0, 0);
+  cutoff.setDate(cutoff.getDate() - keep);
+  let n = 0;
+  ss.getSheets().forEach(function(sh) {
+    const m = String(sh.getName()).trim().match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})(\s*\(\d+\))?$/);
+    if (!m) return;
+    const d = new Date(Number(m[3]), Number(m[1]) - 1, Number(m[2]));
+    if (d < cutoff && !sh.isSheetHidden()) { sh.hideSheet(); n++; }
+  });
+  Logger.log('hideOldAssembly20Tabs: hid ' + n + ' tab(s) older than ' + keep + ' days');
+  return { ok: true, hidden: n };
 }
 // Unpublish = append a tombstone version (append-only; history preserved).
 function unpublishPlan(weekLabel, day) {
@@ -2342,7 +3458,22 @@ function getPublishedPlan(weekLabel, day) {
     lsx.breaks.forEach(function(b){ if (b.endClockMin > maxEnd) maxEnd = b.endClockMin; });
     lsx.totalMin = maxEnd - lsx.startMin;
   });
-  const lines = Object.keys(lineSeen).map(function(id){ const c = cfgById[id] || {}; return { id: id, label: c.label || id, startTime: c.startTime || '', hc: c.hc || 0, type: c.type || 'day' }; });
+  // Order follows Line Config, not the order lines happened to appear in the
+  // archive rows — that was the sequencer's internal object order, which is why
+  // a published plan came back shuffled while Workbench showed 1, 2, 3.
+  // lineLead and caps ride along too: without them a plan reopened from the
+  // archive computes lead = 0 and re-derives night from `type`, so its labor
+  // numbers disagreed with the ones the same plan produced at publish time.
+  function _lineOut_(id) {
+    const c = cfgById[id] || {};
+    return { id: id, label: c.label || id, startTime: c.startTime || '', hc: c.hc || 0,
+             type: c.type || 'day', lineLead: Number(c.lineLead) || 0, caps: c.caps || null };
+  }
+  const lines = [];
+  lineConfig.forEach(function(l){ if (lineSeen[l.id]) lines.push(_lineOut_(l.id)); });
+  // Anything published on a line that has since left Line Config still belongs
+  // in the plan — appended rather than dropped.
+  Object.keys(lineSeen).forEach(function(id){ if (!cfgById[id]) lines.push(_lineOut_(id)); });
   const first = rows[0];
   // Round every minute value to 2dp. The sequencer produces raw floats like
   // 656.8597087378641 and the archive stored them verbatim — 17 chars where 6
@@ -2427,7 +3558,7 @@ function saveSkuMove(weekLabel, day, sku, fromLine, toLine, violations, note, po
   const user = getCurrentUser();
   if (!user.isAdmin && !user.isPlanner && !user.canEditRules) throw new Error('Not authorized');
 
-  const overrides = getSection_(STATE_KEYS.overrides) || {};
+  const overrides = stateStoreGet_('overrides');
   if (!overrides[weekLabel]) overrides[weekLabel] = {};
   if (!overrides[weekLabel][day]) overrides[weekLabel][day] = {};
 
@@ -2440,7 +3571,8 @@ function saveSkuMove(weekLabel, day, sku, fromLine, toLine, violations, note, po
     note: note || ''
   };
 
-  setSection_(STATE_KEYS.overrides, overrides);
+  stateStorePut_('overrides', weekLabel, day, overrides[weekLabel][day]);
+  pruneOverridesBeforeCurrentWeek_();
 
   writeSkuMoveLog_({
     email: user.email, weekLabel, day, sku, fromLine, toLine, violations, note
@@ -2453,10 +3585,12 @@ function clearSkuMove(weekLabel, day, sku) {
   const user = getCurrentUser();
   if (!user.isAdmin && !user.isPlanner && !user.canEditRules) throw new Error('Not authorized');
 
-  const overrides = getSection_(STATE_KEYS.overrides) || {};
+  const overrides = stateStoreGet_('overrides');
   if (overrides?.[weekLabel]?.[day]?.[sku]) {
     delete overrides[weekLabel][day][sku];
-    setSection_(STATE_KEYS.overrides, overrides);
+    // An emptied day loses its row rather than keeping an empty object.
+    if (Object.keys(overrides[weekLabel][day]).length) stateStorePut_('overrides', weekLabel, day, overrides[weekLabel][day]);
+    else stateStoreDelete_('overrides', weekLabel, day);
     writeAuditLog_(user.email, 'clear_sku_override', weekLabel, day, sku);
   }
   return { ok: true };
