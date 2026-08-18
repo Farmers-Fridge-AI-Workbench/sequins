@@ -1,20 +1,13 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.117 — 2026-08-17    (pairs with Code.js v0.4.59)
+  Sequins ✨ — Index.html    v0.5.127 — 2026-08-18    (pairs with Code.js v0.4.59)
   Full history: git log.
 
-  v0.5.117 The run-sheet entry fields now save. Everything the floor types —
-           start, end, people, actual units, plus the lead's name and
-           held-over totes — upserts to "Run Sheet Actuals" / "Run Sheet
-           Shift" in the plan archive, debounced 1.5s so a shift of edits
-           isn't a shift of round trips.
-           Each row carries the planned units and tote split beside the
-           actual, so a republish under the day can't retroactively change
-           what a recorded actual is measured against.
-           Recorded values are read back when a line/day is opened, so a
-           tablet picked up mid-shift shows what's already been entered.
-           Save state sits next to the refresh stamp and says so when a save
-           fails — a tablet that has quietly stopped saving is worse than one
-           that admits it.
+  v0.5.127 The grid is inset from the right edge. It wasn't actually clipped,
+           but at full width the right border sat on the boundary of the
+           printable area and read as a cut-off page — not a question you
+           want QA or a USDA inspector asking about a production record.
+           Table and banner now sit at 98% with a wider right page margin, so
+           the table is visibly closed on both sides.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -61,6 +54,72 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .metrics-arrow.collapsed{transform:rotate(-90deg);}
 .metrics-body{overflow:hidden;transition:max-height .28s ease,opacity .2s ease;max-height:800px;opacity:1;}
 .metrics-body.collapsed{max-height:0;opacity:0;}
+/* ─── PRINT (v0.5.123) ──────────────────────────────────────────────────────
+   The floor prints this, and they've read a ruled grid for years. So printing
+   swaps the card list out for a purpose-built table (buildMyLinePrintSheet_)
+   rather than bending card CSS into something table-shaped — the familiar
+   layout is the point, and CSS pushed that far breaks differently in every
+   browser.
+   Black on white throughout: the screen theme is near-black, which is a toner
+   sink and unreadable under fluorescents.                                    */
+.print-only-sheet{display:none;}
+@media print{
+  @page{margin:.4in .5in .4in .4in;size:landscape;}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact;box-shadow:none!important;}
+  html,body{background:#fff!important;height:auto!important;overflow:visible!important;}
+  body{color:#000!important;font-family:var(--sans);font-size:9.5pt;}
+  .shell{display:block!important;height:auto!important;overflow:visible!important;}
+  .topbar,.sidebar,.preview-banner,.nav-spacer{display:none!important;}
+  .main{display:block!important;overflow:visible!important;padding:0!important;}
+  .view{display:none!important;}
+  .view.active{display:block!important;}
+  /* on paper the cards, the header strip and every control give way to the table */
+  .page-header,#myLineContent,#myLineNoData,button,.btn,select,.spinner,
+  .live-dot,.live-label,#syncIndicator{display:none!important;}
+  .print-only-sheet{display:block!important;}
+
+  .ps-top{display:flex;gap:44px;align-items:baseline;font-size:10pt;margin:0 0 10px;}
+  .ps-top b{font-weight:700;}
+  .ps-rule{display:inline-block;width:210px;border-bottom:1px solid #000;}
+  .ps-date{border-bottom:1px solid #000;padding:0 26px 0 4px;font-weight:700;}
+  .ps-line{border:1px solid #000;border-bottom:none;text-align:center;font-weight:700;
+           font-size:11pt;padding:3px;letter-spacing:.04em;width:98%;box-sizing:border-box;}
+  /* one line per page, so a page can be torn off and handed to a line without
+     the next line's plan riding along with it */
+  .ps-page{page-break-after:always;break-after:page;}
+  .ps-page:last-child{page-break-after:auto;break-after:auto;}
+
+  /* 98%, not 100% — at full width the right border lands on the edge of the
+     printable area and reads as a page that's been cut off. The inset makes
+     the table visibly closed. */
+  .ps-table{width:98%;border-collapse:collapse;table-layout:fixed;}
+  .ps-table th,.ps-table td{border:1px solid #000;padding:3px 5px;vertical-align:middle;
+                            font-size:8.5pt;line-height:1.25;word-wrap:break-word;}
+  .ps-table th{font-weight:700;text-align:center;font-size:8pt;hyphens:none;word-break:keep-all;}
+  .ps-table tr{page-break-inside:avoid;break-inside:avoid;}
+  .ps-table thead{display:table-header-group;}   /* headers repeat on page 2+ */
+  .ps-table col{}
+  .ps-table th:nth-child(1),.ps-table td:nth-child(1){width:6%;}
+  .ps-table th:nth-child(2),.ps-table td:nth-child(2){width:19%;}
+  .ps-table th:nth-child(3),.ps-table td:nth-child(3){width:11%;}
+  .ps-table th:nth-child(4),.ps-table td:nth-child(4){width:8%;}
+  .ps-table th:nth-child(5),.ps-table td:nth-child(5){width:8%;}
+  .ps-table th:nth-child(6),.ps-table td:nth-child(6){width:7%;}
+  .ps-table th:nth-child(7),.ps-table td:nth-child(7){width:9%;}
+  .ps-table th:nth-child(8),.ps-table td:nth-child(8){width:7%;}
+  .ps-table th:nth-child(9),.ps-table td:nth-child(9){width:8%;}
+  .ps-table th:nth-child(10),.ps-table td:nth-child(10){width:8%;}
+  .ps-table th:nth-child(11),.ps-table td:nth-child(11){width:9%;}
+  /* write-in cells: taller, so there's room for a pen */
+  .ps-w{height:26px;}
+  .ps-c{text-align:center;}
+  .ps-n{text-align:center;font-weight:700;font-variant-numeric:tabular-nums;}
+  .ps-sku{font-weight:700;}
+  .ps-alg{font-size:8pt;}
+  .ps-flag{border:1px solid #000;padding:0 3px;font-size:7pt;font-weight:700;}
+  .ps-break td{text-align:center;font-weight:700;letter-spacing:.06em;font-size:8.5pt;}
+}
+.ml-writebox{border:1px solid var(--border2);border-radius:5px;height:22px;}
 .ml-runhdr{display:flex;align-items:flex-end;gap:26px;flex-wrap:wrap;padding:0 0 2px 26px;border-left:1px solid var(--border);}
 .ml-runhdr.stale{border-left-color:rgba(245,158,11,.5);}
 .ml-seq{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--muted);background:var(--surface2);border:1px solid var(--border2);border-radius:5px;min-width:26px;text-align:center;padding:2px 6px;flex:0 0 auto;}
@@ -262,8 +321,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
       <div id="legendBody" style="display:flex;flex-direction:column;gap:5px;padding:4px 4px 8px;max-height:900px;overflow:hidden;transition:max-height .25s ease,opacity .2s;opacity:1">
         <div class="legend-row"><span class="sku-tag tag-usda">USDA</span><span class="legend-desc">Needs a USDA-approved line</span></div>
         <div class="legend-row"><span class="legend-desc" style="opacity:.75">Food-contact class and line capability decide routing; category only prefers a home line.</span></div>
-        <div class="legend-row"><span class="sku-tag tag-wrap">wrap</span><span class="legend-desc">Wrap — home line LINE-3, not a lock</span></div>
-        <div class="legend-row"><span class="sku-tag tag-sand">sand</span><span class="legend-desc">Sandwich — home line LINE-2, not a lock</span></div>
+        <div class="legend-row"><span class="sku-tag tag-wrap">wrap</span><span class="legend-desc" id="legendWrap">Wrap — soft home line</span></div>
+        <div class="legend-row"><span class="sku-tag tag-sand">sand</span><span class="legend-desc" id="legendSand">Sandwich — soft home line</span></div>
         <div class="legend-row"><span class="sku-tag" style="background:rgba(250,204,21,.15);color:#facc15">&#9889;</span><span class="legend-desc">Off its usual home line</span></div>
         <div class="legend-row"><span class="sku-tag" style="background:rgba(45,212,191,.15);color:var(--teal)">&#9875; seed</span><span class="legend-desc">Starts the line; chain builds on it</span></div>
         <div class="legend-row"><span class="preproc-badge" style="width:14px;height:14px;font-size:8px;flex-shrink:0">P</span><span class="legend-desc">Pre-processed — runs first</span></div>
@@ -273,7 +332,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         <div class="legend-row"><span class="mode-badge mode-actual" style="font-size:9px;padding:1px 6px;flex-shrink:0">actual</span><span class="legend-desc">Confirmed demand</span></div>
         <div class="legend-row"><span class="mode-badge mode-forecast" style="font-size:9px;padding:1px 6px;flex-shrink:0">forecast</span><span class="legend-desc">Projected demand</span></div>
         <div class="legend-row"><div class="live-dot" style="width:7px;height:7px;flex-shrink:0;margin:0 1px"></div><span class="legend-desc">Live — polls every 8s</span></div>
-        <div class="legend-row" style="margin-top:6px;opacity:.55"><span class="legend-desc" style="font-family:var(--mono);font-size:10px" title="Which build the browser is actually running. If this does not match the file you pushed, the deployment is serving an older version.">Index v0.5.111</span></div>
+        <div class="legend-row" style="margin-top:6px;opacity:.55"><span class="legend-desc" id="legendVersion" style="font-family:var(--mono);font-size:10px" title="Which build the browser is actually running. If this does not match the file you pushed, the deployment is serving an older version."></span></div>
       </div>
     </div>
     <div style="flex:1"></div>
@@ -382,6 +441,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         <div style="display:flex;gap:8px;align-items:center">
           <select class="form-select" id="myLineSel" onchange="onMyLineChange()" style="font-size:13px;padding:8px 10px"></select>
           <button class="btn btn-sm metrics-toggle-row" id="myLineEntryBtn" onclick="toggleMyLineEntry()" title="Show the Start Time / End Time / # People / Actual Units columns. Nothing is saved yet.">Entry <span class="metrics-arrow collapsed" id="myLineEntryArrow" style="transform:rotate(-90deg)">&#9662;</span></button>
+          <button class="btn btn-sm" onclick="printMyLine()" title="Print this line's run sheet. Comes out black and white.">&#128424; Print</button>
+          <button class="btn btn-sm" onclick="printAllMyLines()" title="Print every line's run sheet, one line per page.">&#128424; Print all</button>
           <button class="btn btn-teal btn-sm" onclick="refreshMyLine(this)">↻ Refresh</button>
         </div>
       </div>
@@ -394,6 +455,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
       <div id="myLineNoPlan" class="card" style="display:none;border-color:rgba(245,158,11,.25)">
         <div style="text-align:center;padding:32px"><span style="font-family:var(--mono);font-size:12px;color:var(--muted)">No published plan for today yet.</span></div>
       </div>
+      <div id="myLinePrintSheet" class="print-only-sheet"></div>
       <div id="myLineContent" style="display:none">
         <div id="myLineCurfew"></div>
         <div id="myLineList" style="display:flex;flex-direction:column;gap:10px"></div>
@@ -3072,7 +3134,7 @@ function submitAddLine(){
   google.script.run.withSuccessHandler(function(){
     STATE.lineConfig=lines;
     if(btn){btn.disabled=false;btn.textContent=orig||'Add line';}
-    renderLineConfig();renderSequence();renderWorkbench();renderDayStrip('seqDayStrip');renderDayStrip('wbDayStrip');
+    renderLineConfig();renderSequence();renderWorkbench();renderDayStrip('seqDayStrip');renderDayStrip('wbDayStrip');renderLegend();
     toggleAddLine(false);
     var el=document.getElementById('lineConfigStatus');
     if(el)el.innerHTML='<div class="status status-ok">\u2713 Added '+line.id+' \u2014 '+(runDays.length?('runs '+runDays.join(', ')):'no run days yet, so it stays out of every plan until you check one')+'.</div>';
@@ -3113,6 +3175,30 @@ function migrateLineCaps(){
   }).withFailureHandler(function(err){
     if(el)el.innerHTML='<div class="status status-err">⚠ Anchor FAILED, nothing saved: '+err.message+'</div>';
   }).saveLineConfig(lines);
+}
+// ─── LEGEND (v0.5.118) ───────────────────────────────────────────────────────
+// The wrap/sand rows used to name LINE-3 and LINE-2 in static markup. Those
+// stopped being real line rules when FC-W/FC-S took over routing — they're a
+// soft per-category home line now, set in the Category home lines card and
+// changeable without touching this file. Naming them in hardcoded text meant
+// the sidebar could contradict the configuration it's describing, which is
+// worse than saying less. These read the live config instead.
+//
+// The version stamp had drifted six versions behind (v0.5.111 while the file
+// header said v0.5.117) because it was a hand-typed string in the markup. It
+// now comes from APP_VERSION, one place, updated with the header.
+var APP_VERSION='v0.5.127';
+function renderLegend(){
+  var v=document.getElementById('legendVersion');
+  if(v)v.textContent='Index '+APP_VERSION;
+  var hl=getHomeLines(),w=document.getElementById('legendWrap'),sd=document.getElementById('legendSand');
+  function txt(kind,pool){
+    var lines=(hl&&hl[pool])||[];
+    if(!lines.length)return kind+' \u2014 no home line set';
+    return kind+' \u2014 prefers '+(Array.isArray(lines)?lines.join(', '):String(lines))+', not a lock';
+  }
+  if(w)w.textContent=txt('Wrap','wrap');
+  if(sd)sd.textContent=txt('Sandwich','sandwich');
 }
 function renderRules(){
   var rules=getRules(),ce=!!window._canEditRules,el=document.getElementById('rulesBody');if(!el)return;
@@ -4508,7 +4594,7 @@ function switchView(name,btn){
   var mainEl=document.querySelector('.main');if(mainEl)mainEl.scrollTop=0;
   if(name==='demand'){loadForecastWeeks();renderLoadedDemand();}
   if(name==='skus')renderSkuLibrary();
-  if(name==='lines'){renderLineConfig();renderRules();renderRulesAccess();}
+  if(name==='lines'){renderLineConfig();renderRules();renderRulesAccess();renderLegend();}
   if(name==='users')renderUsers();
   if(name==='sequence'){document.querySelector('.main').classList.remove('wb-active');renderSequence();}
   if(name==='workbench'){document.querySelector('.main').classList.add('wb-active');renderWorkbench();}
@@ -4705,7 +4791,9 @@ function renderMyLine(){
   _mlSaveCtx={week:wd.week,day:wd.day,date:pub.date||'',room:mlLineRoom_(lineId,line),
               line:lineId,lineLabel:(line&&line.label)||lineId,slots:(_lsCtx&&_lsCtx.slots)||[]};
   var _fetchKey=(pub.date||wd.day)+'|'+lineId;
-  if(pub.date&&_mlFetched!==_fetchKey){_mlFetched=_fetchKey;mlLoadActuals_(_mlSaveCtx);}
+  if(pub.date&&mlCanWriteActuals_()&&_mlFetched!==_fetchKey){_mlFetched=_fetchKey;mlLoadActuals_(_mlSaveCtx);}
+  var _eb=document.getElementById('myLineEntryBtn');
+  if(_eb)_eb.style.display=mlCanWriteActuals_()?'':'none';
   var ls=pub.lineState&&pub.lineState[lineId];
   var slots=(ls&&ls.slots)||[];
   var listEl=document.getElementById('myLineList');
@@ -4760,6 +4848,7 @@ function renderMyLine(){
   var timeline=slots.map(function(j){return{t:j.startClockMin,kind:'job',d:j};})
     .concat(breaks.map(function(b){return{t:b.startClockMin,kind:'break',d:b};}))
     .sort(function(a,b){return a.t-b.t;});
+  buildMyLinePrintSheet_(pub,wd,lineId,line,timeline,lib);
   var _seqN=0;
   listEl.innerHTML=timeline.map(function(item){
     if(item.kind==='break'){
@@ -4829,6 +4918,7 @@ function mlEntryVal_(lineId,sku,field){
 }
 function mlSetEntry(lineId,sku,field,val){_mlEntry[lineId+'|'+sku+'|'+field]=val;mlQueueSave_();}
 function mlEntryBlock_(lineId,job){
+  if(!mlCanWriteActuals_())return'';
   var sku=(job.sku||''),li=lineId.replace(/'/g,"\\'"),sk=sku.replace(/'/g,"\\'");
   function f(label,field,ph){
     return'<div class="ml-f"><label>'+label+'</label>'
@@ -4854,7 +4944,12 @@ function mlEntryBlock_(lineId,job){
 // Failures are surfaced, not swallowed: a tablet that has silently stopped
 // saving is worse than one that says so, because the lead keeps typing into it.
 var _mlSaveTimer=null,_mlSaveCtx=null,_mlFetched=null;
+// Mirrors the server gate in saveRunSheetActuals: admins and floor viewers.
+// Anyone else never sees the Entry control at all — a field that refuses to
+// save is a worse answer than no field, and My Line is visible to planners.
+function mlCanWriteActuals_(){return !!(CURRENT_USER&&(CURRENT_USER.isAdmin||CURRENT_USER.isFloorViewer));}
 function mlQueueSave_(){
+  if(!mlCanWriteActuals_())return;
   if(_mlSaveTimer)clearTimeout(_mlSaveTimer);
   mlSaveStatus_('pending');
   _mlSaveTimer=setTimeout(mlFlushSave_,1500);
@@ -4905,7 +5000,105 @@ function mlLoadActuals_(ctx){
     renderMyLine();
   }).withFailureHandler(function(){}).getRunSheetActuals(ctx.date,ctx.line);
 }
+// Ctrl+P isn't reachable on a phone, and the floor is on phones and tablets.
+// window.print() is what the OS share/print sheet hangs off on both iOS and
+// Android, so this is the same action, just findable.
+// ─── PRINT SHEET (v0.5.123) ──────────────────────────────────────────────────
+// Screen and paper want different shapes. Cards work on a tablet; the floor
+// has read a ruled grid for years and a page of bordered cards doesn't read
+// like the thing they know. So print gets its own DOM — a table built to
+// match the run sheet's layout — rather than CSS bent over the card list.
+//
+// Start Time / End Time / # People / Total Units are NOT here. They aren't in
+// use yet, which is why they're hidden on screen; printing empty boxes for
+// them spends the page on nothing. That's the block to revisit when actuals
+// go live.
+//
+// Empty sequence rows aren't padded out to 14 either — the run only runs as
+// far as it runs.
+function mlPrintBlock_(pub,wd,lineId,line,timeline,lib){
+  var d=pub.date||'';
+  var dateTxt=d?new Date(d+'T12:00:00').toLocaleDateString('en-US',{month:'numeric',day:'numeric',year:'numeric'}):(wd.day||'');
+  var room=mlLineRoom_(lineId,line);
+  var head='<div class="ps-top">'
+    +'<span><b>Assembly:</b> '+escHtml(room||'\u2014')+'</span>'
+    +'<span><b>Name:</b> <span class="ps-rule"></span></span>'
+    +'<span><b>Date:</b> <span class="ps-date">'+escHtml(dateTxt)+'</span></span>'
+    +'</div>';
+  // Start Time / End Time / # People / Total Units are blank on purpose. The
+  // floor writes these in by hand — confirmed with Samad — so they print as
+  // empty cells in the same position the 2.0 sheet puts them, between
+  // Allergen and Plan. They are NOT screen inputs; nobody enters them
+  // electronically yet.
+  var cols='<tr><th>Sequence</th><th>Product</th><th>Allergen</th>'
+    +'<th>Start Time</th><th>End Time</th><th># People</th><th>Total Units</th>'
+    +'<th>Plan</th><th># Full Totes</th><th># Units in Partial Tote</th>'
+    +'<th>Label Number-Version</th></tr>';
+  var n=0,body='';
+  timeline.forEach(function(item){
+    if(item.kind==='break'){
+      var b=item.d;
+      body+='<tr class="ps-break"><td></td><td colspan="10">'+escHtml(b.label)+' BREAK &nbsp;&middot;&nbsp; '
+        +escHtml(fmtClock(b.startClockMin))+' \u2013 '+escHtml(fmtClock(b.endClockMin))+'</td></tr>';
+      return;
+    }
+    var job=item.d;n++;
+    var meta=lib[(job.sku||'').toUpperCase()]||{};
+    var t=mlToteSplit_(job.qty,parseFloat(meta.unitsPerTote));
+    var lv=job.labelVersion||meta.labelNumberVersion||'';
+    var alg=job.allergenUnknown?'NO ALLERGEN DATA'
+      :((job.allergenSet&&job.allergenSet.length)?job.allergenSet.join(', '):'None');
+    body+='<tr>'
+      +'<td class="ps-c">'+n+'</td>'
+      +'<td class="ps-sku">'+escHtml(job.sku||'')+(job.isUSDA?' <span class="ps-flag">USDA</span>':'')+'</td>'
+      +'<td class="ps-alg">'+escHtml(alg)+'</td>'
+      +'<td class="ps-w"></td><td class="ps-w"></td><td class="ps-w"></td><td class="ps-w"></td>'
+      +'<td class="ps-n">'+fmtUnits(job.qty)+'</td>'
+      +'<td class="ps-n">'+(t?t.full:'\u2014')+'</td>'
+      +'<td class="ps-n">'+(t?t.part:'\u2014')+'</td>'
+      +'<td class="ps-c">'+(lv==='NO ACTIVE LABEL'?'<b>NO ACTIVE LABEL</b>':escHtml(lv||'\u2014'))+'</td>'
+      +'</tr>';
+  });
+  if(!n&&!body)return'';
+  return'<div class="ps-page">'+head
+    +'<div class="ps-line">'+escHtml((line&&line.label)||lineId)+'</div>'
+    +'<table class="ps-table"><thead>'+cols+'</thead><tbody>'+body+'</tbody></table></div>';
+}
+
+// Rebuilds a line's timeline from the snapshot. renderMyLine does this inline
+// for the line on screen; print-all needs it for lines nobody has selected.
+function mlTimelineFor_(pub,lineId){
+  var ls=(pub.lineState||{})[lineId]||{};
+  return (ls.slots||[]).map(function(j){return{t:j.startClockMin,kind:'job',d:j};})
+    .concat((ls.breaks||[]).map(function(b){return{t:b.startClockMin,kind:'break',d:b};}))
+    .sort(function(a,b){return a.t-b.t;});
+}
+
+function buildMyLinePrintSheet_(pub,wd,lineId,line,timeline,lib){
+  var el=document.getElementById('myLinePrintSheet');if(!el)return;
+  el.innerHTML=mlPrintBlock_(pub,wd,lineId,line,timeline,lib);
+}
+
+// Print all lines, one per page. Renders every line into the print container,
+// prints, then puts the single-line sheet back — so what's on screen and what
+// the next Print produces are never out of step with each other.
+function printAllMyLines(){
+  var el=document.getElementById('myLinePrintSheet');if(!el)return;
+  var wd=myLineTodayWeekDay_();if(!wd)return;
+  var pub=STATE.publishedPlans&&STATE.publishedPlans[wd.week]&&STATE.publishedPlans[wd.week][wd.day];
+  if(!pub)return;
+  var lib=STATE.skuLibrary||{},prior=el.innerHTML,out='';
+  (pub.lines||[]).forEach(function(l){
+    out+=mlPrintBlock_(pub,wd,l.id,l,mlTimelineFor_(pub,l.id),lib);
+  });
+  if(!out){el.innerHTML=prior;return;}
+  el.innerHTML=out;
+  window.print();
+  el.innerHTML=prior;
+}
+function printMyLine(){window.print();}
 function toggleMyLineEntry(){
+  if(!mlCanWriteActuals_())return;
   _mlEntryOpen=!_mlEntryOpen;
   var els=document.querySelectorAll('#myLineList .ml-entry');
   for(var i=0;i<els.length;i++)els[i].classList.toggle('collapsed',!_mlEntryOpen);
@@ -4989,18 +5182,22 @@ function renderMyLineRunHeader_(pub,wd,lineId,line){
   el.innerHTML='<div class="ml-runhdr'+(stale?' stale':'')+'">'
     +fact('DATE',escHtml(dateTxt),stale?'var(--amber)':'var(--teal)',
         stale?'<div style="font-family:var(--mono);font-size:10px;color:var(--amber);margin-top:1px;white-space:nowrap">\u26a0 not today\u2019s date \u2014 refresh</div>':'')
-    +fact('ASSEMBLY',room?escHtml(room):'<span style="color:var(--muted);font-weight:400">\u2014 set in Line Config</span>','var(--text)')
+    // An unset room is a dash. Nobody needs to be told where to go and fix it
+    // — an admin already knows, and everyone else can't.
+    +fact('ASSEMBLY',room?escHtml(room):'<span style="color:var(--muted);font-weight:400">\u2014</span>','var(--text)')
     +(function(){
       var t=mlToteTotals_(pub,STATE.skuLibrary||{},lineId);
       var warn=t.unknown?'<div style="font-family:var(--mono);font-size:10px;color:var(--amber);margin-top:1px;white-space:nowrap">\u26a0 '+t.unknown+' SKU'+(t.unknown===1?'':'s')+' with no tote size</div>':'';
       return fact('FULL TOTES','<span title="This line">'+t.mine+'</span><span style="color:var(--muted);font-weight:400"> / '+t.day+' day</span>','var(--text)',warn);
     })()
-    +'<div class="ml-f"><label>NAME</label>'
-      +'<input type="text" style="width:150px;text-align:left;padding:5px 8px;font-size:12px" placeholder="who\u2019s running this line" '
-      +'value="'+escHtml(mlHeaderVal_(nameKey))+'" oninput="mlSetHeader(\''+nameKey.replace(/'/g,"\\'")+'\',this.value)"></div>'
-    +'<div class="ml-f"><label>HELD-OVER TOTES</label>'
-      +'<input type="text" style="width:92px;padding:5px 8px;font-size:12px" placeholder="\u2014" '
-      +'value="'+escHtml(mlHeaderVal_(toteKey))+'" oninput="mlSetHeader(\''+toteKey.replace(/'/g,"\\'")+'\',this.value)"></div>'
+    +(mlCanWriteActuals_()
+      ?('<div class="ml-f"><label>NAME</label>'
+        +'<input type="text" style="width:150px;text-align:left;padding:5px 8px;font-size:12px" placeholder="who\u2019s running this line" '
+        +'value="'+escHtml(mlHeaderVal_(nameKey))+'" oninput="mlSetHeader(\''+nameKey.replace(/'/g,"\\'")+'\',this.value)"></div>'
+        +'<div class="ml-f"><label>HELD-OVER TOTES</label>'
+        +'<input type="text" style="width:92px;padding:5px 8px;font-size:12px" placeholder="\u2014" '
+        +'value="'+escHtml(mlHeaderVal_(toteKey))+'" oninput="mlSetHeader(\''+toteKey.replace(/'/g,"\\'")+'\',this.value)"></div>')
+      :'')
     +'</div>';
 }
 
@@ -5190,6 +5387,7 @@ window.onload=function(){
     // it self-gates on isAdmin inside checkPushedDemand.
     checkPushedDemand(false);
     checkDemandMigration();
+    renderLegend();  // sidebar is always visible, so it can't wait for a view switch
   }).withFailureHandler(function(err){document.getElementById('seqNoDataSub').textContent='Error loading state: '+err.message;}).getState();
 
   var today=new Date(),plus2=new Date(today);plus2.setDate(plus2.getDate()+2);
