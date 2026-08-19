@@ -177,9 +177,12 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .tag-sand{background:rgba(34,197,94,.15);color:var(--green);}
 .preproc-badge{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:#facc15;color:#000;font-size:9px;font-weight:700;flex-shrink:0;}
 .sb-only-badge{font-size:9px;font-family:var(--mono);padding:1px 6px;border-radius:3px;background:var(--amber-dim);color:var(--amber);white-space:nowrap;}
-.sb-daybox{display:flex;gap:6px;flex-wrap:wrap;padding:6px 0 2px 22px;flex-basis:100%;width:100%;}
-.sb-daybox label{display:flex;align-items:center;gap:3px;font-family:var(--mono);font-size:10px;color:var(--muted);cursor:pointer;}
-.sb-daybox input{accent-color:var(--amber);cursor:pointer;}
+.sb-linegrid{border-collapse:collapse;font-family:var(--mono);font-size:11px;}
+.sb-linegrid th{text-align:center;padding:4px 10px;color:var(--muted);font-weight:500;font-size:10px;text-transform:uppercase;letter-spacing:.04em;}
+.sb-linegrid th:first-child{text-align:left;}
+.sb-linegrid td{padding:4px 10px;text-align:center;border-top:1px solid var(--border);white-space:nowrap;}
+.sb-linegrid td:first-child{text-align:left;color:var(--text);}
+.sb-linegrid input{accent-color:var(--teal);cursor:pointer;}
 .line-empty{color:var(--muted);font-family:var(--mono);font-size:11px;padding:8px 0;text-align:center;}
 .data-table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px;}
 .data-table th{text-align:left;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;padding:6px 10px;border-bottom:.5px solid var(--border2);font-weight:400;}
@@ -589,7 +592,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         </div>
         <div class="card">
           <div class="card-title">5 · Line availability</div>
-          <div class="sb-note" style="margin-bottom:10px">Untick a line to model it being down.</div>
+          <div class="sb-note" style="margin-bottom:10px">Tick the days each line runs. A row with nothing ticked is that line down for the whole run.</div>
           <div id="sbLines" class="sb-lines"></div>
         </div>
 
@@ -3239,7 +3242,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.129';
+var APP_VERSION='v0.5.130';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -3864,20 +3867,31 @@ function sbLineDays(c,l){
   var map=(c&&c.lineDays&&c.lineDays[l.id])||null;
   return map||l.days||{};
 }
-function sbLineRunsOn(c,l,dayShort){var m=sbLineDays(c,l);return !!(m&&m[dayShort]);}
+// excludedLines is the old whole-line kill and is still honoured on read, so a
+// sandbox saved before the matrix existed opens showing that line's row empty.
+function sbLineRunsOn(c,l,dayShort){
+  if(c&&c.excludedLines&&c.excludedLines.indexOf(l.id)!==-1)return false;
+  var m=sbLineDays(c,l);return !!(m&&m[dayShort]);
+}
 function toggleSbLineDay(lineId,dayShort){
   var c=sbCurrent();if(!c)return;
   if(!c.lineDays)c.lineDays={};
   if(!c.lineDays[lineId]){
     // Seed from the line's configured days, so toggling one day doesn't
-    // silently decide the other six.
+    // silently decide the other six. A line already killed via excludedLines
+    // seeds empty — that is what the screen was showing.
     var src=null,cfg=sbAllLines_();
     cfg.forEach(function(l){if(l.id===lineId)src=l;});
     var seed={},base=(src&&src.days)||{};
-    ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach(function(d){seed[d]=!!base[d];});
+    var killed=(c.excludedLines||[]).indexOf(lineId)!==-1;
+    ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach(function(d){seed[d]=killed?false:!!base[d];});
     c.lineDays[lineId]=seed;
   }
   c.lineDays[lineId][dayShort]=!c.lineDays[lineId][dayShort];
+  // Ticking any day has to release the legacy kill, or the matrix and the
+  // stored list would disagree about the same line.
+  var i=(c.excludedLines||[]).indexOf(lineId);
+  if(i!==-1)c.excludedLines.splice(i,1);
   sbPersist();renderSandboxLines();
 }
 // The line config this sandbox runs against: the real one, with each
@@ -3887,10 +3901,11 @@ function toggleSbLineDay(lineId,dayShort){
 function sbLineConfig_(c){
   var cfg=sbAllLines_();
   return cfg.map(function(l){
-    if(!isSandboxOnlyLine_(l))return l;
+    var m=(c&&c.lineDays&&c.lineDays[l.id])||null;
+    if(!m)return l;
     var copy={},k;
     for(k in l){if(Object.prototype.hasOwnProperty.call(l,k))copy[k]=l[k];}
-    copy.days=sbLineDays(c,l);
+    copy.days=m;
     return copy;
   });
 }
@@ -4373,47 +4388,44 @@ function renderSandboxLines(){
   el.innerHTML='';
   // Union of lines running on ANY selected day — a line configured Mon-Thu only
   // still belongs here when Monday is in scope.
-  var cfg=sbAllLines_(),seen={},list=[];
-  var days=sbSelectedDays();
-  days.forEach(function(d){
-    var sd=DAY_SHORT[d];
-    cfg.forEach(function(l){if(!isSandboxOnlyLine_(l)&&l.days&&l.days[sd]&&!seen[l.id]){seen[l.id]=true;list.push(l);}});
-  });
-  // Sandbox-only lines are always offered while any day is in scope. Their days
-  // are chosen right here, so global config must not gate them out — a line
-  // staged with no days checked would otherwise be unreachable.
-  if(days.length){
-    cfg.forEach(function(l){if(isSandboxOnlyLine_(l)&&!seen[l.id]){seen[l.id]=true;list.push(l);}});
+  var cfg=sbAllLines_(),days=sbSelectedDays();
+  if(!days.length){
+    var n=document.createElement('div');n.className='sb-note';
+    n.textContent='Select at least one day above to see which lines run.';
+    el.appendChild(n);return;
   }
-  list.forEach(function(l){
-    var on=c.excludedLines.indexOf(l.id)===-1;
-    var chip=document.createElement('div');chip.className='sb-linechip'+(on?' on':'');
-    var cb=document.createElement('input');cb.type='checkbox';cb.checked=on;
-    chip.appendChild(cb);chip.appendChild(document.createTextNode(l.label||l.id));
+  // v0.5.130: a line-by-day matrix, same shape as Line Config's day columns.
+  // The week runs all seven days but not every line runs every day, so a single
+  // checkbox per line could never express the real question — "LINE-7 on Monday
+  // only" has no answer in a one-per-line control. A row with nothing ticked is
+  // that line down for the whole run, which is what the old chip meant.
+  var tbl=document.createElement('table');tbl.className='sb-linegrid';
+  var thead=document.createElement('thead'),hr=document.createElement('tr');
+  var th0=document.createElement('th');th0.appendChild(document.createTextNode('Line'));hr.appendChild(th0);
+  days.forEach(function(d){
+    var th=document.createElement('th');th.appendChild(document.createTextNode(DAY_SHORT[d]));hr.appendChild(th);
+  });
+  thead.appendChild(hr);tbl.appendChild(thead);
+  var tb=document.createElement('tbody');
+  cfg.forEach(function(l){
+    var tr=document.createElement('tr'),td=document.createElement('td');
+    td.appendChild(document.createTextNode(l.label||l.id));
     if(isSandboxOnlyLine_(l)){
       var bdg=document.createElement('span');bdg.className='sb-only-badge';
       bdg.style.marginLeft='6px';bdg.appendChild(document.createTextNode('sandbox only'));
-      chip.appendChild(bdg);
+      td.appendChild(bdg);
     }
-    chip.addEventListener('click',function(e){e.preventDefault();toggleSbLine(l.id);});
-    el.appendChild(chip);
-    if(isSandboxOnlyLine_(l)&&on)el.appendChild(buildSbDayBox_(c,l,days));
+    tr.appendChild(td);
+    days.forEach(function(d){
+      var sd=DAY_SHORT[d],cell=document.createElement('td');
+      var cb=document.createElement('input');cb.type='checkbox';
+      cb.checked=sbLineRunsOn(c,l,sd);
+      cb.addEventListener('change',function(){toggleSbLineDay(l.id,sd);});
+      cell.appendChild(cb);tr.appendChild(cell);
+    });
+    tb.appendChild(tr);
   });
-  if(!list.length){var n=document.createElement('div');n.className='sb-note';n.textContent='Select at least one day above to see which lines run.';el.appendChild(n);}
-}
-// Per-day picker for one sandbox-only line, limited to the days this sandbox is
-// actually modelling — offering Saturday when Saturday isn't in scope is noise.
-function buildSbDayBox_(c,l,days){
-  var box=document.createElement('div');box.className='sb-daybox';
-  days.forEach(function(d){
-    var sd=DAY_SHORT[d];
-    var lab=document.createElement('label');
-    var cb=document.createElement('input');cb.type='checkbox';cb.checked=sbLineRunsOn(c,l,sd);
-    cb.addEventListener('change',function(){toggleSbLineDay(l.id,sd);});
-    lab.appendChild(cb);lab.appendChild(document.createTextNode(sd));
-    box.appendChild(lab);
-  });
-  return box;
+  tbl.appendChild(tb);el.appendChild(tbl);
 }
 
 // ── the run ────────────────────────────────────────────────────────────────
