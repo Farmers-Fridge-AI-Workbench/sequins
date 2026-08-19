@@ -1,5 +1,5 @@
 /**
- * Sequins ✨ — Code.js    v0.4.63 — 2026-08-19    (pairs with Index.html v0.5.131)
+ * Sequins ✨ — Code.js    v0.4.64 — 2026-08-19    (pairs with Index.html v0.5.132)
  * Full history: git log.
  *
  * v0.4.61  Sandbox-only lines move out of stored Line Config and into a code
@@ -78,6 +78,22 @@ const PLAN_ARCHIVE_TAB      = 'Published Plans';
 const RUN_ACTUALS_TAB       = 'Run Sheet Actuals';  // same spreadsheet as PLAN_ARCHIVE_SHEET_ID
 const RUN_SHIFT_TAB         = 'Run Sheet Shift';    // same spreadsheet as PLAN_ARCHIVE_SHEET_ID
 const SANDBOX_TAB           = 'Sandboxes';  // same spreadsheet — see SANDBOXES below
+// ─── CONFIG MIRROR (v0.4.64) ─────────────────────────────────────────────────
+// SKU Library and Line Config are the only Sequins data that lived nowhere but
+// Script Properties — the storage with a hard ceiling that fails silently. Every
+// save now also writes a flat copy here, so the ruleset is readable outside the
+// tool, survives a properties loss, and is joinable in Snowflake alongside the
+// published plans.
+//
+// SNAPSHOT, not history: each write replaces the tab's contents, so what you
+// read is always current. Signed off explicitly — this is the one place the
+// no-automatic-deletion rule is waived, and only because these tabs are a
+// derived mirror, never the record. The record is still Script Properties, and
+// the audit log still says who saved when.
+const SKU_LIB_MIRROR_TAB    = 'SKU Library';   // same spreadsheet
+const LINE_CFG_MIRROR_TAB   = 'Line Config';   // same spreadsheet
+const SKU_LIB_MIRROR_HEADER = ['SKU','Active','Pending','Category','FcClass','PackageType','UnitsPerTote','UPM','Allergens','LabelNumberVersion','LinesSunTh','LinesFriSat','FriSatOverride','UsdaPairedSku','Capper','NightShift','PreProcessed','UpdatedAt','UpdatedBy'];
+const LINE_CFG_MIRROR_HEADER = ['LineId','Label','Type','Room','HC','LineLead','Pool','StartTime','SandboxOnly','CapCapper','CapSmallCup','CapUsdaApproved','CapNight','Mon','Tue','Wed','Thu','Fri','Sat','Sun','UpdatedAt','UpdatedBy'];
 const DEMAND_ARCHIVE_TAB    = 'Demand Archive';  // same spreadsheet — see ARCHIVE OLD DEMAND
 const DEMAND_STORE_TAB     = 'Demand Store';    // same spreadsheet — see DEMAND STORE below
 const DEMAND_STORE_HEADER  = ['Week','Day','Payload','History','UpdatedAt'];
@@ -1735,6 +1751,7 @@ function saveSkuLibrary(library) {
   const user = getCurrentUser();
   if (!user.isAdmin) throw new Error('Not authorized');
   setSection_(STATE_KEYS.skuLibrary, library);
+  mirrorConfigSafely_('sku', library, user.email);
   return { ok: true };
 }
 
@@ -2109,11 +2126,82 @@ function runAllergenSyncNow() {
 }
 
 // ─── LINE CONFIG + RULES ──────────────────────────────────────────────────────
+// ─── CONFIG MIRROR ───────────────────────────────────────────────────────────
+// Rewrite one mirror tab from scratch: clear the old body, write header + rows
+// in a single setValues. One block write, per the no-setValue-in-a-loop rule.
+// UpdatedAt is forced to text so the ISO stamp doesn't re-serialize through the
+// spreadsheet timezone on the way in.
+function writeConfigMirror_(tabName, header, rows) {
+  const ss = SpreadsheetApp.openById(PLAN_ARCHIVE_SHEET_ID);
+  let sheet = ss.getSheetByName(tabName);
+  if (!sheet) {
+    sheet = ss.insertSheet(tabName);
+    sheet.setFrozenRows(1);
+    Logger.log('writeConfigMirror_: created "' + tabName + '".');
+  }
+  const last = sheet.getLastRow();
+  if (last > 0) sheet.getRange(1, 1, last, sheet.getMaxColumns()).clearContent();
+  const block = [header].concat(rows);
+  sheet.getRange(1, 1, block.length, header.length).setValues(block);
+  const stampCol = header.indexOf('UpdatedAt') + 1;
+  if (stampCol > 0 && block.length > 1) {
+    sheet.getRange(2, stampCol, block.length - 1, 1).setNumberFormat('@');
+  }
+  return rows.length;
+}
+
+function mirrorSkuLibrary_(library, email) {
+  const at = new Date().toISOString();
+  const keys = Object.keys(library || {}).sort();
+  const rows = keys.map(function (k) {
+    const s = library[k] || {};
+    return [
+      k, s.active !== false, !!s.pending, s.category || '', s.fcClass || '',
+      s.packageType || '', s.unitsPerTote || '', s.upm || '', s.allergens || '',
+      s.labelNumberVersion || '',
+      (s.admissibleLines || []).join(', '),
+      (s.admissibleLinesFriSat || []).join(', '),
+      !!s.friSatOverride, s.usdaPairedSku || '',
+      !!s.capper, !!s.nightShift, !!s.preProcessed, at, email || ''
+    ];
+  });
+  return writeConfigMirror_(SKU_LIB_MIRROR_TAB, SKU_LIB_MIRROR_HEADER, rows);
+}
+
+function mirrorLineConfig_(lines, email) {
+  const at = new Date().toISOString();
+  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const rows = (lines || []).map(function (l) {
+    const caps = l.caps || {};
+    const d = l.days || {};
+    return [
+      l.id || '', l.label || '', l.type || '', l.room || '',
+      Number(l.hc) || 0, Number(l.lineLead) || 0, l.pool || '',
+      l.startTime || '', !!l.sandboxOnly,
+      !!caps.capper, !!caps.smallCup, caps.usdaApproved !== false, !!caps.night
+    ].concat(days.map(function (x) { return !!d[x]; })).concat([at, email || '']);
+  });
+  return writeConfigMirror_(LINE_CFG_MIRROR_TAB, LINE_CFG_MIRROR_HEADER, rows);
+}
+
+// Best-effort, exactly like the publish fan-out. The save is the record; the
+// mirror is a courtesy. A sheet hiccup must never cost someone their edit.
+function mirrorConfigSafely_(kind, payload, email) {
+  try {
+    const n = (kind === 'sku') ? mirrorSkuLibrary_(payload, email)
+                               : mirrorLineConfig_(payload, email);
+    Logger.log('config mirror: wrote ' + n + ' ' + kind + ' rows.');
+  } catch (e) {
+    Logger.log('config mirror failed (non-fatal, ' + kind + '): ' + e.message);
+  }
+}
+
 function saveLineConfig(lineConfig) {
   const user = getCurrentUser();
   if (!user.isAdmin && !user.canEditRules) throw new Error('Not authorized');
   setSection_(STATE_KEYS.lineConfig, lineConfig);
   writeAuditLog_(user.email, 'save_line_config', '', '', lineConfig.length + ' lines');
+  mirrorConfigSafely_('line', lineConfig, user.email);
   return { ok: true };
 }
 

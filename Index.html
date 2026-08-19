@@ -594,6 +594,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           <div class="card-title">5 · Line availability</div>
           <div class="sb-note" style="margin-bottom:10px">Tick the days each line runs. A row with nothing ticked is that line down for the whole run.</div>
           <div id="sbLines" class="sb-lines"></div>
+          <label style="display:flex;align-items:center;gap:7px;margin-top:12px;font-family:var(--mono);font-size:11px;color:var(--muted);cursor:pointer"><input type="checkbox" id="sbAllowSbLines" style="accent-color:var(--amber)" onchange="toggleSbAllowSandboxLines(this.checked)"> Let SKUs run on sandbox-only lines — no SKU lists LINE-7 in its Lines column, so without this it runs empty. Capability rules still apply.</label>
           <div style="margin-top:18px;font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)">Finish by</div>
           <div class="sb-note" style="margin:6px 0 10px">Latest end time per day — set one where Pick Pack starts early. Blank assumes 16:30.</div>
           <div id="sbFinishBy"></div>
@@ -3245,7 +3246,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.131';
+var APP_VERSION='v0.5.132';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -3953,6 +3954,36 @@ function renderSandboxFinishBy(){
   });
   tbl.appendChild(tb);el.appendChild(tbl);
 }
+// v0.5.132: no SKU in the real library has ever heard of a sandbox-only line,
+// so every one of them carries an admissibleLines list that excludes it. Without
+// this the line runs empty and the model reports it as useless — which is a
+// property of the data, not of the line.
+//
+// Applied to the sandbox's CLONE of the library only, so the banner's promise
+// that nothing here changes SKU Library stays literally true.
+//
+// An empty list already means "no restriction", so only non-empty lists are
+// extended. Safety is still capabilities, not the list: a green-belt SKU needs
+// smallCup and a capper SKU needs capper, and LINE-7 advertises neither, so
+// jars and 4oz cups cannot drift onto it.
+function sbAllowSandboxLines(c){return !(c&&c.allowSandboxLines===false);}
+function toggleSbAllowSandboxLines(on){
+  var c=sbCurrent();if(!c)return;
+  c.allowSandboxLines=!!on;sbPersist();
+}
+function sbApplySandboxLineAccess_(lib){
+  var ids=[];SANDBOX_ONLY_LINES.forEach(function(l){ids.push(l.id);});
+  if(!ids.length)return lib;
+  Object.keys(lib).forEach(function(k){
+    var m=lib[k];if(!m)return;
+    ['admissibleLines','admissibleLinesFriSat'].forEach(function(f){
+      var list=m[f];
+      if(!list||!list.length)return;
+      ids.forEach(function(id){if(list.indexOf(id)===-1)list.push(id);});
+    });
+  });
+  return lib;
+}
 function sbLineConfig_(c){
   var cfg=sbAllLines_();
   return cfg.map(function(l){
@@ -4441,6 +4472,8 @@ function renderSandboxVolume(){
 function renderSandboxLines(){
   var el=document.getElementById('sbLines'),c=sbCurrent();if(!el||!c)return;
   el.innerHTML='';
+  var chk=document.getElementById('sbAllowSbLines');
+  if(chk)chk.checked=sbAllowSandboxLines(c);
   // Union of lines running on ANY selected day — a line configured Mon-Thu only
   // still belongs here when Monday is in scope.
   var cfg=sbAllLines_(),days=sbSelectedDays();
@@ -4518,6 +4551,7 @@ function sbBuildCtx(c,day,withOverlay,volPlan){
       };
     });
   }
+  if(withOverlay&&sbAllowSandboxLines(c))sbApplySandboxLineAccess_(lib);
   var demand={};demand[c.week]={};demand[c.week][day]={skus:skus,mode:bd.mode||'forecast',date:bd.date||''};
   return {week:c.week,day:day,demand:demand,skuLibrary:lib,rules:getRules(),
           // Sandbox-only lines belong to the OVERLAY pass, never the baseline.
