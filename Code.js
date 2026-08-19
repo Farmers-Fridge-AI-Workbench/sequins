@@ -1,6 +1,12 @@
 /**
- * Sequins ✨ — Code.js    v0.4.60 — 2026-08-19    (pairs with Index.html v0.5.128)
+ * Sequins ✨ — Code.js    v0.4.61 — 2026-08-19    (pairs with Index.html v0.5.129)
  * Full history: git log.
+ *
+ * v0.4.61  Sandbox-only lines move out of stored Line Config and into a code
+ *          list the Sandbox reads directly. v0.4.60 set the flag on the
+ *          DEFAULT_LINE_CONFIG entry only, so any deployment with a saved line
+ *          config — i.e. the live one — never saw the line at all. No server
+ *          change; pairing bump only.
  *
  * v0.4.60  Sandbox-only lines. No server change — saveLineConfig persists the
  *          line array whole, so the new `sandboxOnly` flag and the per-sandbox

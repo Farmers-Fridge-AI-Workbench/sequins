@@ -855,7 +855,29 @@ function lineCaps(l){
 // This flag answers WHERE a line is visible. `days` still answers WHEN it runs,
 // exactly as before. The two compose: a sandbox-only line with Tue/Wed checked
 // is modelled on Tue and Wed and appears nowhere real.
-function isSandboxOnlyLine_(l){return !!(l&&l.sandboxOnly);}
+// v0.5.129: Sandbox-only lines are defined HERE, not in stored Line Config.
+// A line that isn't on the floor yet has no business in the config the floor
+// edits, and requiring someone to add it there first defeats the point. Same
+// shape as any other line, so nothing downstream knows the difference.
+// When the line does go live it gets added to Line Config properly and its
+// entry here is deleted.
+var SANDBOX_ONLY_LINES=[
+  {id:'LINE-7',label:'LINE-7',type:'day',hc:10,pool:'flex',startTime:'06:00',sandboxOnly:true,caps:{capper:false,smallCup:false,usdaApproved:true,night:false},days:{Mon:false,Tue:false,Wed:false,Thu:false,Fri:false,Sat:false,Sun:false}}
+];
+var SANDBOX_ONLY_IDS={};
+SANDBOX_ONLY_LINES.forEach(function(l){SANDBOX_ONLY_IDS[l.id]=true;});
+// Either the stored flag OR the code list. The list matters because a stored
+// config written before this version has no flag on the line, and a deployment
+// must not need a config edit to keep sandbox-only lines out of live planning.
+function isSandboxOnlyLine_(l){return !!(l&&(l.sandboxOnly||SANDBOX_ONLY_IDS[l.id]));}
+// The line set Sandbox works from: real config plus any sandbox-only line that
+// isn't in it. Live paths never call this, so these lines cannot leak.
+function sbAllLines_(){
+  var cfg=STATE.lineConfig||DEFAULT_LINE_CONFIG,out=[],seen={};
+  cfg.forEach(function(l){seen[l.id]=true;out.push(l);});
+  SANDBOX_ONLY_LINES.forEach(function(l){if(!seen[l.id])out.push(l);});
+  return out;
+}
 // The live line list. Everything that plans, renders or publishes the real day
 // goes through this. Sandbox deliberately does not.
 function liveLines_(cfg){
@@ -3217,7 +3239,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.128';
+var APP_VERSION='v0.5.129';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -3849,7 +3871,7 @@ function toggleSbLineDay(lineId,dayShort){
   if(!c.lineDays[lineId]){
     // Seed from the line's configured days, so toggling one day doesn't
     // silently decide the other six.
-    var src=null,cfg=STATE.lineConfig||DEFAULT_LINE_CONFIG;
+    var src=null,cfg=sbAllLines_();
     cfg.forEach(function(l){if(l.id===lineId)src=l;});
     var seed={},base=(src&&src.days)||{};
     ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach(function(d){seed[d]=!!base[d];});
@@ -3863,7 +3885,7 @@ function toggleSbLineDay(lineId,dayShort){
 // so shared STATE.lineConfig is never mutated — a what-if must not be able to
 // edit the floor's configuration.
 function sbLineConfig_(c){
-  var cfg=STATE.lineConfig||DEFAULT_LINE_CONFIG;
+  var cfg=sbAllLines_();
   return cfg.map(function(l){
     if(!isSandboxOnlyLine_(l))return l;
     var copy={},k;
@@ -4351,7 +4373,7 @@ function renderSandboxLines(){
   el.innerHTML='';
   // Union of lines running on ANY selected day — a line configured Mon-Thu only
   // still belongs here when Monday is in scope.
-  var cfg=STATE.lineConfig||DEFAULT_LINE_CONFIG,seen={},list=[];
+  var cfg=sbAllLines_(),seen={},list=[];
   var days=sbSelectedDays();
   days.forEach(function(d){
     var sd=DAY_SHORT[d];
