@@ -594,6 +594,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           <div class="card-title">5 · Line availability</div>
           <div class="sb-note" style="margin-bottom:10px">Tick the days each line runs. A row with nothing ticked is that line down for the whole run.</div>
           <div id="sbLines" class="sb-lines"></div>
+          <div style="margin-top:18px;font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)">Finish by</div>
+          <div class="sb-note" style="margin:6px 0 10px">Latest end time per day — set one where Pick Pack starts early. Blank assumes 16:30.</div>
+          <div id="sbFinishBy"></div>
         </div>
 
         <div style="display:flex;align-items:center;gap:12px">
@@ -3242,7 +3245,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.130';
+var APP_VERSION='v0.5.131';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -3898,6 +3901,58 @@ function toggleSbLineDay(lineId,dayShort){
 // sandbox-only line's days replaced by this sandbox's choice. Cloned per line
 // so shared STATE.lineConfig is never mutated — a what-if must not be able to
 // edit the floor's configuration.
+// ─── SANDBOX FINISH-BY (v0.5.131) ───────────────────────────────────────────
+// Per-day curfew for the what-if. Pick Pack starting early on some days is a
+// real constraint and half the reason a week gets modelled at all, so it sits
+// next to line availability rather than in the live day's control.
+//
+// Blank means 16:30 — the normal end time. That is deliberately NOT the live
+// behaviour, where blank means no cap at all and the engine solves for even
+// run-hours instead. In a sandbox the question is always "can we still finish
+// in time", so there is always a clock to answer it against.
+//
+// Times are 24h "HH:MM", which is what curfewToMin_ already parses and what
+// <input type="time"> already emits. No new format.
+var SB_DEFAULT_FINISH_BY='16:30';
+function sbFinishByFor(c,day){
+  var v=(c&&c.finishBy&&c.finishBy[day])||'';
+  return v||SB_DEFAULT_FINISH_BY;
+}
+function setSbFinishBy(day,val){
+  var c=sbCurrent();if(!c)return;
+  if(!c.finishBy)c.finishBy={};
+  c.finishBy[day]=String(val||'').trim();
+  sbPersist();renderSandboxFinishBy();
+}
+function renderSandboxFinishBy(){
+  var el=document.getElementById('sbFinishBy'),c=sbCurrent();if(!el||!c)return;
+  el.innerHTML='';
+  var days=sbSelectedDays();
+  if(!days.length){
+    var n=document.createElement('div');n.className='sb-note';
+    n.appendChild(document.createTextNode('Select at least one day above.'));
+    el.appendChild(n);return;
+  }
+  var tbl=document.createElement('table');tbl.className='sb-linegrid';
+  var thead=document.createElement('thead'),hr=document.createElement('tr');
+  var th0=document.createElement('th');th0.appendChild(document.createTextNode('Day'));hr.appendChild(th0);
+  var th1=document.createElement('th');th1.appendChild(document.createTextNode('Finish by'));hr.appendChild(th1);
+  thead.appendChild(hr);tbl.appendChild(thead);
+  var tb=document.createElement('tbody');
+  days.forEach(function(d){
+    var tr=document.createElement('tr'),td=document.createElement('td');
+    td.appendChild(document.createTextNode(d));tr.appendChild(td);
+    var tc=document.createElement('td');
+    var inp=document.createElement('input');
+    inp.type='time';inp.className='inline-input';inp.style.width='120px';
+    inp.value=(c.finishBy&&c.finishBy[d])||'';
+    inp.title='Blank assumes '+SB_DEFAULT_FINISH_BY;
+    inp.addEventListener('change',function(){setSbFinishBy(d,inp.value);});
+    tc.appendChild(inp);tr.appendChild(tc);
+    tb.appendChild(tr);
+  });
+  tbl.appendChild(tb);el.appendChild(tbl);
+}
 function sbLineConfig_(c){
   var cfg=sbAllLines_();
   return cfg.map(function(l){
@@ -3978,7 +4033,7 @@ function renderSandbox(){
   document.getElementById('sbName').value=c.name||'';
   var wkSel=document.getElementById('sbWeek');
   wkSel.innerHTML='';getWeeks().forEach(function(w){var o=document.createElement('option');o.value=w;o.textContent=w;if(w===c.week)o.selected=true;wkSel.appendChild(o);});
-  renderSandboxDays();renderSandboxSwaps();renderSandboxStubs();renderSandboxVolume();renderSandboxLines();
+  renderSandboxDays();renderSandboxSwaps();renderSandboxStubs();renderSandboxVolume();renderSandboxLines();renderSandboxFinishBy();
   document.getElementById('sbReport').innerHTML='';
   document.getElementById('sbRunNote').textContent='';
   // sbSaveState is deliberately NOT cleared here — a failed save must stay on
@@ -4472,6 +4527,14 @@ function sbBuildCtx(c,day,withOverlay,volPlan){
           // asked. Same overlay-only shape excludedLines already uses.
           lineConfig:withOverlay?sbLineConfig_(c):(STATE.lineConfig||DEFAULT_LINE_CONFIG),
           includeSandboxOnly:!!withOverlay,
+          // Baseline runs the normal 16:30 curfew; the overlay runs whatever
+          // this day was given. That makes the diff answer the actual question —
+          // "what breaks if Pick Pack pulls us in two hours" — instead of
+          // comparing an early finish against no deadline at all.
+          // Passed explicitly on BOTH passes: leaving it undefined let
+          // runSequencer fall back to getFinishByForDay(), which reads the LIVE
+          // view's selected day and has nothing to do with this sandbox.
+          finishBy:withOverlay?sbFinishByFor(c,day):SB_DEFAULT_FINISH_BY,
           // Workbench overrides are decisions about the REAL day. A what-if
           // inherits none of them, or the report would blame the sandbox for a
           // manual move someone made last Tuesday.
