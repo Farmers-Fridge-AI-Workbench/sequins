@@ -176,6 +176,10 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .tag-wrap{background:rgba(96,165,250,.15);color:var(--blue);}
 .tag-sand{background:rgba(34,197,94,.15);color:var(--green);}
 .preproc-badge{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:#facc15;color:#000;font-size:9px;font-weight:700;flex-shrink:0;}
+.sb-only-badge{font-size:9px;font-family:var(--mono);padding:1px 6px;border-radius:3px;background:var(--amber-dim);color:var(--amber);white-space:nowrap;}
+.sb-daybox{display:flex;gap:6px;flex-wrap:wrap;padding:6px 0 2px 22px;flex-basis:100%;width:100%;}
+.sb-daybox label{display:flex;align-items:center;gap:3px;font-family:var(--mono);font-size:10px;color:var(--muted);cursor:pointer;}
+.sb-daybox input{accent-color:var(--amber);cursor:pointer;}
 .line-empty{color:var(--muted);font-family:var(--mono);font-size:11px;padding:8px 0;text-align:center;}
 .data-table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px;}
 .data-table th{text-align:left;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;padding:6px 10px;border-bottom:.5px solid var(--border2);font-weight:400;}
@@ -723,7 +727,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           </div>
           <div id="addLineStatus" style="margin-top:8px"></div>
         </div>
-        <table class="data-table"><thead><tr><th>Line</th><th>Type</th><th title="Assembly room this line sits in. Printed at the top of the run sheet so the floor knows the plan is for their room.">Room</th><th style="text-align:right">HC</th><th style="text-align:right" title="Line lead — counted as one extra person in the War Room $/unit figure only. Does not affect sequencing or Per-Line Summary.">Lead</th><th>Pool</th><th title="SKU that STARTS this line — placed as slot 0, allergen chain compounds on top. Carries every day.">Seed</th><th style="text-align:center" title="Capper equipment">Capper</th><th style="text-align:center" title="Green belt / small cups">Sm Cup</th><th style="text-align:center" title="USDA-approved">USDA</th><th style="text-align:center" title="Night shift line">Night</th><th>Start Time</th><th style="text-align:center">Mon</th><th style="text-align:center">Tue</th><th style="text-align:center">Wed</th><th style="text-align:center">Thu</th><th style="text-align:center">Fri</th><th style="text-align:center">Sat</th><th style="text-align:center">Sun</th></tr></thead><tbody id="lineConfigBody"></tbody></table>
+        <table class="data-table"><thead><tr><th>Line</th><th>Type</th><th title="Assembly room this line sits in. Printed at the top of the run sheet so the floor knows the plan is for their room.">Room</th><th style="text-align:right">HC</th><th style="text-align:right" title="Line lead — counted as one extra person in the War Room $/unit figure only. Does not affect sequencing or Per-Line Summary.">Lead</th><th>Pool</th><th title="SKU that STARTS this line — placed as slot 0, allergen chain compounds on top. Carries every day.">Seed</th><th style="text-align:center" title="Capper equipment">Capper</th><th style="text-align:center" title="Green belt / small cups">Sm Cup</th><th style="text-align:center" title="USDA-approved">USDA</th><th style="text-align:center" title="Night shift line">Night</th><th style="text-align:center" title="Sandbox only — the line is configured normally but hidden from every live view (Line Sequence, Workbench, My Line, published plans). Only Sandbox can model it. Use for a line being stood up ahead of go-live.">Sandbox</th><th>Start Time</th><th style="text-align:center">Mon</th><th style="text-align:center">Tue</th><th style="text-align:center">Wed</th><th style="text-align:center">Thu</th><th style="text-align:center">Fri</th><th style="text-align:center">Sat</th><th style="text-align:center">Sun</th></tr></thead><tbody id="lineConfigBody"></tbody></table>
         <div id="lineConfigStatus" style="margin-top:8px"></div>
       </div>
       <div class="card">
@@ -802,7 +806,7 @@ var DEFAULT_LINE_CONFIG=[
   {id:'LINE-4',label:'LINE-4',type:'day',hc:10,pool:'flex',startTime:'06:30',caps:{capper:false,smallCup:false,usdaApproved:true,night:false},days:{Mon:true,Tue:true,Wed:true,Thu:true,Fri:true,Sat:false,Sun:false}},
   {id:'LINE-5',label:'LINE-5',type:'day',hc:9,pool:'flex',startTime:'08:00',caps:{capper:false,smallCup:false,usdaApproved:true,night:false},days:{Mon:true,Tue:true,Wed:true,Thu:true,Fri:false,Sat:false,Sun:false}},
   {id:'LINE-6',label:'LINE-6 (Capper)',type:'capper',hc:10,pool:'bowl',startTime:'08:00',caps:{capper:true,smallCup:false,usdaApproved:false,night:false},days:{Mon:true,Tue:true,Wed:true,Thu:true,Fri:true,Sat:false,Sun:false}},
-  {id:'LINE-7',label:'LINE-7',type:'day',hc:10,pool:'flex',startTime:'06:00',caps:{capper:false,smallCup:false,usdaApproved:true,night:false},days:{Mon:false,Tue:false,Wed:false,Thu:false,Fri:false,Sat:false,Sun:false}},
+  {id:'LINE-7',label:'LINE-7',type:'day',hc:10,pool:'flex',startTime:'06:00',sandboxOnly:true,caps:{capper:false,smallCup:false,usdaApproved:true,night:false},days:{Mon:false,Tue:false,Wed:false,Thu:false,Fri:false,Sat:false,Sun:false}},
   {id:'LINE-0',label:'LINE-0 (Green Belt)',type:'day',hc:5,pool:'green',startTime:'00:20',caps:{capper:false,smallCup:true,usdaApproved:true,night:false},days:{Mon:true,Tue:true,Wed:true,Thu:true,Fri:true,Sat:false,Sun:false}},
   {id:'NIGHT-1',label:'Night Shift 1',type:'night',hc:9,pool:'night',startTime:'00:20',caps:{capper:true,smallCup:false,usdaApproved:false,night:true},days:{Mon:true,Tue:true,Wed:true,Thu:true,Fri:false,Sat:false,Sun:true}},
   {id:'NIGHT-2',label:'Night Shift 2',type:'night',hc:9,pool:'night',startTime:'00:20',caps:{capper:false,smallCup:false,usdaApproved:false,night:true},days:{Mon:true,Tue:true,Wed:true,Thu:true,Fri:false,Sat:false,Sun:false}}
@@ -843,6 +847,20 @@ function lineCaps(l){
   };
 }
 // Soft, per-category preferred home line. Set in the Category home lines card.
+// ─── SANDBOX-ONLY LINES (v0.5.128) ──────────────────────────────────────────
+// A line being stood up but not yet on the floor. It is configured normally —
+// capabilities, pool, start time, days, the lot — but every live surface
+// filters it out and only Sandbox can see it.
+//
+// This flag answers WHERE a line is visible. `days` still answers WHEN it runs,
+// exactly as before. The two compose: a sandbox-only line with Tue/Wed checked
+// is modelled on Tue and Wed and appears nowhere real.
+function isSandboxOnlyLine_(l){return !!(l&&l.sandboxOnly);}
+// The live line list. Everything that plans, renders or publishes the real day
+// goes through this. Sandbox deliberately does not.
+function liveLines_(cfg){
+  return (cfg||[]).filter(function(l){return !isSandboxOnlyLine_(l);});
+}
 function getHomeLines(r){
   r=r||getRules();
   // v0.5.65: was falling back to the legacy wrapLine / sandwichLine /
@@ -1120,7 +1138,16 @@ function runSequencer(ctx){
   var dayData=demand&&demand[week]&&demand[week][day];
   if(!dayData)return null;
   var skus=dayData.skus||{};
-  var lines=lineCfg.filter(function(l){var d=DAY_SHORT[day];return l.days&&l.days[d];});
+  // Sandbox-only lines (v0.5.128) are excluded unless the caller opts in. The
+  // live path passes no ctx and so never sees them; sbBuildCtx is the only
+  // caller that sets includeSandboxOnly. Both paths share this one filter, so a
+  // new live surface downstream of the engine cannot forget to exclude them.
+  var wantSandboxOnly=!!(ctx&&ctx.includeSandboxOnly);
+  var lines=lineCfg.filter(function(l){
+    var d=DAY_SHORT[day];
+    if(!(l.days&&l.days[d]))return false;
+    return wantSandboxOnly||!isSandboxOnlyLine_(l);
+  });
   if(excluded.length){
     lines=lines.filter(function(l){return excluded.indexOf(l.id)===-1;});
   }
@@ -3036,7 +3063,7 @@ function autoSaveRulesDebounced(){
     }).saveSequencingRules(getRules());
   },1500);
 }
-function renderLineConfig(){var lines=STATE.lineConfig||DEFAULT_LINE_CONFIG,seeds=(getRules().lineSeeds||{}),days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];document.getElementById('lineConfigBody').innerHTML=lines.map(function(l,i){var dc=days.map(function(d){return'<td style="text-align:center"><input type="checkbox" '+(l.days[d]?'checked':'')+' style="accent-color:var(--teal)" onchange="updateLineDay('+i+',\''+d+'\',this.checked)"></td>';}).join('');var tc=l.type==='night'?'var(--purple)':l.type==='capper'?'var(--blue)':'var(--teal)';var caps=lineCaps(l);function capChk(cap){return'<td style="text-align:center"><input type="checkbox" '+(caps[cap]?'checked':'')+' style="accent-color:var(--teal)" onchange="updateLineCap('+i+',\''+cap+'\',this.checked)"></td>';}var seedVal=seeds[l.id]||'';var seedCell='<td><input class="inline-input" value="'+seedVal+'" onchange="updateLineSeed(\''+l.id+'\',this.value);autoSaveRulesDebounced()" style="width:180px" placeholder="(none)" title="SKU that starts this line as slot 0"></td>';return'<tr><td>'+l.label+'</td><td><span style="color:'+tc+'">'+l.type+'</span></td><td><input class="inline-input" value="'+escHtml(l.room||'')+'" onchange="updateLineRoom('+i+',this.value)" style="width:100px" placeholder="Room W"></td><td style="text-align:right"><input class="inline-input" type="number" value="'+l.hc+'" onchange="updateLineHC('+i+',this.value)" style="width:45px;text-align:right"></td><td style="text-align:right"><input class="inline-input" type="number" min="0" value="'+(Number(l.lineLead)||0)+'" onchange="updateLineLead('+i+',this.value)" style="width:45px;text-align:right"></td><td><input class="inline-input" value="'+l.pool+'" onchange="updateLinePool('+i+',this.value)" style="width:80px"></td>'+seedCell+capChk('capper')+capChk('smallCup')+capChk('usdaApproved')+capChk('night')+'<td><input class="inline-input" type="time" value="'+(l.startTime||'06:00')+'" onchange="updateLineStartTime('+i+',this.value)" style="width:100px"></td>'+dc+'</tr>';}).join('');renderHomeLines();}
+function renderLineConfig(){var lines=STATE.lineConfig||DEFAULT_LINE_CONFIG,seeds=(getRules().lineSeeds||{}),days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];document.getElementById('lineConfigBody').innerHTML=lines.map(function(l,i){var dc=days.map(function(d){return'<td style="text-align:center"><input type="checkbox" '+(l.days[d]?'checked':'')+' style="accent-color:var(--teal)" onchange="updateLineDay('+i+',\''+d+'\',this.checked)"></td>';}).join('');var tc=l.type==='night'?'var(--purple)':l.type==='capper'?'var(--blue)':'var(--teal)';var caps=lineCaps(l);function capChk(cap){return'<td style="text-align:center"><input type="checkbox" '+(caps[cap]?'checked':'')+' style="accent-color:var(--teal)" onchange="updateLineCap('+i+',\''+cap+'\',this.checked)"></td>';}var sbOnlyCell='<td style="text-align:center"><input type="checkbox" '+(isSandboxOnlyLine_(l)?'checked':'')+' style="accent-color:var(--amber)" onchange="updateLineSandboxOnly('+i+',this.checked)" title="Sandbox only — hidden from every live view"></td>';var seedVal=seeds[l.id]||'';var seedCell='<td><input class="inline-input" value="'+seedVal+'" onchange="updateLineSeed(\''+l.id+'\',this.value);autoSaveRulesDebounced()" style="width:180px" placeholder="(none)" title="SKU that starts this line as slot 0"></td>';return'<tr><td>'+l.label+(isSandboxOnlyLine_(l)?' <span class="sb-only-badge">sandbox only</span>':'')+'</td><td><span style="color:'+tc+'">'+l.type+'</span></td><td><input class="inline-input" value="'+escHtml(l.room||'')+'" onchange="updateLineRoom('+i+',this.value)" style="width:100px" placeholder="Room W"></td><td style="text-align:right"><input class="inline-input" type="number" value="'+l.hc+'" onchange="updateLineHC('+i+',this.value)" style="width:45px;text-align:right"></td><td style="text-align:right"><input class="inline-input" type="number" min="0" value="'+(Number(l.lineLead)||0)+'" onchange="updateLineLead('+i+',this.value)" style="width:45px;text-align:right"></td><td><input class="inline-input" value="'+l.pool+'" onchange="updateLinePool('+i+',this.value)" style="width:80px"></td>'+seedCell+capChk('capper')+capChk('smallCup')+capChk('usdaApproved')+capChk('night')+sbOnlyCell+'<td><input class="inline-input" type="time" value="'+(l.startTime||'06:00')+'" onchange="updateLineStartTime('+i+',this.value)" style="width:100px"></td>'+dc+'</tr>';}).join('');renderHomeLines();}
 function renderHomeLines(){
   var el=document.getElementById('homeLinesBody');if(!el)return;
   var ce=!!window._canEditRules,hl=getHomeLines();
@@ -3045,6 +3072,9 @@ function renderHomeLines(){
 }
 function updateLineCap(i,cap,val){var l=STATE.lineConfig||DEFAULT_LINE_CONFIG;if(!l[i].caps)l[i].caps=lineCaps(l[i]);l[i].caps[cap]=val;STATE.lineConfig=l;}
 function updateLineDay(i,d,val){var l=STATE.lineConfig||DEFAULT_LINE_CONFIG;l[i].days[d]=val;STATE.lineConfig=l;}
+// v0.5.128. Re-renders because the row grows a badge, and re-renders the live
+// views because a line just appeared in or vanished from all of them.
+function updateLineSandboxOnly(i,val){var l=STATE.lineConfig||DEFAULT_LINE_CONFIG;l[i].sandboxOnly=!!val;STATE.lineConfig=l;renderLineConfig();renderSequence();renderWorkbench();renderDayStrip('seqDayStrip');renderDayStrip('wbDayStrip');}
 function updateLineHC(i,val){var l=STATE.lineConfig||DEFAULT_LINE_CONFIG;l[i].hc=parseInt(val)||0;STATE.lineConfig=l;}
 function updateLineLead(i,val){var l=STATE.lineConfig||DEFAULT_LINE_CONFIG;l[i].lineLead=parseInt(val,10)||0;STATE.lineConfig=l;}
 function updateLinePool(i,val){var l=STATE.lineConfig||DEFAULT_LINE_CONFIG;l[i].pool=val;STATE.lineConfig=l;}
@@ -3187,7 +3217,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.127';
+var APP_VERSION='v0.5.128';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -3802,6 +3832,46 @@ function toggleSbLine(id){
   if(i===-1)c.excludedLines.push(id);else c.excludedLines.splice(i,1);
   sbPersist();renderSandboxLines();
 }
+// ─── SANDBOX-ONLY LINE DAYS (v0.5.128) ──────────────────────────────────────
+// A sandbox-only line picks its days per sandbox, not globally. The holiday
+// question is "how many days do we need it", and answering that means running
+// three days in one sandbox and five in another WITHOUT editing shared Line
+// Config in between. Stored additively as c.lineDays — excludedLines is
+// untouched and keeps its shape. Absent means fall back to the line's own days.
+function sbLineDays(c,l){
+  var map=(c&&c.lineDays&&c.lineDays[l.id])||null;
+  return map||l.days||{};
+}
+function sbLineRunsOn(c,l,dayShort){var m=sbLineDays(c,l);return !!(m&&m[dayShort]);}
+function toggleSbLineDay(lineId,dayShort){
+  var c=sbCurrent();if(!c)return;
+  if(!c.lineDays)c.lineDays={};
+  if(!c.lineDays[lineId]){
+    // Seed from the line's configured days, so toggling one day doesn't
+    // silently decide the other six.
+    var src=null,cfg=STATE.lineConfig||DEFAULT_LINE_CONFIG;
+    cfg.forEach(function(l){if(l.id===lineId)src=l;});
+    var seed={},base=(src&&src.days)||{};
+    ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach(function(d){seed[d]=!!base[d];});
+    c.lineDays[lineId]=seed;
+  }
+  c.lineDays[lineId][dayShort]=!c.lineDays[lineId][dayShort];
+  sbPersist();renderSandboxLines();
+}
+// The line config this sandbox runs against: the real one, with each
+// sandbox-only line's days replaced by this sandbox's choice. Cloned per line
+// so shared STATE.lineConfig is never mutated — a what-if must not be able to
+// edit the floor's configuration.
+function sbLineConfig_(c){
+  var cfg=STATE.lineConfig||DEFAULT_LINE_CONFIG;
+  return cfg.map(function(l){
+    if(!isSandboxOnlyLine_(l))return l;
+    var copy={},k;
+    for(k in l){if(Object.prototype.hasOwnProperty.call(l,k))copy[k]=l[k];}
+    copy.days=sbLineDays(c,l);
+    return copy;
+  });
+}
 function updateStub(name,f,v){
   var c=sbCurrent();if(!c)return;
   if(!c.stubs[name])c.stubs[name]={};
@@ -4282,19 +4352,46 @@ function renderSandboxLines(){
   // Union of lines running on ANY selected day — a line configured Mon-Thu only
   // still belongs here when Monday is in scope.
   var cfg=STATE.lineConfig||DEFAULT_LINE_CONFIG,seen={},list=[];
-  sbSelectedDays().forEach(function(d){
+  var days=sbSelectedDays();
+  days.forEach(function(d){
     var sd=DAY_SHORT[d];
-    cfg.forEach(function(l){if(l.days&&l.days[sd]&&!seen[l.id]){seen[l.id]=true;list.push(l);}});
+    cfg.forEach(function(l){if(!isSandboxOnlyLine_(l)&&l.days&&l.days[sd]&&!seen[l.id]){seen[l.id]=true;list.push(l);}});
   });
+  // Sandbox-only lines are always offered while any day is in scope. Their days
+  // are chosen right here, so global config must not gate them out — a line
+  // staged with no days checked would otherwise be unreachable.
+  if(days.length){
+    cfg.forEach(function(l){if(isSandboxOnlyLine_(l)&&!seen[l.id]){seen[l.id]=true;list.push(l);}});
+  }
   list.forEach(function(l){
     var on=c.excludedLines.indexOf(l.id)===-1;
     var chip=document.createElement('div');chip.className='sb-linechip'+(on?' on':'');
     var cb=document.createElement('input');cb.type='checkbox';cb.checked=on;
     chip.appendChild(cb);chip.appendChild(document.createTextNode(l.label||l.id));
+    if(isSandboxOnlyLine_(l)){
+      var bdg=document.createElement('span');bdg.className='sb-only-badge';
+      bdg.style.marginLeft='6px';bdg.appendChild(document.createTextNode('sandbox only'));
+      chip.appendChild(bdg);
+    }
     chip.addEventListener('click',function(e){e.preventDefault();toggleSbLine(l.id);});
     el.appendChild(chip);
+    if(isSandboxOnlyLine_(l)&&on)el.appendChild(buildSbDayBox_(c,l,days));
   });
   if(!list.length){var n=document.createElement('div');n.className='sb-note';n.textContent='Select at least one day above to see which lines run.';el.appendChild(n);}
+}
+// Per-day picker for one sandbox-only line, limited to the days this sandbox is
+// actually modelling — offering Saturday when Saturday isn't in scope is noise.
+function buildSbDayBox_(c,l,days){
+  var box=document.createElement('div');box.className='sb-daybox';
+  days.forEach(function(d){
+    var sd=DAY_SHORT[d];
+    var lab=document.createElement('label');
+    var cb=document.createElement('input');cb.type='checkbox';cb.checked=sbLineRunsOn(c,l,sd);
+    cb.addEventListener('change',function(){toggleSbLineDay(l.id,sd);});
+    lab.appendChild(cb);lab.appendChild(document.createTextNode(sd));
+    box.appendChild(lab);
+  });
+  return box;
 }
 
 // ── the run ────────────────────────────────────────────────────────────────
@@ -4334,7 +4431,13 @@ function sbBuildCtx(c,day,withOverlay,volPlan){
   }
   var demand={};demand[c.week]={};demand[c.week][day]={skus:skus,mode:bd.mode||'forecast',date:bd.date||''};
   return {week:c.week,day:day,demand:demand,skuLibrary:lib,rules:getRules(),
-          lineConfig:STATE.lineConfig||DEFAULT_LINE_CONFIG,
+          // Sandbox-only lines belong to the OVERLAY pass, never the baseline.
+          // The baseline is the day as it stands today, and a line not yet on
+          // the floor is no part of that — put it in both and the diff shows no
+          // benefit from standing it up, which is the entire question being
+          // asked. Same overlay-only shape excludedLines already uses.
+          lineConfig:withOverlay?sbLineConfig_(c):(STATE.lineConfig||DEFAULT_LINE_CONFIG),
+          includeSandboxOnly:!!withOverlay,
           // Workbench overrides are decisions about the REAL day. A what-if
           // inherits none of them, or the report would blame the sandbox for a
           // manual move someone made last Tuesday.
@@ -4655,7 +4758,7 @@ function myLineTodayWeekDay_(){
 
 function initMyLine(){
   var sel=document.getElementById('myLineSel');
-  var lines=STATE.lineConfig||DEFAULT_LINE_CONFIG;
+  var lines=liveLines_(STATE.lineConfig||DEFAULT_LINE_CONFIG);
   sel.innerHTML=lines.map(function(l){return'<option value="'+l.id+'">'+l.label+'</option>';}).join('');
   var last=null;
   try{last=window.localStorage.getItem(MYLINE_STORAGE_KEY);}catch(e){}
@@ -5225,7 +5328,7 @@ function renderScenarioBar(containerId){
   var el=document.getElementById(containerId);if(!el)return;
   if(!CURRENT_WEEK||!CURRENT_DAY){el.innerHTML='';return;}
   var d=getDayScenarios();
-  var dayLines=(STATE.lineConfig||DEFAULT_LINE_CONFIG).filter(function(l){var dd=DAY_SHORT[CURRENT_DAY];return l.days&&l.days[dd];});
+  var dayLines=liveLines_(STATE.lineConfig||DEFAULT_LINE_CONFIG).filter(function(l){var dd=DAY_SHORT[CURRENT_DAY];return l.days&&l.days[dd];});
   var html='<button class="scn-tab'+(!d.activeId?' active':'')+'" onclick="selectScenario(\''+containerId+'\',null)">Baseline</button>';
   d.list.forEach(function(s){
     html+='<button class="scn-tab'+(d.activeId===s.id?' active':'')+'" onclick="selectScenario(\''+containerId+'\',\''+s.id+'\')">'+escHtml(s.name)+

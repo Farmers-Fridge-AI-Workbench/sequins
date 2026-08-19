@@ -1,6 +1,17 @@
 /**
- * Sequins ✨ — Code.js    v0.4.59 — 2026-08-17    (pairs with Index.html v0.5.117)
+ * Sequins ✨ — Code.js    v0.4.60 — 2026-08-19    (pairs with Index.html v0.5.128)
  * Full history: git log.
+ *
+ * v0.4.60  Sandbox-only lines. No server change — saveLineConfig persists the
+ *          line array whole, so the new `sandboxOnly` flag and the per-sandbox
+ *          `lineDays` map ride along with no schema work, and getPublishedPlan
+ *          only ever emits lines that appear in a published plan, which a
+ *          sandbox-only line never does. Version bumped to keep the pair
+ *          honest.
+ *          NOTE: the pairing line above said v0.5.117 while Index.html was
+ *          actually on v0.5.127 — ten versions of drift. Corrected here. The
+ *          v0.5.118-.127 changelog entries were never written and are not
+ *          reconstructed; git log is the record for those.
  *
  * v0.4.59  Run-sheet actuals get somewhere to land. Two new tabs in the plan
  *          archive — "Run Sheet Actuals" (one row per SKU per line per day:

@@ -10,18 +10,23 @@ Opened 2026-08-19.
 
 ## Blocked on Cori
 
-### Version drift — `Code.js` header vs `APP_VERSION`
+### Go-live date for sandbox-only lines
 
-`APP_VERSION` in `Index.html` reads **v0.5.127**. The `Code.js` header says it
-pairs with **v0.5.117**. Ten versions apart, and `Index.html` carries work
-stamped `.118`, `.123`, `.127`.
+`sandboxOnly` is a boolean today: a line is either hidden from live planning or
+it isn't, and flipping it is a manual edit in Line Config.
 
-To resolve: confirm whether `.118`–`.127` were client-only. If so, `Code.js`
-stays at v0.4.59 and only the pairing line in its header moves. Then backfill
-the missing changelog entries — a few lines each, newest-first.
+What Cori actually wants: set a **date** in Line Config for when a staged line
+joins real planning, so LINE-7 turns itself on for the holiday weeks without
+anyone remembering to un-tick a box.
 
-This is exactly the drift CLAUDE.md warns about, and it's invisible unless
-someone reads the header. Worth fixing before the next real change ships.
+Deliberately deferred on 2026-08-19 to ship the sandbox modelling first. When
+it's built: the flag becomes a date comparison at the same single chokepoint in
+`runSequencer`, plus a date input in Line Config. Nothing else should need to
+move — every live surface already routes through `liveLines_`.
+
+Note the per-sandbox `lineDays` map stays regardless. It answers a different
+question ("how many days do we need it") from the go-live date ("when does it
+become real").
 
 ---
 
