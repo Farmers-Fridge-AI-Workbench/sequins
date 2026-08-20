@@ -886,9 +886,18 @@ var SANDBOX_ONLY_LINES=[
 // What it does NOT bypass, deliberately: sausage/sesame separation, the
 // allergen compounding chain, USDA approval, the slot cap and the finish-by
 // clock. Those are safety and regulatory rules and live outside this filter.
-function isWildcardLine_(l){return !!(l&&l.wildcard);}
-var SANDBOX_ONLY_IDS={};
-SANDBOX_ONLY_LINES.forEach(function(l){SANDBOX_ONLY_IDS[l.id]=true;});
+// v0.5.134 BUGFIX: check the code list as well as the stored flag. sbAllLines_
+// keeps the STORED copy of a line when Line Config already contains that id —
+// and every real deployment's config already has LINE-7 — so the code-defined
+// entry carrying wildcard:true was never the object the engine saw. The flag
+// silently did nothing. Same trap as sandboxOnly in v0.4.60; the lesson is that
+// a property set only on the code definition never reaches a saved config.
+function isWildcardLine_(l){return !!(l&&(l.wildcard||WILDCARD_IDS[l.id]));}
+var SANDBOX_ONLY_IDS={},WILDCARD_IDS={};
+SANDBOX_ONLY_LINES.forEach(function(l){
+  SANDBOX_ONLY_IDS[l.id]=true;
+  if(l.wildcard)WILDCARD_IDS[l.id]=true;
+});
 // Either the stored flag OR the code list. The list matters because a stored
 // config written before this version has no flag on the line, and a deployment
 // must not need a config edit to keep sandbox-only lines out of live planning.
@@ -3267,7 +3276,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.133';
+var APP_VERSION='v0.5.134';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
