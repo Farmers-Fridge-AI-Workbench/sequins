@@ -1636,10 +1636,32 @@ function runSequencer(ctx){
   // Runtime is planned at the library UPM. These run faster off the capper, but
   // there's no per-SKU rate for it until the floor tracker captures real
   // completion times, so no adjustment is invented here.
+  // v0.5.135: LINE-6 is a PREFERENCE for capper SKUs, not a rule.
+  //
+  // The rescue below used to bail the moment a SKU had anything in its Lines
+  // column — and every capper SKU in the library names LINE-6 there. So the
+  // rescue could never fire for the exact SKUs it was written for, and a full
+  // capper line meant those SKUs went unplaced rather than spilling. That made
+  // LINE-6 a hard rule by accident, expressed in data rather than code.
+  //
+  // A Lines column listing ONLY capper lines is the capper reservation restated,
+  // so it does not block a move. A list naming any non-capper line IS a
+  // deliberate planner choice about where this SKU may run, and still wins.
+  //
+  // Resolved against the full line config, not just today's lines: a SKU pinned
+  // to a capper line that isn't running today needs the rescue MORE, not less.
+  function isCapperLineId_(lid){
+    for(var ci=0;ci<lineCfg.length;ci++){
+      if(lineCfg[ci].id===lid)return !!lineCaps(lineCfg[ci]).capper;
+    }
+    return false;
+  }
   jobs.forEach(function(job){
     if(placed[job.sku]||!job.needsCapper)return;
-    if(job.forcedLine||job.admissibleLines){
-      var pinned=job.forcedLine?[job.forcedLine]:job.admissibleLines;
+    var adm=job.admissibleLines;
+    var admCapperOnly=!!(adm&&adm.length)&&adm.every(isCapperLineId_);
+    if(job.forcedLine||(adm&&adm.length&&!admCapperOnly)){
+      var pinned=job.forcedLine?[job.forcedLine]:adm;
       job.unplacedReason=(job.unplacedReason?job.unplacedReason+' · ':'')+
         'not moved off the capper: this SKU is restricted to '+pinned.join('/')+
         ' in the SKU Library (clear its Lines column to let it move)';
@@ -3276,7 +3298,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.134';
+var APP_VERSION='v0.5.135';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
