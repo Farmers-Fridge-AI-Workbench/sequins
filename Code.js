@@ -1,5 +1,5 @@
 /**
- * Sequins ✨ — Code.js    v0.4.70 — 2026-08-20    (pairs with Index.html v0.5.138)
+ * Sequins ✨ — Code.js    v0.4.71 — 2026-08-20    (pairs with Index.html v0.5.139)
  * Full history: git log.
  *
  * v0.4.61  Sandbox-only lines move out of stored Line Config and into a code
