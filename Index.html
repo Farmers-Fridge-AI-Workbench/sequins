@@ -1613,7 +1613,7 @@ function runSequencer(ctx){
       }
       if(!placer(job,cids)){
         var reasons=[];
-        cids.forEach(function(lid){var ls=lineState[lid];if(!ls)return;if(ls.slots.length>=SLOT_CAP)reasons.push(lid+' slot cap');else if(!fits(ls,lid,job))reasons.push(lid+(capActive&&isDayLine_(lineTypeById[lid])?' would finish past the '+fmtClock(CAP_MIN)+' cap':' runtime full'));});
+        cids.forEach(function(lid){var ls=lineState[lid];if(!ls)return;if(ls.slots.length>=SLOT_CAP)reasons.push(lid+' slot cap');else if(!fits(ls,lid,job))reasons.push(lid+(capActive&&isDayLine_(lineTypeById[lid])?' cannot take it without passing the '+fmtClock(CAP_MIN)+' cap':' runtime full'));});
         job.unplacedReason=reasons.length?reasons.slice(0,2).join(', '):(job.forcedLine?'seed line '+job.forcedLine+' not available':job.admissibleLines?'no eligible admissible lines':'no eligible lines (capability filter)');
       }
     });
@@ -1650,9 +1650,15 @@ function runSequencer(ctx){
   //
   // Resolved against the full line config, not just today's lines: a SKU pinned
   // to a capper line that isn't running today needs the rescue MORE, not less.
+  // v0.5.136: a WILDCARD line counts as capper-capable here. Sandbox injects
+  // sandbox-only line ids into every SKU's admissibleLines (so a staged line can
+  // receive work at all), which silently turned [LINE-6] into [LINE-6, LINE-7]
+  // and made the list look like a deliberate planner restriction — re-blocking
+  // the very rescue v0.5.135 unblocked. A wildcard can run capper work, so its
+  // presence in the list must not change the verdict.
   function isCapperLineId_(lid){
     for(var ci=0;ci<lineCfg.length;ci++){
-      if(lineCfg[ci].id===lid)return !!lineCaps(lineCfg[ci]).capper;
+      if(lineCfg[ci].id===lid)return !!(lineCaps(lineCfg[ci]).capper||isWildcardLine_(lineCfg[ci]));
     }
     return false;
   }
@@ -3298,7 +3304,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.135';
+var APP_VERSION='v0.5.136';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
