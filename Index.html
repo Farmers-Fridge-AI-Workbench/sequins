@@ -1740,6 +1740,22 @@ function orderChainMonotonic_(jobs){
     var me=String(j.sku).toUpperCase();
     partnerOf[me]=j.usdaPairedSku;partnerOf[j.usdaPairedSku]=me;
   });
+  // v0.5.137 FIX. A seed STARTS the line — that is what seeding means, what the
+  // Line Config tooltip promises, and what the docstring above claims. But the
+  // pin below is keyed on the job's CURRENT index, so a seed that placement
+  // happened to drop at index 4 was frozen at slot 4, and a higher-allergen SKU
+  // was free to run ahead of it. That is how LINE-4 shipped
+  // SAUSAGE_BURRITO_BREAKFAST {egg,milk,soy,wheat} before its seed
+  // TURKEY_CLUB_SANDWICH {milk,soy,wheat} and dropped egg — twice in the
+  // archive, with Samad hand-correcting it three more times.
+  //
+  // Seeds move to the front BEFORE pins are computed, so the chain compounds on
+  // top of the seed as intended. Manual overrides still pin where the human put
+  // them; they shift by the seed's displacement, which is at most one position
+  // and is the correct trade against a food-contact chain break.
+  var seedJobs=[],restJobs=[];
+  jobs.forEach(function(j){ (j.isSeed?seedJobs:restJobs).push(j); });
+  if(seedJobs.length) jobs=seedJobs.concat(restJobs);
   var idxOf={};jobs.forEach(function(j,i){idxOf[j.sku]=i;});
   var pinned={};
   jobs.forEach(function(j,i){ if(j.isSeed||j.overridden) pinned[i]=j; });
@@ -1818,9 +1834,15 @@ function orderLineByBlocks_(slots){
   if(!fc.length) return {order:slots.slice(),split:null};
   if(!jar.length) return {order:orderChainMonotonic_(slots),split:null};
   var desired=orderChainMonotonic_(fc).concat(jar);
+  // v0.5.137: seeds are NOT pinned here any more. orderChainMonotonic_ above
+  // already put the seed at the head of the FC block, and pinning it at its
+  // placed line index would immediately drag it back out of position — which is
+  // exactly the bug that let a burrito run ahead of its seed. Manual overrides
+  // still pin: a human choosing a position is a decision, a seed is a starting
+  // point.
   var pinAt={},isPinned=[];
   for(i=0;i<slots.length;i++){
-    if(slots[i].isSeed||slots[i].overridden){ pinAt[i]=slots[i]; isPinned.push(slots[i]); }
+    if(slots[i].overridden){ pinAt[i]=slots[i]; isPinned.push(slots[i]); }
   }
   var flow=[],k;
   for(k=0;k<desired.length;k++){ if(isPinned.indexOf(desired[k])===-1) flow.push(desired[k]); }
@@ -3304,7 +3326,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.136';
+var APP_VERSION='v0.5.137';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
