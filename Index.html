@@ -594,7 +594,6 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           <div class="card-title">5 · Line availability</div>
           <div class="sb-note" style="margin-bottom:10px">Tick the days each line runs. A row with nothing ticked is that line down for the whole run.</div>
           <div id="sbLines" class="sb-lines"></div>
-          <label style="display:flex;align-items:center;gap:7px;margin-top:12px;font-family:var(--mono);font-size:11px;color:var(--muted);cursor:pointer"><input type="checkbox" id="sbAllowSbLines" style="accent-color:var(--amber)" onchange="toggleSbAllowSandboxLines(this.checked)"> Let SKUs run on sandbox-only lines — no SKU lists LINE-7 in its Lines column, so without this it runs empty. Capability rules still apply.</label>
           <div style="margin-top:18px;font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)">Finish by</div>
           <div class="sb-note" style="margin:6px 0 10px">Latest end time per day — set one where Pick Pack starts early. Blank assumes 16:30.</div>
           <div id="sbFinishBy"></div>
@@ -869,8 +868,25 @@ function lineCaps(l){
 // When the line does go live it gets added to Line Config properly and its
 // entry here is deleted.
 var SANDBOX_ONLY_LINES=[
-  {id:'LINE-7',label:'LINE-7',type:'day',hc:10,pool:'flex',startTime:'06:00',sandboxOnly:true,caps:{capper:false,smallCup:false,usdaApproved:true,night:false},days:{Mon:false,Tue:false,Wed:false,Thu:false,Fri:false,Sat:false,Sun:false}}
+  {id:'LINE-7',label:'LINE-7',type:'day',hc:10,pool:'flex',startTime:'06:00',sandboxOnly:true,wildcard:true,caps:{capper:false,smallCup:false,usdaApproved:true,night:false},days:{Mon:false,Tue:false,Wed:false,Thu:false,Fri:false,Sat:false,Sun:false}}
 ];
+// v0.5.133 — WILDCARD. Capabilities are EXCLUSIVE, not additive: a non-capper
+// job is rejected from a capper line and a non-small-cup job from a small-cup
+// line, so "takes everything" cannot be said with caps — ticking them all would
+// make a line take almost nothing. A wildcard needs its own flag.
+//
+// This is a MODELLING DEVICE, not a description of a real table. It exists to
+// answer "is there enough total capacity to finish on time, and with how many
+// people" — the staffing question — by letting a table absorb anything.
+//
+// It is therefore OPTIMISTIC. A wildcard will happily run capper jars and 4oz
+// cups that no bare assembly table can physically produce, so treat its finish
+// time as a ceiling on what's achievable, not a plan anyone can execute.
+//
+// What it does NOT bypass, deliberately: sausage/sesame separation, the
+// allergen compounding chain, USDA approval, the slot cap and the finish-by
+// clock. Those are safety and regulatory rules and live outside this filter.
+function isWildcardLine_(l){return !!(l&&l.wildcard);}
 var SANDBOX_ONLY_IDS={};
 SANDBOX_ONLY_LINES.forEach(function(l){SANDBOX_ONLY_IDS[l.id]=true;});
 // Either the stored flag OR the code list. The list matters because a stored
@@ -1409,6 +1425,11 @@ function runSequencer(ctx){
     var offCapper=!!(allowOffCapper&&job.needsCapper);
     var out=lines.filter(function(l){
       var c=capsById[l.id];
+      // Wildcard (v0.5.133): skip the equipment/pool filter entirely. USDA is
+      // NOT skipped — that one is regulatory, not a capability preference.
+      // Sausage/sesame, the allergen chain, slot cap and the finish-by clock
+      // all live outside this filter and still apply.
+      if(isWildcardLine_(l))return !(job.isUSDA&&!c.usdaApproved);
       if(offCapper){ if(c.capper)return false; }
       else if(job.needsCapper){if(!c.capper)return false;}else if(c.capper){return false;}
       if(job.needsSmallCup){if(!c.smallCup)return false;}else if(c.smallCup){return false;}
@@ -3246,7 +3267,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.132';
+var APP_VERSION='v0.5.133';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -3966,11 +3987,9 @@ function renderSandboxFinishBy(){
 // extended. Safety is still capabilities, not the list: a green-belt SKU needs
 // smallCup and a capper SKU needs capper, and LINE-7 advertises neither, so
 // jars and 4oz cups cannot drift onto it.
-function sbAllowSandboxLines(c){return !(c&&c.allowSandboxLines===false);}
-function toggleSbAllowSandboxLines(on){
-  var c=sbCurrent();if(!c)return;
-  c.allowSandboxLines=!!on;sbPersist();
-}
+// v0.5.133: unconditional. This was a checkbox and shouldn't have been — with
+// it off the line simply runs empty, which is not a scenario anyone wants to
+// model. The day matrix is the only control now.
 function sbApplySandboxLineAccess_(lib){
   var ids=[];SANDBOX_ONLY_LINES.forEach(function(l){ids.push(l.id);});
   if(!ids.length)return lib;
@@ -4472,8 +4491,6 @@ function renderSandboxVolume(){
 function renderSandboxLines(){
   var el=document.getElementById('sbLines'),c=sbCurrent();if(!el||!c)return;
   el.innerHTML='';
-  var chk=document.getElementById('sbAllowSbLines');
-  if(chk)chk.checked=sbAllowSandboxLines(c);
   // Union of lines running on ANY selected day — a line configured Mon-Thu only
   // still belongs here when Monday is in scope.
   var cfg=sbAllLines_(),days=sbSelectedDays();
@@ -4500,7 +4517,11 @@ function renderSandboxLines(){
     td.appendChild(document.createTextNode(l.label||l.id));
     if(isSandboxOnlyLine_(l)){
       var bdg=document.createElement('span');bdg.className='sb-only-badge';
-      bdg.style.marginLeft='6px';bdg.appendChild(document.createTextNode('sandbox only'));
+      bdg.style.marginLeft='6px';
+      bdg.appendChild(document.createTextNode(isWildcardLine_(l)?'wildcard':'sandbox only'));
+      bdg.title=isWildcardLine_(l)
+        ? 'Sandbox only, and takes any SKU — ignores capper / small-cup / night restrictions so it can absorb overflow. Best case, not a runnable plan.'
+        : 'Sandbox only — never appears in live planning.';
       td.appendChild(bdg);
     }
     tr.appendChild(td);
@@ -4551,7 +4572,7 @@ function sbBuildCtx(c,day,withOverlay,volPlan){
       };
     });
   }
-  if(withOverlay&&sbAllowSandboxLines(c))sbApplySandboxLineAccess_(lib);
+  if(withOverlay)sbApplySandboxLineAccess_(lib);
   var demand={};demand[c.week]={};demand[c.week][day]={skus:skus,mode:bd.mode||'forecast',date:bd.date||''};
   return {week:c.week,day:day,demand:demand,skuLibrary:lib,rules:getRules(),
           // Sandbox-only lines belong to the OVERLAY pass, never the baseline.
@@ -4798,6 +4819,36 @@ function runSandbox(){
       ltb.appendChild(tr);
     });
     lt.appendChild(ltb);body.appendChild(lt);
+    // v0.5.133 — "what would the extra table have to be?". Read entirely off the
+    // run that just happened; there is no second solve. Answers the sizing half
+    // of the staffing question: how long it runs, how much it carries, when it
+    // has to start to land inside the finish-by clock.
+    //
+    // It deliberately does NOT say how many PEOPLE. Runtime here is qty/upm and
+    // upm is a per-SKU constant from the Master Document — nothing in the engine
+    // makes throughput a function of headcount, so any number of people would
+    // produce this same runtime. Claiming a headcount would be inventing one.
+    sbAllLines_().forEach(function(l){
+      if(!isWildcardLine_(l))return;
+      var x=r.S.byLine[l.id];if(!x)return;
+      var cap=curfewToMin_(sbFinishByFor(c,r.day));
+      var bits=[sbDur_(x.min)+' of run time',
+                fmtUnits(x.units)+' units',
+                x.seq.length+' SKU'+(x.seq.length===1?'':'s'),
+                'start '+fmtClock(x.start)+', finish '+fmtClock(x.end)];
+      var h=document.createElement('div');
+      h.className='sb-note';h.style.color='var(--text)';h.style.marginTop='12px';
+      h.textContent=(l.label||l.id)+' would have to carry: '+bits.join(' · ');
+      body.appendChild(h);
+      if(cap!==null){
+        var slack=cap-x.end;
+        body.appendChild(slack>=0
+          ? sbNote_('Lands ' + sbMin_(slack) + ' inside the ' + fmtClock(cap) + ' finish. Could start as late as ' + fmtClock(cap - x.min) + ' and still make it.','var(--green)')
+          : sbNote_('Misses the ' + fmtClock(cap) + ' finish by ' + sbMin_(-slack) + '. It would have to start by ' + fmtClock(cap - x.min) + ', or shed ' + sbMin_(-slack) + ' of work.','var(--red)'));
+      }
+      body.appendChild(sbNote_('Wildcard table — ignores capper / small-cup / night restrictions, so this is a best case. Allergen, sausage-sesame and USDA rules still applied.','var(--muted)'));
+      any=true;
+    });
     if(!any)body.insertBefore(sbNote_('Nothing blocking, no chain breaks, nothing moved.','var(--green)'),body.firstChild);
     sbCard_(rep,r.day,body);
   });
