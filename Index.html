@@ -3327,7 +3327,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.140';
+var APP_VERSION='v0.5.141';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4656,6 +4656,19 @@ function sbBuildCtx(c,day,withOverlay,volPlan){
           overrides:{},
           excludedLines:withOverlay?(c.excludedLines||[]).slice():[]};
 }
+// v0.5.141: which lines actually ran. byLine only contains lines that placed at
+// least one SKU, so this is the operating set rather than the configured one —
+// a line that is scheduled but ends up empty correctly does not appear.
+// Shortened because the full labels ("LINE-6 (Capper)") do not fit a table cell
+// eight lines wide.
+function sbShortLine_(id){
+  return String(id||'').replace(/^LINE-/,'').replace(/^NIGHT-/,'N');
+}
+function sbLinesRunning_(sum){
+  if(!sum||!sum.byLine)return '—';
+  var ids=Object.keys(sum.byLine).sort();
+  return ids.length?ids.map(sbShortLine_).join(', '):'—';
+}
 function sbSummarise(res){
   var out={byLine:{},unplaced:[],placedOn:{},total:0,units:0,latestEnd:0};
   if(!res)return out;
@@ -4784,8 +4797,8 @@ function runSandbox(){
   // finish it produced. Without it the finish times are unreadable \u2014 1:52 PM is
   // a comfortable day against 4:30 and a miss against 1:45, and the report gave
   // no way to tell which.
-  ['Day','Units','\u0394 units','Run time base','Run time sandbox','\u0394','Finish by','Latest finish base','Latest finish sandbox','New unplaced','Chain breaks','Moved']
-    .forEach(function(h,i){var e=document.createElement('th');e.textContent=h;if(i>=1&&i<=6)e.style.textAlign='right';if(i>=9)e.style.textAlign='right';hr.appendChild(e);});
+  ['Day','Lines running','Units','\u0394 units','Run time base','Run time sandbox','\u0394','Finish by','Latest finish base','Latest finish sandbox','New unplaced','Chain breaks','Moved']
+    .forEach(function(h,i){var e=document.createElement('th');e.textContent=h;if(i>=2&&i<=7)e.style.textAlign='right';if(i>=10)e.style.textAlign='right';hr.appendChild(e);});
   th.appendChild(hr);tbl.appendChild(th);
   var tb=document.createElement('tbody');
   var wk={bMin:0,sMin:0,bU:0,sU:0,newUn:0,chain:0,moved:0};
@@ -4798,6 +4811,10 @@ function runSandbox(){
     var tr=document.createElement('tr');
     function td(txt,align,cls){var e=document.createElement('td');e.textContent=txt;if(align)e.style.textAlign=align;if(cls)e.className=cls;tr.appendChild(e);return e;}
     td(r.day);
+    // Sandbox set, not baseline — this is the scenario's operating lines. A line
+    // switched off in the matrix simply stops appearing here.
+    var eLines=td(sbLinesRunning_(r.S));
+    if(sbLinesRunning_(r.S)!==sbLinesRunning_(r.B))eLines.style.color='var(--amber)';
     td(fmtUnits(r.S.units),'right');
     td((r.S.units-r.B.units>=0?'+':'')+fmtUnits(r.S.units-r.B.units),'right');
     td(sbDur_(bMin),'right');
@@ -4820,6 +4837,7 @@ function runSandbox(){
   var trT=document.createElement('tr');trT.style.borderTop='1.5px solid var(--border2)';trT.style.fontWeight='600';
   function tdT(txt,align,color){var e=document.createElement('td');e.textContent=txt;if(align)e.style.textAlign=align;if(color)e.style.color=color;trT.appendChild(e);return e;}
   tdT('Week');
+  tdT('—');
   tdT(fmtUnits(wk.sU),'right');
   tdT((wk.sU-wk.bU>=0?'+':'')+fmtUnits(wk.sU-wk.bU),'right');
   tdT(sbDur_(wk.bMin),'right');
