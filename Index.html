@@ -248,6 +248,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .preview-table td{padding:5px 8px;border-bottom:.5px solid var(--border);text-align:right;}
 .preview-table td:first-child{text-align:left;color:var(--text);}
 .preview-table tr.total-row td{font-weight:500;color:var(--teal);}
+.data-table tr.total-row td{font-weight:600;border-top:1.5px solid var(--border2);}
 .empty{text-align:center;padding:60px 0;}
 .empty-icon{font-size:36px;margin-bottom:12px;}
 .empty-title{font-family:var(--mono);font-size:15px;margin-bottom:6px;}
@@ -3326,7 +3327,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.137';
+var APP_VERSION='v0.5.138';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4776,8 +4777,11 @@ function runSandbox(){
   var ws=document.createElement('div');
   var tbl=document.createElement('table');tbl.className='data-table';
   var th=document.createElement('thead'),hr=document.createElement('tr');
-  ['Day','Units','Run time base','Run time sandbox','\u0394','Latest finish base','Latest finish sandbox','New unplaced','Chain breaks','Moved']
-    .forEach(function(h,i){var e=document.createElement('th');e.textContent=h;if(i>=1&&i<=4)e.style.textAlign='right';if(i>=7)e.style.textAlign='right';hr.appendChild(e);});
+  // v0.5.138: "Units" was labelled as volume but rendered the DELTA, so the
+  // day's actual size was nowhere in the report. Absolute volume now, delta
+  // beside it.
+  ['Day','Units','\u0394 units','Run time base','Run time sandbox','\u0394','Latest finish base','Latest finish sandbox','New unplaced','Chain breaks','Moved']
+    .forEach(function(h,i){var e=document.createElement('th');e.textContent=h;if(i>=1&&i<=5)e.style.textAlign='right';if(i>=8)e.style.textAlign='right';hr.appendChild(e);});
   th.appendChild(hr);tbl.appendChild(th);
   var tb=document.createElement('tbody');
   var wk={bMin:0,sMin:0,bU:0,sU:0,newUn:0,chain:0,moved:0};
@@ -4790,6 +4794,7 @@ function runSandbox(){
     var tr=document.createElement('tr');
     function td(txt,align,cls){var e=document.createElement('td');e.textContent=txt;if(align)e.style.textAlign=align;if(cls)e.className=cls;tr.appendChild(e);return e;}
     td(r.day);
+    td(fmtUnits(r.S.units),'right');
     td((r.S.units-r.B.units>=0?'+':'')+fmtUnits(r.S.units-r.B.units),'right');
     td(sbDur_(bMin),'right');
     td(sbDur_(sMin),'right');
@@ -4805,6 +4810,7 @@ function runSandbox(){
   var trT=document.createElement('tr');trT.style.borderTop='1.5px solid var(--border2)';trT.style.fontWeight='600';
   function tdT(txt,align,color){var e=document.createElement('td');e.textContent=txt;if(align)e.style.textAlign=align;if(color)e.style.color=color;trT.appendChild(e);return e;}
   tdT('Week');
+  tdT(fmtUnits(wk.sU),'right');
   tdT((wk.sU-wk.bU>=0?'+':'')+fmtUnits(wk.sU-wk.bU),'right');
   tdT(sbDur_(wk.bMin),'right');
   tdT(sbDur_(wk.sMin),'right');
@@ -4860,8 +4866,11 @@ function runSandbox(){
     // per-line hours for this day, always — it's the thing she'll cross-check
     var lt=document.createElement('table');lt.className='data-table';lt.style.marginTop='10px';
     var lth=document.createElement('thead'),lhr=document.createElement('tr');
-    ['Line','Base run time','Sandbox run time','\u0394','Finish base','Finish sandbox'].forEach(function(h,i){
-      var e=document.createElement('th');e.textContent=h;if(i>=1&&i<=3)e.style.textAlign='right';lhr.appendChild(e);});
+    // v0.5.138: units alongside minutes. Run time answers "does it fit"; volume
+    // answers "is it worth moving" \u2014 a line shedding 40 minutes of a low-volume
+    // SKU is a different decision from one shedding 40 minutes of 12,000 units.
+    ['Line','Base units','Sandbox units','Base run time','Sandbox run time','\u0394','Finish base','Finish sandbox'].forEach(function(h,i){
+      var e=document.createElement('th');e.textContent=h;if(i>=1&&i<=5)e.style.textAlign='right';lhr.appendChild(e);});
     lth.appendChild(lhr);lt.appendChild(lth);
     var ltb=document.createElement('tbody'),ids={};
     Object.keys(r.B.byLine).forEach(function(k){ids[k]=1;});Object.keys(r.S.byLine).forEach(function(k){ids[k]=1;});
@@ -4869,6 +4878,8 @@ function runSandbox(){
       var b=r.B.byLine[id],x=r.S.byLine[id],tr=document.createElement('tr');
       function td(txt,align,cls){var e=document.createElement('td');e.textContent=txt;if(align)e.style.textAlign=align;if(cls)e.className=cls;tr.appendChild(e);}
       td((x&&x.label)||(b&&b.label)||id);
+      td(b?fmtUnits(b.units):'\u2014','right');
+      td(x?fmtUnits(x.units):'\u2014','right');
       td(b?sbDur_(b.min):'\u2014','right');
       td(x?sbDur_(x.min):'\u2014 (down)','right');
       var dm=(x?x.min:0)-(b?b.min:0);
@@ -4877,6 +4888,24 @@ function runSandbox(){
       td(x?fmtClock(x.end):'\u2014');
       ltb.appendChild(tr);
     });
+    // Day totals (v0.5.138). Units are the day's volume. Minutes are SUMMED
+    // ACROSS LINES, so that figure is labour-hours, not wall-clock — the lines
+    // run in parallel and the day is not that long. The finish columns carry
+    // latestEnd instead, which IS the wall-clock answer to "when are we out".
+    var trT=document.createElement('tr');trT.className='total-row';
+    function ttd(txt,align){var e=document.createElement('td');e.textContent=txt;if(align)e.style.textAlign=align;trT.appendChild(e);}
+    var bMin=0,sMin=0;
+    Object.keys(r.B.byLine).forEach(function(k){bMin+=r.B.byLine[k].min;});
+    Object.keys(r.S.byLine).forEach(function(k){sMin+=r.S.byLine[k].min;});
+    ttd(r.day+' total');
+    ttd(fmtUnits(r.B.units),'right');
+    ttd(fmtUnits(r.S.units),'right');
+    ttd(sbDur_(bMin),'right');
+    ttd(sbDur_(sMin),'right');
+    ttd(sbMin_(sMin-bMin),'right');
+    ttd(r.B.latestEnd?fmtClock(r.B.latestEnd):'—');
+    ttd(r.S.latestEnd?fmtClock(r.S.latestEnd):'—');
+    ltb.appendChild(trT);
     lt.appendChild(ltb);body.appendChild(lt);
     // v0.5.133 — "what would the extra table have to be?". Read entirely off the
     // run that just happened; there is no second solve. Answers the sizing half
