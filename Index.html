@@ -1,14 +1,12 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.145 — 2026-08-21    (pairs with Code.js v0.4.77)
+  Sequins ✨ — Index.html    v0.5.146 — 2026-08-21    (pairs with Code.js v0.4.78)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.145 Overtime readout — the other end of the curfew question. A curfew
-           asks "can we be out by X"; this prices the answer when we can't.
-           Any line past targetRuntimeMin (510 = 8.5h) is flagged with its
-           minutes over, crew size and cost at hourlyRate x otMultiplier
-           (new, default 1.5). Per line, per day, rolled up per week, and
-           stamped on the day card title so an OT day is visible collapsed.
-           Pure readout — it changes no placement decision.
+  v0.5.146 SKU Library's Active and Staging columns pin to the right edge. The
+           table is wider than any screen and its scrollbar sits below 46 rows,
+           so reaching Active meant scrolling to the bottom of the page and
+           back — which is why an inactive SKU looked impossible to reactivate
+           unless you searched to shorten the table first.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -250,6 +248,22 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .preview-table td:first-child{text-align:left;color:var(--text);}
 .preview-table tr.total-row td{font-weight:500;color:var(--teal);}
 .data-table tr.total-row td{font-weight:600;border-top:1.5px solid var(--border2);}
+/* v0.5.146 — SKU Library is wider than any screen, and its horizontal
+   scrollbar sits below 46 rows, so reaching Active meant scrolling to the
+   bottom of the page and back. Pin the last two columns (Active, Staging) to
+   the right edge so they are reachable from any scroll position. Opaque
+   background or the columns underneath show through. */
+#view-skus .data-table th:nth-last-child(2),
+#view-skus .data-table td:nth-last-child(2),
+#view-skus .data-table th:last-child,
+#view-skus .data-table td:last-child{
+  position:sticky;background:var(--surface);z-index:2;
+  box-shadow:-6px 0 8px -6px rgba(0,0,0,0.55);
+}
+#view-skus .data-table th:nth-last-child(2),
+#view-skus .data-table td:nth-last-child(2){right:96px;}
+#view-skus .data-table th:last-child,
+#view-skus .data-table td:last-child{right:0;width:96px;box-shadow:none;}
 .empty{text-align:center;padding:60px 0;}
 .empty-icon{font-size:36px;margin-bottom:12px;}
 .empty-title{font-family:var(--mono);font-size:15px;margin-bottom:6px;}
@@ -3328,7 +3342,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.145';
+var APP_VERSION='v0.5.146';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;

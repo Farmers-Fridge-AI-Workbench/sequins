@@ -1,9 +1,13 @@
 /**
- * Sequins ✨ — Code.js    v0.4.77 — 2026-08-21    (pairs with Index.html v0.5.145)
+ * Sequins ✨ — Code.js    v0.4.78 — 2026-08-21    (pairs with Index.html v0.5.146)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.77  No server change — pairing bump. The overtime readout is entirely
- *          client-side.
+ * v0.4.78  FIX: the allergen sync was deactivating SKUs that have demand.
+ *          demandedSkus_ enumerated days from the legacy Script Properties
+ *          index only, so demand living in the Demand Store sheet was
+ *          invisible and a scheduled SKU read as undemanded. It was switched
+ *          off nightly and reactivating it by hand never held. Now reads the
+ *          sheet first and the index second, matching getDemandDay_.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -1987,17 +1991,28 @@ function allergenIsUnknown_(v) {
 // deactivating a SKU removes it from sequencing entirely, so a SKU that is
 // missing from Menu Library but HAS demand must never be auto-deactivated —
 // that would silently drop units out of the plan.
+// v0.4.78 FIX. This guard is what stops the daily sync deactivating a SKU that
+// is actually scheduled. It used to enumerate days from DEMAND_INDEX_KEY only —
+// the LEGACY Script Properties index — which does not list days that have moved
+// to the Demand Store sheet. Every sheet-migrated week was therefore invisible
+// here, so a SKU carrying real demand read as undemanded and got switched off,
+// again the next night, and again, however many times someone reactivated it by
+// hand. That is not a data problem; that is this function lying.
+//
+// Now reads the sheet FIRST and the legacy index second, matching getDemandDay_.
 function demandedSkus_() {
-  const idx = getSection_(DEMAND_INDEX_KEY) || {};
   const out = {};
-  Object.keys(idx).forEach(function(week) {
-    (idx[week] || []).forEach(function(day) {
-      const d = getDemandDay_(week, day);
-      const skus = (d && d.skus) || {};
-      Object.keys(skus).forEach(function(sku) {
-        if ((skus[sku] || 0) > 0) out[normalizeSku_(sku)] = true;
-      });
+  function absorb(d) {
+    const skus = (d && d.skus) || {};
+    Object.keys(skus).forEach(function(sku) {
+      if ((skus[sku] || 0) > 0) out[normalizeSku_(sku)] = true;
     });
+  }
+  const map = demandStoreRead_();
+  Object.keys(map).forEach(function(k) { absorb(demandStoreParse_(map[k].payload)); });
+  const idx = getSection_(DEMAND_INDEX_KEY) || {};
+  Object.keys(idx).forEach(function(week) {
+    (idx[week] || []).forEach(function(day) { absorb(getDemandDay_(week, day)); });
   });
   return out;
 }
