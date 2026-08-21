@@ -8,6 +8,44 @@ Opened 2026-08-19.
 
 ---
 
+## Ready to build
+
+### Sandbox needs a real "no cap" option
+
+Since v0.5.131 a blank Finish by means **16:30**, so every sandbox day is
+capped whether anyone asked for it or not. That switches the engine from
+balancing on duration to balancing on projected clock finish, which makes
+start times decide everything: LINE-3 (08:20) structurally gets ~2h less work
+than LINE-2/LINE-4 (06:20). Samad reported exactly this — "Line 3 keeps
+getting shorted hours" — on a sandbox where he had entered no curfews at all.
+
+Before .131 the sandbox passed no finish-by and fell through to the live
+view's selected day, which was usually off, so days ran uncapped on even
+run-hours.
+
+Fix: an explicit "no cap" choice per day in the Finish by table, so blank or
+"none" genuinely means uncapped. Right now an uncapped day cannot be modelled
+at all, which was possible before.
+
+### Recommend how to structure a new line
+
+Cori, 2026-08-21. When standing up a line (LINE-7 for holiday volume), have
+Sequins propose what it should *be* — pool, capabilities, start time, seed —
+based on where volume is actually growing. A week that is mostly wraps wants a
+different 7th line than one that is mostly bowls.
+
+The engine has no notion of what a line *should* be, only whether SKUs fit on
+one, so this is a new capability rather than a readout. Inputs already exist:
+46 published day-versions of real line/SKU/volume mix in the archive, plus
+forecast demand out to Wk 52.
+
+Shape it as: read the mix trend → cluster the growth by pool and package →
+propose a line config → run it through the existing sandbox engine to show
+the before/after. Simulate against archive history before wiring anything in,
+per house rule.
+
+---
+
 ## Blocked on Cori
 
 ### Go-live date for sandbox-only lines
