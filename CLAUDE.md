@@ -85,12 +85,20 @@ still execute as the real account.
   `setValue` in a loop. Genuine single-cell writes are fine and exist
   (War Room cost cell, ASM20 date + start time).
 - **Version stamp on every change.** `Code.js` and `Index.html` are
-  versioned and delivered as a **pair**. Bump both, add a brief changelog
-  entry — a few lines per version, newest-first, no long writeups.
-  The client stamp is `APP_VERSION` in `Index.html` (one place, feeds the
-  sidebar); the pairing is recorded in the `Code.js` header. **Check the
-  two agree before shipping** — drift has happened repeatedly and is
-  invisible until someone reads the header.
+  versioned and delivered as a **pair**. Bump both, even when only one
+  changed.
+- **There are THREE stamps, not two.** All three must agree before shipping:
+  1. the `Code.js` header comment (version + date + the Index.html it pairs with)
+  2. the `Index.html` header comment — an HTML comment in the **first 14
+     lines**, easy to miss because nothing reads it
+  3. `APP_VERSION` in `Index.html` (~line 3330) — the only one the sidebar
+     shows, so it is the only one anyone notices when it drifts
+  Drift has happened repeatedly: the `Code.js` pairing line once sat 10
+  versions behind, and the `Index.html` header 14. Both went unnoticed
+  because the sidebar was correct. **Grep all three, every time.**
+- **Each header carries the LATEST change only** — replace the previous
+  entry, don't accumulate. `git log` is the full history. A few lines,
+  no long writeups.
 - Use `getDisplayValues()` for date columns — `getValues()` returns Date
   objects that re-serialize through timezone on `setValues()`. Force text
   format with `setNumberFormat('@')`.

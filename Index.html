@@ -1,13 +1,11 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.127 — 2026-08-18    (pairs with Code.js v0.4.59)
-  Full history: git log.
+  Sequins ✨ — Index.html    v0.5.142 — 2026-08-21    (pairs with Code.js v0.4.74)
+  Full history: git log. This header carries the LATEST change only.
 
-  v0.5.127 The grid is inset from the right edge. It wasn't actually clipped,
-           but at full width the right border sat on the boundary of the
-           printable area and read as a cut-off page — not a question you
-           want QA or a USDA inspector asking about a production record.
-           Table and banner now sit at 98% with a wider right page margin, so
-           the table is visibly closed on both sides.
+  v0.5.142 This header was stranded at v0.5.127 while APP_VERSION ran on to
+           .141 — fourteen versions of drift, invisible because the sidebar
+           reads APP_VERSION and nothing reads this. Both are now bumped
+           together, and CLAUDE.md records all three stamps rather than two.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -3327,7 +3325,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.141';
+var APP_VERSION='v0.5.142';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;

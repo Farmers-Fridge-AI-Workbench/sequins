@@ -1,36 +1,12 @@
 /**
- * Sequins ✨ — Code.js    v0.4.73 — 2026-08-20    (pairs with Index.html v0.5.141)
- * Full history: git log.
+ * Sequins ✨ — Code.js    v0.4.74 — 2026-08-21    (pairs with Index.html v0.5.142)
+ * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.61  Sandbox-only lines move out of stored Line Config and into a code
- *          list the Sandbox reads directly. v0.4.60 set the flag on the
- *          DEFAULT_LINE_CONFIG entry only, so any deployment with a saved line
- *          config — i.e. the live one — never saw the line at all. No server
- *          change; pairing bump only.
- *
- * v0.4.60  Sandbox-only lines. No server change — saveLineConfig persists the
- *          line array whole, so the new `sandboxOnly` flag and the per-sandbox
- *          `lineDays` map ride along with no schema work, and getPublishedPlan
- *          only ever emits lines that appear in a published plan, which a
- *          sandbox-only line never does. Version bumped to keep the pair
- *          honest.
- *          NOTE: the pairing line above said v0.5.117 while Index.html was
- *          actually on v0.5.127 — ten versions of drift. Corrected here. The
- *          v0.5.118-.127 changelog entries were never written and are not
- *          reconstructed; git log is the record for those.
- *
- * v0.4.59  Run-sheet actuals get somewhere to land. Two new tabs in the plan
- *          archive — "Run Sheet Actuals" (one row per SKU per line per day:
- *          start, end, people, units) and "Run Sheet Shift" (one row per line
- *          per day: who ran it, held-over totes). Both upsert on their natural
- *          key so a shift's worth of edits doesn't append a shift's worth of
- *          rows, and both carry the plan alongside the actual so planned-vs-
- *          actual is a column subtraction in Snowflake rather than a join.
- *          Write access is floor viewers and admins. Nothing is ever deleted:
- *          a blanked field writes empty, the row stays.
- *          ActualFullTotes / ActualPartialUnits exist in the schema and are
- *          written empty — that's the tote-by-tote counting idea, so when it
- *          gets built it's a UI change and not a migration.
+ * v0.4.74  No server change — pairing bump. The sandbox work in v0.5.128-.142
+ *          is entirely client-side. Trimmed this header to the latest entry:
+ *          it still listed v0.4.61/.60/.59 and had nothing for .62 through
+ *          .73, because CLAUDE.md documented an accumulating list rather than
+ *          the latest-only style actually wanted.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
