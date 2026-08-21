@@ -1,10 +1,12 @@
 /**
- * Sequins ✨ — Code.js    v0.4.90 — 2026-08-21    (pairs with Index.html v0.5.158)
+ * Sequins ✨ — Code.js    v0.4.91 — 2026-08-21    (pairs with Index.html v0.5.159)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.90  No server change — pairing bump. The Category column removal is
- *          client-side; the field is still synced by fetchSkuAttributesFor and
- *          still written to the config mirror.
+ * v0.4.91  FIX: the config mirror wrote StartTime as a time serial. Sheets
+ *          coerces '06:30' on setValues, and formatting the column afterwards
+ *          cannot recover the string, so Line Config mirrored as
+ *          0.2708333333333333 and was unreadable. Text format is now applied
+ *          to StartTime and UpdatedAt BEFORE the write.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -2157,11 +2159,16 @@ function writeConfigMirror_(tabName, header, rows) {
   const last = sheet.getLastRow();
   if (last > 0) sheet.getRange(1, 1, last, sheet.getMaxColumns()).clearContent();
   const block = [header].concat(rows);
+  // v0.4.91: force text on time-like columns BEFORE writing, not after. Sheets
+  // coerces "06:30" into a time serial on setValues, so StartTime was landing
+  // as 0.2708333333333333 and the Line Config mirror stopped being readable —
+  // and formatting it afterwards cannot recover the original string. Same
+  // reason getDisplayValues() exists on the read side.
+  ['UpdatedAt', 'StartTime'].forEach(function (name) {
+    const c = header.indexOf(name) + 1;
+    if (c > 0) sheet.getRange(1, c, block.length, 1).setNumberFormat('@');
+  });
   sheet.getRange(1, 1, block.length, header.length).setValues(block);
-  const stampCol = header.indexOf('UpdatedAt') + 1;
-  if (stampCol > 0 && block.length > 1) {
-    sheet.getRange(2, stampCol, block.length - 1, 1).setNumberFormat('@');
-  }
   return rows.length;
 }
 
