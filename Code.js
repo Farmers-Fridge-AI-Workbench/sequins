@@ -1,9 +1,12 @@
 /**
- * Sequins ✨ — Code.js    v0.4.87 — 2026-08-21    (pairs with Index.html v0.5.155)
+ * Sequins ✨ — Code.js    v0.4.88 — 2026-08-21    (pairs with Index.html v0.5.156)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.87  No server change — pairing bump. The unsaved-config guard is
- *          entirely client-side, in the 8s poll.
+ * v0.4.88  Config-mirror failures are reported instead of swallowed. The three
+ *          save functions return the message and the client surfaces it. The
+ *          mirror had stopped recording SKU Library saves while the app
+ *          reported success — a stale tab reading as authoritative is worse
+ *          than a visible error. Still non-fatal.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -1730,8 +1733,8 @@ function saveSkuLibrary(library) {
   const user = getCurrentUser();
   if (!user.isAdmin) throw new Error('Not authorized');
   setSection_(STATE_KEYS.skuLibrary, library);
-  mirrorConfigSafely_('sku', library, user.email);
-  return { ok: true };
+  const mirrorErr = mirrorConfigSafely_('sku', library, user.email);
+  return { ok: true, mirror: mirrorErr };
 }
 
 // ─── UNITS PER TOTE (ported out of Assembly Sequencing 2.0) ──────────────────
@@ -2213,14 +2216,24 @@ function mirrorRules_(rules, email) {
 
 // Best-effort, exactly like the publish fan-out. The save is the record; the
 // mirror is a courtesy. A sheet hiccup must never cost someone their edit.
+// v0.4.88: returns a message instead of swallowing the failure into Logger.log.
+// The mirror silently failed to record a SKU Library save and there was no way
+// to see it — the tab just kept an old timestamp while the app reported success,
+// so the mirror looked authoritative when it was stale. Exactly the class of
+// invisible failure this session kept tripping over. Still non-fatal: the save
+// is the record and a sheet problem must never cost an edit. But the caller
+// hands the message back to the client so it lands in the status line.
 function mirrorConfigSafely_(kind, payload, email) {
   try {
-    const n = (kind === 'sku')  ? mirrorSkuLibrary_(payload, email)
+    const n = (kind === 'sku')   ? mirrorSkuLibrary_(payload, email)
             : (kind === 'rules') ? mirrorRules_(payload, email)
-                               : mirrorLineConfig_(payload, email);
+                                 : mirrorLineConfig_(payload, email);
     Logger.log('config mirror: wrote ' + n + ' ' + kind + ' rows.');
+    return null;
   } catch (e) {
-    Logger.log('config mirror failed (non-fatal, ' + kind + '): ' + e.message);
+    const msg = 'Config mirror did NOT record this save (' + kind + '): ' + e.message;
+    Logger.log(msg);
+    return msg;
   }
 }
 
@@ -2229,8 +2242,8 @@ function saveLineConfig(lineConfig) {
   if (!user.isAdmin && !user.canEditRules) throw new Error('Not authorized');
   setSection_(STATE_KEYS.lineConfig, lineConfig);
   writeAuditLog_(user.email, 'save_line_config', '', '', lineConfig.length + ' lines');
-  mirrorConfigSafely_('line', lineConfig, user.email);
-  return { ok: true };
+  const mirrorErr = mirrorConfigSafely_('line', lineConfig, user.email);
+  return { ok: true, mirror: mirrorErr };
 }
 
 function saveSequencingRules(rules) {
@@ -2238,8 +2251,8 @@ function saveSequencingRules(rules) {
   if (!user.isAdmin && !user.canEditRules) throw new Error('Not authorized');
   setSection_(STATE_KEYS.sequencingRules, rules);
   writeAuditLog_(user.email, 'save_rules', '', '', JSON.stringify(rules));
-  mirrorConfigSafely_('rules', rules, user.email);
-  return { ok: true };
+  const mirrorErr = mirrorConfigSafely_('rules', rules, user.email);
+  return { ok: true, mirror: mirrorErr };
 }
 
 // ─── BREAK OVERRIDES (per week/day, per line) ─────────────────────────────────

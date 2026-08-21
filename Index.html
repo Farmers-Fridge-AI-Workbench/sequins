@@ -1,17 +1,12 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.155 — 2026-08-21    (pairs with Code.js v0.4.87)
+  Sequins ✨ — Index.html    v0.5.156 — 2026-08-21    (pairs with Code.js v0.4.88)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.155 FIX: the 8s poll was silently discarding unsaved config edits. It
-           replaced STATE.skuLibrary / lineConfig / sequencingRules wholesale
-           and only re-rendered Line Sequence, so an edit sitting in its 1.5s
-           auto-save debounce was overwritten by the server copy, the debounced
-           save sent that copy back, and the edit vanished — while the input
-           kept showing what had been typed. lastModified changes whenever
-           ANYONE saves, so with two people in the app it fired constantly.
-           That is how STEAK_CUP and GRILLED_CHICKEN kept losing their package
-           type. The poll now leaves a section alone while it has unsaved local
-           edits; everything else still syncs.
+  v0.5.156 A failed config-mirror write now shows in the SKU Library status
+           line instead of vanishing into Logger.log. The mirror stopped
+           recording SKU Library saves while the app still reported success, so
+           a stale tab looked authoritative. Save is still the record and a
+           sheet problem still cannot cost an edit — it just says so now.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -3265,7 +3260,7 @@ function applyAdmissibleLinesModal(){
   if(_skuTimer)clearTimeout(_skuTimer);_skuTimer=setTimeout(function(){saveSkuLibrary(true);},1500);
 }
 function updateSkuCounts(){var lib=STATE.skuLibrary,k=Object.keys(lib).filter(function(x){return !lib[x].pending;});var pend=Object.keys(lib).filter(function(x){return !!lib[x].pending;});var pEl=document.getElementById('sc-pending');if(pEl)pEl.textContent=pend.length?String(pend.length):'0';document.getElementById('sc-capper').textContent=k.filter(function(x){return lib[x].capper;}).length;document.getElementById('sc-night').textContent=k.filter(function(x){return lib[x].nightShift;}).length;document.getElementById('sc-preproc').textContent=k.filter(function(x){return lib[x].preProcessed;}).length;document.getElementById('sc-active').textContent=k.filter(function(x){return lib[x].active!==false;}).length;document.getElementById('sc-total').textContent=k.length;}
-function saveSkuLibrary(isAutoSave){var el=document.getElementById('skuLibStatus');if(el)el.innerHTML='<div class="status status-info"><span class="spinner"></span>Saving…</div>';google.script.run.withSuccessHandler(function(){_cfgDirty.sku=false;if(el){el.innerHTML='<div class="status status-ok">✓ Saved'+(isAutoSave?' (auto)':'')+'</div>';setTimeout(function(){if(el.innerHTML.indexOf('Saved')!==-1)el.innerHTML='';},3000);}}).withFailureHandler(function(err){if(el)el.innerHTML='<div class="status status-err">⚠ SAVE FAILED: '+err.message+'</div>';}).saveSkuLibrary(STATE.skuLibrary);}
+function saveSkuLibrary(isAutoSave){var el=document.getElementById('skuLibStatus');if(el)el.innerHTML='<div class="status status-info"><span class="spinner"></span>Saving…</div>';google.script.run.withSuccessHandler(function(r){_cfgDirty.sku=false;if(r&&r.mirror){if(el)el.innerHTML='<div class="status status-warn">✓ Saved — but '+r.mirror+'</div>';return;}if(el){el.innerHTML='<div class="status status-ok">✓ Saved'+(isAutoSave?' (auto)':'')+'</div>';setTimeout(function(){if(el.innerHTML.indexOf('Saved')!==-1)el.innerHTML='';},3000);}}).withFailureHandler(function(err){if(el)el.innerHTML='<div class="status status-err">⚠ SAVE FAILED: '+err.message+'</div>';}).saveSkuLibrary(STATE.skuLibrary);}
 function importSkusFromForecast(){var allSkuNamesSet={};Object.keys(STATE.demand).forEach(function(wk){Object.keys(STATE.demand[wk]).forEach(function(day){Object.keys(STATE.demand[wk][day].skus||{}).forEach(function(sku){allSkuNamesSet[sku]=true;});});});Object.keys(STATE.skuLibrary).forEach(function(key){allSkuNamesSet[key]=true;});var allSkuNames=Object.keys(allSkuNamesSet),el=document.getElementById('skuLibStatus');if(!allSkuNames.length){el.innerHTML='<div class="status status-warn">No demand loaded yet — load demand first.</div>';return;}el.innerHTML='<div class="status status-info"><span class="spinner"></span>Pulling attributes…</div>';google.script.run.withSuccessHandler(function(result){var attributes=result.attributes,notFound=result.notFound,added=0,updated=0;allSkuNames.forEach(function(sku){var key=sku.toUpperCase(),normKey=key.replace(/[^A-Z0-9]/g,''),attrs=attributes[normKey];if(!STATE.skuLibrary[key]){STATE.skuLibrary[key]={active:true,category:'',packageType:'',unitsPerTote:'',upm:'',allergens:'',capper:false,nightShift:false,preProcessed:false};added++;}if(attrs){if(attrs.category)STATE.skuLibrary[key].category=attrs.category;if(attrs.packageType)STATE.skuLibrary[key].packageType=attrs.packageType;if(attrs.allergens)STATE.skuLibrary[key].allergens=attrs.allergens;if(attrs.upm)STATE.skuLibrary[key].upm=attrs.upm;updated++;}});renderSkuLibrary();var nfMsg=notFound.length?('<br><span style="color:var(--amber)">⚠ '+notFound.length+' not found: '+notFound.slice(0,10).join(', ')+(notFound.length>10?'…':'')+'</span>'):'';el.innerHTML='<div class="status status-info"><span class="spinner"></span>'+added+' new, '+updated+' matched — saving…</div>';google.script.run.withSuccessHandler(function(){el.innerHTML='<div class="status status-ok">✓ Saved — '+added+' new, '+updated+' matched'+nfMsg+'</div>';}).withFailureHandler(function(err){el.innerHTML='<div class="status status-err">⚠ Pull ok, SAVE FAILED: '+err.message+'</div>';}).saveSkuLibrary(STATE.skuLibrary);}).withFailureHandler(function(err){el.innerHTML='<div class="status status-err">'+err.message+'</div>';}).fetchSkuAttributesFor(allSkuNames);}
 
 // v0.5.58: rules consolidation — line seeds moved into the Active Lines table
@@ -3445,7 +3440,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.155';
+var APP_VERSION='v0.5.156';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
