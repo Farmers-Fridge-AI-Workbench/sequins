@@ -1,12 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.84 — 2026-08-21    (pairs with Index.html v0.5.152)
+ * Sequins ✨ — Code.js    v0.4.85 — 2026-08-21    (pairs with Index.html v0.5.153)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.84  Config mirror covers sequencing rules. They were the third thing
- *          living only in Script Properties, and the one that decides
- *          behaviour nobody can see — greenBeltPackages, homeLines and
- *          lineSeeds are all in there and appear in no view. New "Sequencing
- *          Rules" tab, key/value so a new rule needs no schema change.
+ * v0.4.85  No server change — pairing bump. The FC chain guard is entirely
+ *          client-side, in seq()/bal().
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────

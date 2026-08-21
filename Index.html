@@ -1,8 +1,16 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.152 — 2026-08-21    (pairs with Code.js v0.4.84)
+  Sequins ✨ — Index.html    v0.5.153 — 2026-08-21    (pairs with Code.js v0.4.85)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.152 Pairing bump for the Code.js rules mirror. No client change.
+  v0.5.153 seq()/bal() refuse a food-contact placement that would break the
+           allergen chain. distributeFcGroup never breaks one, but the jobs it
+           gave up on were placed by the generic placer, which checked slot
+           cap, runtime, USDA and sausage/sesame and NOT the chain — so the
+           break was created after the allergen logic had declined to make it,
+           then merely reported. Wk 33 Fri and Wk 34 Mon both shipped that way.
+           Now surfaces as unplaced with a reason. Replayed across all 140
+           stored demand days: identical breaks (0) and unplaced (140) before
+           and after, so it disturbs nothing currently planned.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -1497,8 +1505,41 @@ function runSequencer(ctx){
     return out;
   }
   function place(job,ls,lid){var co=ls.slots.length>0?(rules.changeoverMin||0):0;job.changeoverMin=co;job.startClockMin=ls.startMin+ls.totalMin+co;ls.slots.push(job);ls.totalMin+=job.runtimeMin+co;job.endClockMin=ls.startMin+ls.totalMin;ls.totalUnits+=job.qty;if(job.hasSausage)ls.hasSausage=true;if(job.hasSesame)ls.hasSesame=true;placed[job.sku]=true;job.placedOnLine=lid;}
-  function seq(job,cids){for(var i=0;i<cids.length;i++){var lid=cids[i],ls=lineState[lid];if(!ls||ls.slots.length>=SLOT_CAP||!fits(ls,lid,job))continue;if(job.isUSDA&&capsById[lid]&&!capsById[lid].usdaApproved)continue;if(job.hasSausage&&ls.hasSesame)continue;if(job.hasSesame&&ls.hasSausage)continue;place(job,ls,lid);return true;}return false;}
-  function bal(job,cids){var best=null,bl=Infinity;for(var i=0;i<cids.length;i++){var lid=cids[i],ls=lineState[lid];if(!ls||ls.slots.length>=SLOT_CAP||!fits(ls,lid,job))continue;if(job.isUSDA&&capsById[lid]&&!capsById[lid].usdaApproved)continue;if(job.hasSausage&&ls.hasSesame)continue;if(job.hasSesame&&ls.hasSausage)continue;var ld=loadOf(ls,lid);if(ld<bl){bl=ld;best=lid;}}if(!best)return false;place(job,lineState[best],best);return true;}
+  // ─── FC CHAIN GUARD (v0.5.153) ────────────────────────────────────────────
+  // distributeFcGroup never breaks a chain — it only ever extends one, and hands
+  // back whatever it could not place as `broken`. But those broken jobs were
+  // then pushed into the normal pools and placed by seq()/bal(), which check
+  // slot cap, runtime, USDA and sausage/sesame and NOT the allergen chain. So a
+  // food-contact SKU could land on a line where it breaks the chain, created
+  // after the allergen logic had already declined to do it, and surfaced as a
+  // "chain break" tag instead of being prevented. Wk 33 Friday and Wk 34 Monday
+  // both shipped that way (SAUSAGE_BURRITO_BREAKFAST -> TURKEY_CLUB_SANDWICH,
+  // egg dropped).
+  //
+  // A line's FC block must be totally ordered by inclusion. Since it already is,
+  // a new FC job keeps it so only if its allergen set is comparable — superset or
+  // subset — with EVERY FC job already on the line. Position is not decided here;
+  // orderLineByBlocks_ still sorts the block afterwards. This only refuses
+  // arrangements no order could rescue.
+  //
+  // An unknown-allergen FC SKU carries an empty set, which is a subset of
+  // everything and stays comparable, so it is not newly excluded — it just has
+  // to run first, which the ordering pass already handles.
+  //
+  // Jars are untouched: compounding is a conveyor rule and they never touch it.
+  function fcChainOk_(job,ls){
+    if(!job.fcClass)return true;
+    var a=job.allergenSet||[];
+    for(var i=0;i<ls.slots.length;i++){
+      var s=ls.slots[i];
+      if(!s||!s.fcClass)continue;
+      var b=s.allergenSet||[];
+      if(!isSupersetArr(a,b)&&!isSupersetArr(b,a))return false;
+    }
+    return true;
+  }
+  function seq(job,cids){for(var i=0;i<cids.length;i++){var lid=cids[i],ls=lineState[lid];if(!ls||ls.slots.length>=SLOT_CAP||!fits(ls,lid,job))continue;if(job.isUSDA&&capsById[lid]&&!capsById[lid].usdaApproved)continue;if(job.hasSausage&&ls.hasSesame)continue;if(job.hasSesame&&ls.hasSausage)continue;if(!fcChainOk_(job,ls))continue;place(job,ls,lid);return true;}return false;}
+  function bal(job,cids){var best=null,bl=Infinity;for(var i=0;i<cids.length;i++){var lid=cids[i],ls=lineState[lid];if(!ls||ls.slots.length>=SLOT_CAP||!fits(ls,lid,job))continue;if(job.isUSDA&&capsById[lid]&&!capsById[lid].usdaApproved)continue;if(job.hasSausage&&ls.hasSesame)continue;if(job.hasSesame&&ls.hasSausage)continue;if(!fcChainOk_(job,ls))continue;var ld=loadOf(ls,lid);if(ld<bl){bl=ld;best=lid;}}if(!best)return false;place(job,lineState[best],best);return true;}
   var SEQ={wrap:true,sandwich:true,green:true,night:true};
   // Candidate lines now come from candidateLines(job) — the hard capability
   // filter + soft home-line ordering — instead of a hardcoded pool->line map.
@@ -1652,7 +1693,7 @@ function runSequencer(ctx){
       }
       if(!placer(job,cids)){
         var reasons=[];
-        cids.forEach(function(lid){var ls=lineState[lid];if(!ls)return;if(ls.slots.length>=SLOT_CAP)reasons.push(lid+' slot cap');else if(!fits(ls,lid,job))reasons.push(lid+(capActive&&isDayLine_(lineTypeById[lid])?' cannot take it without passing the '+fmtClock(CAP_MIN)+' cap':' runtime full'));});
+        cids.forEach(function(lid){var ls=lineState[lid];if(!ls)return;if(ls.slots.length>=SLOT_CAP)reasons.push(lid+' slot cap');else if(!fcChainOk_(job,ls))reasons.push(lid+' would break the allergen chain (it already carries a food-contact SKU whose allergens this one neither contains nor is contained by, so no run order is legal)');else if(!fits(ls,lid,job))reasons.push(lid+(capActive&&isDayLine_(lineTypeById[lid])?' cannot take it without passing the '+fmtClock(CAP_MIN)+' cap':' runtime full'));});
         job.unplacedReason=reasons.length?reasons.slice(0,2).join(', '):(job.forcedLine?'seed line '+job.forcedLine+' not available':job.admissibleLines?'no eligible admissible lines':'no eligible lines (capability filter)');
       }
     });
@@ -3375,7 +3416,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.152';
+var APP_VERSION='v0.5.153';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
