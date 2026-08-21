@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.85 — 2026-08-21    (pairs with Index.html v0.5.153)
+ * Sequins ✨ — Code.js    v0.4.86 — 2026-08-21    (pairs with Index.html v0.5.154)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.85  No server change — pairing bump. The FC chain guard is entirely
- *          client-side, in seq()/bal().
+ * v0.4.86  No server change — pairing bump. The chain-ordering fix is entirely
+ *          client-side, in orderChainMonotonic_.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────

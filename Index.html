@@ -1,16 +1,16 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.153 — 2026-08-21    (pairs with Code.js v0.4.85)
+  Sequins ✨ — Index.html    v0.5.154 — 2026-08-21    (pairs with Code.js v0.4.86)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.153 seq()/bal() refuse a food-contact placement that would break the
-           allergen chain. distributeFcGroup never breaks one, but the jobs it
-           gave up on were placed by the generic placer, which checked slot
-           cap, runtime, USDA and sausage/sesame and NOT the chain — so the
-           break was created after the allergen logic had declined to make it,
-           then merely reported. Wk 33 Fri and Wk 34 Mon both shipped that way.
-           Now surfaces as unplaced with a reason. Replayed across all 140
-           stored demand days: identical breaks (0) and unplaced (140) before
-           and after, so it disturbs nothing currently planned.
+  v0.5.154 ROOT CAUSE of the LINE-4 egg drop. orderChainMonotonic_ began with
+           `if (jobs.length < 3) return jobs.slice()` — so a TWO-job
+           food-contact block was never ordered at all, just handed back in
+           placement order, and placement emits wraps before sandwiches. A line
+           carrying only SAUSAGE_BURRITO_BREAKFAST {egg,milk,soy,wheat} and
+           TURKEY_CLUB_SANDWICH {milk,soy,wheat} therefore ran the burrito
+           first and dropped egg, untouched. Two jobs are exactly enough to
+           break a chain; the guard is now < 2. Verified on that pair in
+           isolation, and a no-op across all 140 stored demand days.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -1813,7 +1813,16 @@ function runSequencer(ctx){
 // When no remaining job can legally extend the chain the cleanest one goes next
 // and carries a note, rather than the pass silently pretending the chain is fine.
 function orderChainMonotonic_(jobs){
-  if(jobs.length<3)return jobs.slice();
+  // v0.5.154 FIX: was `< 3`, which returned a two-job block in placement order
+  // WITHOUT ordering it. Two jobs are exactly enough to break a chain — a
+  // bigger allergen set followed by a smaller one drops the difference — and
+  // placement emits pool by pool, wraps before sandwiches. So a line carrying
+  // just SAUSAGE_BURRITO_BREAKFAST (wrap, {egg,milk,soy,wheat}) and
+  // TURKEY_CLUB_SANDWICH (sandwich, {milk,soy,wheat}) got the burrito first and
+  // dropped egg, untouched by the ordering pass. That is the Wk 33 Friday and
+  // Wk 34 Monday case in the archive, and the reason a seed fix alone did not
+  // settle it. One job cannot break anything; two can.
+  if(jobs.length<2)return jobs.slice();
   var partnerOf={};
   jobs.forEach(function(j){
     if(!j.usdaPairedSku)return;
@@ -3416,7 +3425,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.153';
+var APP_VERSION='v0.5.154';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
