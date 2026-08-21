@@ -1,13 +1,14 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.144 — 2026-08-21    (pairs with Code.js v0.4.76)
+  Sequins ✨ — Index.html    v0.5.145 — 2026-08-21    (pairs with Code.js v0.4.77)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.144 Blank Finish by means NO curfew again. v0.5.131 defaulted it to
-           16:30, and a cap does not just impose a ceiling — it changes what
-           bal() optimises, from equal DURATION to equal FINISH TIME. With
-           staggered starts those are opposites, so LINE-3 (08:20) was handed
-           ~2h less than the 06:20 lines on sandboxes with no curfew entered.
-           That was Samad's "LINE-3 keeps getting shorted hours".
+  v0.5.145 Overtime readout — the other end of the curfew question. A curfew
+           asks "can we be out by X"; this prices the answer when we can't.
+           Any line past targetRuntimeMin (510 = 8.5h) is flagged with its
+           minutes over, crew size and cost at hourlyRate x otMultiplier
+           (new, default 1.5). Per line, per day, rolled up per week, and
+           stamped on the day card title so an OT day is visible collapsed.
+           Pure readout — it changes no placement decision.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -818,7 +819,7 @@ var DEFAULT_LINE_CONFIG=[
   {id:'NIGHT-1',label:'Night Shift 1',type:'night',hc:9,pool:'night',startTime:'00:20',caps:{capper:true,smallCup:false,usdaApproved:false,night:true},days:{Mon:true,Tue:true,Wed:true,Thu:true,Fri:false,Sat:false,Sun:true}},
   {id:'NIGHT-2',label:'Night Shift 2',type:'night',hc:9,pool:'night',startTime:'00:20',caps:{capper:false,smallCup:false,usdaApproved:false,night:true},days:{Mon:true,Tue:true,Wed:true,Thu:true,Fri:false,Sat:false,Sun:false}}
 ];
-var DEFAULT_RULES={greenBeltPackages:['4oz jar'],homeLines:{wrap:'LINE-3',sandwich:'LINE-2',salad:'LINE-1',bowl:'LINE-5',green:'LINE-0'},lineSeeds:{},sausageSesameRule:true,targetRuntimeMin:510,slotCap:14,nightShiftUnitCap:9500,changeoverMin:8.5,hourlyRate:24.39,offlineLaborHeadcount:5,processingStaticPerUnit:0.11,planEmailRecipients:'',planEmailCc:'',breakMinRuntimeMin:240,break30OffsetMin:240,break30DurationMin:30,break15OffsetMin:360,break15DurationMin:15,break30Paid:false,break15Paid:true};
+var DEFAULT_RULES={greenBeltPackages:['4oz jar'],homeLines:{wrap:'LINE-3',sandwich:'LINE-2',salad:'LINE-1',bowl:'LINE-5',green:'LINE-0'},lineSeeds:{},sausageSesameRule:true,targetRuntimeMin:510,slotCap:14,nightShiftUnitCap:9500,changeoverMin:8.5,hourlyRate:24.39,offlineLaborHeadcount:5,processingStaticPerUnit:0.11,planEmailRecipients:'',planEmailCc:'',breakMinRuntimeMin:240,break30OffsetMin:240,break30DurationMin:30,break15OffsetMin:360,break15DurationMin:15,break30Paid:false,break15Paid:true,otMultiplier:1.5};
 function getRules(){
   // v0.5.106: merge over DEFAULT_RULES instead of an all-or-nothing ||.
   // A stored rules object written before a key existed used to return
@@ -3327,7 +3328,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.144';
+var APP_VERSION='v0.5.145';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4679,6 +4680,44 @@ function sbLinesRunning_(sum){
   var ids=Object.keys(sum.byLine).sort();
   return ids.length?ids.map(sbShortLine_).join(', '):'—';
 }
+// ─── OVERTIME (v0.5.145) ────────────────────────────────────────────────────
+// The other end of the curfew question. A curfew asks "can we be out by X".
+// This asks the opposite: we are NOT out in time — what does finishing cost?
+//
+// Threshold is rules.targetRuntimeMin (510 = 8.5h), which already means "a
+// normal day's run time" everywhere else in the engine. Comparing run time to
+// run time keeps it apples-to-apples, so paid/unpaid break handling cancels
+// out and no second break model is needed here.
+//
+// Crew is hc + lineLead, the same heads planHeadcount_ counts. Rate is
+// rules.hourlyRate at rules.otMultiplier. Both editable in Sequencing Rules;
+// the multiplier defaults to 1.5 and is a stated assumption, not a fact about
+// anyone's contract.
+//
+// Deliberately a READOUT. It changes no placement decision — the engine has
+// already decided the day and this prices what it decided.
+function sbOvertime_(sum,rules){
+  var thr=ruleNum_(rules,'targetRuntimeMin')||510;
+  var rate=ruleNum_(rules,'hourlyRate')||0;
+  var mult=ruleNum_(rules,'otMultiplier')||1.5;
+  var cfgById={};sbAllLines_().forEach(function(l){cfgById[l.id]=l;});
+  var out={lines:[],otMin:0,cost:0,thr:thr};
+  Object.keys(sum.byLine||{}).sort().forEach(function(id){
+    var x=sum.byLine[id];if(!x)return;
+    var over=x.min-thr;
+    if(over<1)return;
+    var l=cfgById[id]||{};
+    var people=(Number(l.hc)||0)+(Number(l.lineLead)||0);
+    var cost=(over/60)*people*rate*mult;
+    out.lines.push({id:id,label:x.label||id,otMin:over,people:people,cost:cost});
+    out.otMin+=over;out.cost+=cost;
+  });
+  return out;
+}
+function sbMoney_(n){
+  var v=Math.round(Number(n)||0);
+  return '$'+String(v).replace(/\B(?=(\d{3})+(?!\d))/g,',');
+}
 function sbSummarise(res){
   var out={byLine:{},unplaced:[],placedOn:{},total:0,units:0,latestEnd:0};
   if(!res)return out;
@@ -4811,13 +4850,15 @@ function runSandbox(){
     .forEach(function(h,i){var e=document.createElement('th');e.textContent=h;if(i>=2&&i<=7)e.style.textAlign='right';if(i>=10)e.style.textAlign='right';hr.appendChild(e);});
   th.appendChild(hr);tbl.appendChild(th);
   var tb=document.createElement('tbody');
-  var wk={bMin:0,sMin:0,bU:0,sU:0,newUn:0,chain:0,moved:0};
+  var wk={bMin:0,sMin:0,bU:0,sU:0,newUn:0,chain:0,moved:0,otMin:0,otCost:0,otDays:0};
   R.forEach(function(r){
     var bMin=0,sMin=0;
     Object.keys(r.B.byLine).forEach(function(k){bMin+=r.B.byLine[k].min;});
     Object.keys(r.S.byLine).forEach(function(k){sMin+=r.S.byLine[k].min;});
     wk.bMin+=bMin;wk.sMin+=sMin;wk.bU+=r.B.units;wk.sU+=r.S.units;
     wk.newUn+=r.newUn.length;wk.chain+=r.chain.length;wk.moved+=r.moved.length;
+    var dOt=sbOvertime_(r.S,getRules());
+    if(dOt.lines.length){wk.otDays++;wk.otMin+=dOt.otMin;wk.otCost+=dOt.cost;}
     var tr=document.createElement('tr');
     function td(txt,align,cls){var e=document.createElement('td');e.textContent=txt;if(align)e.style.textAlign=align;if(cls)e.className=cls;tr.appendChild(e);return e;}
     td(r.day);
@@ -4860,7 +4901,15 @@ function runSandbox(){
   tdT(String(wk.moved),'right');
   tb.appendChild(trT);
   tbl.appendChild(tb);ws.appendChild(tbl);
-  if(!wk.newUn&&!wk.chain)ws.appendChild(sbNote_('Nothing blocking across the week. '+wk.moved+' placement change'+(wk.moved===1?'':'s')+', '+sbMinHrs_(wk.sMin-wk.bMin)+' run time.','var(--green)'));
+  // v0.5.145: the week's overtime bill, stated before the all-clear so a week
+  // that placed everything but needs OT to do it cannot read as "fine".
+  if(wk.otCost>0){
+    ws.appendChild(sbNote_('Overtime needed on '+wk.otDays+' of '+days.length+
+      ' day'+(days.length===1?'':'s')+' — '+sbMinHrs_(wk.otMin)+' beyond '+
+      sbDur_(ruleNum_(getRules(),'targetRuntimeMin')||510)+' per line, '+
+      sbMoney_(wk.otCost)+' at '+(ruleNum_(getRules(),'otMultiplier')||1.5)+'x.','var(--red)'));
+  }
+  if(!wk.newUn&&!wk.chain)ws.appendChild(sbNote_('Nothing blocking across the week. '+wk.moved+' placement change'+(wk.moved===1?'':'s')+', '+sbMinHrs_(wk.sMin-wk.bMin)+' run time.'+(wk.otCost>0?' Overtime still required — see above.':''),wk.otCost>0?'var(--amber)':'var(--green)'));
   sbCard_(rep,'Week summary \u00b7 '+c.week+' \u00b7 '+days.length+' day'+(days.length===1?'':'s'),ws);
 
   // 2 · per-day detail, only what has something to say
@@ -5003,6 +5052,21 @@ function runSandbox(){
       any=true;
     });
     if(!any)body.insertBefore(sbNote_('Nothing blocking, no chain breaks, nothing moved.','var(--green)'),body.firstChild);
+    // v0.5.145: overtime. Priced off the run the engine just produced — this
+    // decides nothing, it reports what the decided day costs to finish.
+    var ot=sbOvertime_(r.S,getRules());
+    if(ot.lines.length){
+      var oh=document.createElement('div');
+      oh.className='sb-note';oh.style.color='var(--red)';oh.style.marginTop='12px';
+      oh.appendChild(document.createTextNode(
+        'Overtime to complete · '+sbDur_(ot.otMin)+' beyond '+sbDur_(ot.thr)+' per line · '+sbMoney_(ot.cost)));
+      body.appendChild(oh);
+      ot.lines.forEach(function(o){
+        body.appendChild(sbNote_('• '+o.label+' — '+sbDur_(o.otMin)+' over, '+
+          o.people+' on the line, '+sbMoney_(o.cost)));
+      });
+      any=true;
+    }
     // v0.5.140: the day's curfew in its card title, so the finish times inside
     // the card can be read without scrolling back to the week table for the cap.
     var dayCap=curfewToMin_(sbFinishByFor(c,r.day));
@@ -5010,6 +5074,7 @@ function runSandbox(){
     if(dayCap!==null&&r.S.latestEnd&&r.S.latestEnd>dayCap){
       dayTitle+=' · MISSED by '+sbMin_(r.S.latestEnd-dayCap);
     }
+    if(ot.lines.length)dayTitle+=' · OT '+sbMoney_(ot.cost);
     sbCard_(rep,dayTitle,body);
   });
 }

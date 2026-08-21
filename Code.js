@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.76 — 2026-08-21    (pairs with Index.html v0.5.144)
+ * Sequins ✨ — Code.js    v0.4.77 — 2026-08-21    (pairs with Index.html v0.5.145)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.76  No server change — pairing bump. The sandbox curfew default is
- *          entirely client-side.
+ * v0.4.77  No server change — pairing bump. The overtime readout is entirely
+ *          client-side.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
