@@ -1,14 +1,14 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.150 — 2026-08-21    (pairs with Code.js v0.4.82)
+  Sequins ✨ — Index.html    v0.5.151 — 2026-08-21    (pairs with Code.js v0.4.83)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.150 FIX (Samad): Sandbox was discarding SKU attributes for any SKU
-           swapped IN. The incoming-SKU path REPLACED the library entry with
-           an object built purely from the stub form, which does not collect
-           admissibleLines — so a SKU restricted to LINE-3 reached the engine
-           with no restriction and went wherever the balancer liked. Now
-           merges over the existing entry: stub fields win when filled, and
-           anything the form does not ask about survives.
+  v0.5.151 Two fixes. Allergen sync now reads Menu Library rows that are not
+           Status=Active — an "Upcoming" SKU has its allergens filled in and
+           they were being ignored, with NO ALLERGEN DATA stamped over real
+           data. And the Swaps SKU-OUT dropdown keeps an outgoing SKU that has
+           dropped out of this week's forecast: the list is built from demand,
+           so it silently fell back to blank and the row read as an addition
+           while quietly bringing across 0 units.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -2994,9 +2994,14 @@ function resyncAllergens(){
       if(flagged)msg='\u26A0 '+(r.matched||0)+' updated, '+flagged+' flagged NO ALLERGEN DATA';
       if(r.deactivated)msg+='<br><span style="color:var(--muted)">deactivated '+r.deactivated+' SKU(s) no longer on Menu Library\u2019s Active list: '+(r.deactivatedList||[]).join(', ')+'</span>';
       if(r.reactivated)msg+='<br><span style="color:var(--muted)">re-activated '+r.reactivated+' SKU(s) Menu Library still lists as Active</span>';
+      // v0.5.151: allergens taken from a non-Active Menu Library row. Reported
+      // separately because it is good news \u2014 real data, not the sentinel \u2014 and
+      // it used to be silently lumped in with "unknown".
+      if(r.upcoming)
+        msg+='<br><span style="color:var(--teal)">allergens taken from '+r.upcoming+' SKU(s) Menu Library lists but not as Active (e.g. Upcoming): '+(r.upcomingList||[]).join(', ')+'</span>';
       // The one case that needs a human: running, but Menu Library doesn't list it.
       if(r.liveButUnlisted&&r.liveButUnlisted.length)
-        msg+='<br><span style="color:var(--red);font-weight:700">\u26A0 HAS DEMAND but not on Menu Library\u2019s Active list \u2014 left running, allergens unknown: '+r.liveButUnlisted.join(', ')+'</span>';
+        msg+='<br><span style="color:var(--red);font-weight:700">\u26A0 HAS DEMAND but not on Menu Library\u2019s Active list \u2014 left running: '+r.liveButUnlisted.join(', ')+'</span>';
       if(el)el.innerHTML='<div class="status '+(flagged?'status-warn':'status-ok')+'">'+msg+'</div>';
     }).withFailureHandler(function(){
       if(el)el.innerHTML='<div class="status status-ok">\u2713 Synced \u2014 reload to see the values</div>';
@@ -3376,7 +3381,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.150';
+var APP_VERSION='v0.5.151';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4254,6 +4259,20 @@ function renderSandboxSwaps(){
     } else {
       var os=document.createElement('select');os.className='sb-input';
       var blank=document.createElement('option');blank.value='';blank.textContent='— none (addition) —';os.appendChild(blank);
+      // v0.5.151: keep an outgoing SKU that is no longer in this week's demand.
+      // The list is built from demand, so when the forecast stops carrying that
+      // SKU there is no matching option and the browser silently falls back to
+      // the blank one — the row reads as an addition while w.out still holds a
+      // real value underneath. That also silently zeroes the swap, because a
+      // swap inherits the OUTGOING SKU's volume and this one now has none.
+      // Say so instead of showing a lie.
+      if(w.out&&names.indexOf(w.out)===-1){
+        var orphan=document.createElement('option');
+        orphan.value=w.out;orphan.textContent=w.out+'  — no volume this week';
+        orphan.selected=true;os.appendChild(orphan);
+        os.style.borderColor='var(--amber)';
+        os.title='This SKU is no longer in the loaded forecast for this week, so the swap brings across 0 units. Pick a SKU that does run, or switch the row to "+ Add new SKU" and give it its own volume.';
+      }
       names.forEach(function(n){var o=document.createElement('option');o.value=n;o.textContent=n;if(n===w.out)o.selected=true;os.appendChild(o);});
       os.addEventListener('change',function(){updateSwap(i,'out',this.value);});
       td1.appendChild(os);

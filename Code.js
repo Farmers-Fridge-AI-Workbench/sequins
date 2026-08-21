@@ -1,10 +1,14 @@
 /**
- * Sequins ✨ — Code.js    v0.4.82 — 2026-08-21    (pairs with Index.html v0.5.150)
+ * Sequins ✨ — Code.js    v0.4.83 — 2026-08-21    (pairs with Index.html v0.5.151)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.82  No server change — pairing bump. The sandbox stub-merge fix is
- *          client-side: it calls runSequencer(ctx) like Sandbox does, reads
- *          STATE, and writes nothing.
+ * v0.4.83  FIX: the allergen sync ignored Menu Library rows that are not
+ *          Status=Active, so a SKU being launched — sitting at "Upcoming" with
+ *          its allergens already filled in — had NO ALLERGEN DATA stamped over
+ *          real data, including over allergens hand-entered in Sequins. Now
+ *          builds two maps: Active rows own ACTIVE STATUS as before, every
+ *          named row owns ALLERGEN DATA. Allergens are allergens regardless of
+ *          launch status; whether a SKU is active is a separate question.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -2021,21 +2025,36 @@ function syncAllergens_() {
     Logger.log('syncAllergens_: SKU Library is empty - nothing to sync.');
     return { ok: true, matched: 0, unknown: 0, notFound: 0, notFoundList: [] };
   }
-  const menuMap = {};
+  // v0.4.83: TWO maps, because Menu Library answers two different questions and
+  // they were being conflated.
+  //   menuMap  — Active rows only. Owns ACTIVE STATUS, unchanged.
+  //   anyMap   — every named row whatever its Status. Owns ALLERGEN DATA.
+  // A SKU being launched sits at Status "Upcoming" with its allergens already
+  // filled in, and reading only the Active list meant that real data was ignored
+  // and NO ALLERGEN DATA stamped over the top of it — including over allergens
+  // someone had hand-entered in Sequins. Allergens are allergens regardless of
+  // launch status. Whether the SKU is active is a separate question and still
+  // belongs to the Active list.
+  const menuMap = {}, anyMap = {};
   const sheet = SpreadsheetApp.openById(MENU_LIBRARY_SHEET_ID).getSheetByName(MENU_LIBRARY_TAB);
   if (!sheet) throw new Error('Tab "' + MENU_LIBRARY_TAB + '" not found in Menu Library');
   const lastRow = sheet.getLastRow();
   if (lastRow > 1) {
     const data = sheet.getRange(2, 1, lastRow - 1, 13).getValues(); // cols A:M
     data.forEach(function(row) {
-      if (String(row[0] || '').trim().toLowerCase() !== 'active') return; // col A
       const name = String(row[2] || '').trim();                          // col C
       if (!name) return;
-      menuMap[normalizeSku_(name)] = String(row[12] || '').trim();       // col M
+      const norm = normalizeSku_(name);
+      const allerg = String(row[12] || '').trim();                       // col M
+      // First writer wins per status tier: an Active row's allergens should not
+      // be shadowed by a later Upcoming row for the same name.
+      const isActive = String(row[0] || '').trim().toLowerCase() === 'active'; // col A
+      if (isActive) { menuMap[norm] = allerg; anyMap[norm] = allerg; }
+      else if (!Object.prototype.hasOwnProperty.call(anyMap, norm)) anyMap[norm] = allerg;
     });
   }
-  let matched = 0, unknown = 0, notFound = 0, deactivated = 0, reactivated = 0;
-  const notFoundList = [], deactivatedList = [], liveButUnlisted = [];
+  let matched = 0, unknown = 0, notFound = 0, deactivated = 0, reactivated = 0, upcoming = 0;
+  const notFoundList = [], deactivatedList = [], liveButUnlisted = [], upcomingList = [];
   const demanded = demandedSkus_();
   let skipped = 0; const skippedList = [];
   keys.forEach(function(key) {
@@ -2059,8 +2078,16 @@ function syncAllergens_() {
       // would quietly delete units from the plan. Those stay active and get
       // named loudly instead — that's a data problem upstream, not a reason to
       // drop production.
-      library[key].allergens = ALLERGEN_SENTINEL;
-      notFound++; if (notFoundList.length < 25) notFoundList.push(key);
+      // v0.4.83: take allergens from a non-Active Menu Library row when one
+      // exists, rather than stamping the sentinel over real data.
+      const offList = Object.prototype.hasOwnProperty.call(anyMap, norm) ? anyMap[norm] : null;
+      if (offList !== null && !allergenIsUnknown_(offList)) {
+        library[key].allergens = offList;
+        upcoming++; if (upcomingList.length < 25) upcomingList.push(key);
+      } else {
+        library[key].allergens = ALLERGEN_SENTINEL;
+        notFound++; if (notFoundList.length < 25) notFoundList.push(key);
+      }
       if (demanded[norm]) {
         if (liveButUnlisted.length < 25) liveButUnlisted.push(key);
       } else if (library[key].active !== false) {
@@ -2080,7 +2107,8 @@ function syncAllergens_() {
   const result = { ok: true, matched: matched, unknown: unknown, notFound: notFound,
     notFoundList: notFoundList, deactivated: deactivated, reactivated: reactivated,
     deactivatedList: deactivatedList, liveButUnlisted: liveButUnlisted,
-    skipped: skipped, skippedList: skippedList };
+    skipped: skipped, skippedList: skippedList,
+    upcoming: upcoming, upcomingList: upcomingList };
   Logger.log('syncAllergens_ complete - ' + JSON.stringify(result));
   return result;
 }
