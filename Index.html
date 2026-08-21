@@ -1,12 +1,13 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.147 — 2026-08-21    (pairs with Code.js v0.4.79)
+  Sequins ✨ — Index.html    v0.5.148 — 2026-08-21    (pairs with Code.js v0.4.80)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.147 SKU Library status moves ABOVE the table — below it, "saving…" and
-           the resync findings sat 46 rows off-screen and were only visible if
-           you filtered the list short. Plan email gains "Total Hours (A&P)"
-           (Samad): his (A&P $/unit x units) / rate, which reduces exactly to
-           the assembly hours plus the processing hours bank already reported.
+  v0.5.148 New Line Planner tab. Solves a real week twice through the same
+           engine — once as today, once with each SKU's Lines column and the
+           category home-line preference removed — and states whether the
+           current shape is leaving efficiency on the table. Allergen chain,
+           sausage/sesame, USDA, capper, small cup, night and slot cap are
+           never relaxed; seeds stay. Reads STATE, writes nothing.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -323,6 +324,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
       <button class="nav-item active" onclick="switchView('sequence',this)"><span class="icon">📋</span>Line Sequence</button>
       <div id="workbenchNav" style="display:none"><button class="nav-item" onclick="switchView('workbench',this)"><span class="icon">🔧</span>Workbench</button></div>
       <div id="sandboxNav" style="display:none"><button class="nav-item" onclick="switchView('sandbox',this)"><span class="icon">🧪</span>Sandbox</button></div>
+      <div id="linePlannerNav" style="display:none"><button class="nav-item" onclick="switchView('lineplanner',this)"><span class="icon">📐</span>Line Planner</button></div>
     </div>
     <div class="nav-spacer"></div>
     <div class="sidebar-section" id="myLineNav" style="display:none">
@@ -622,6 +624,28 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         <div id="sbReport" style="display:flex;flex-direction:column;gap:12px"></div>
       </div>
     </div>
+    <!-- LINE PLANNER -->
+    <div class="view" id="view-lineplanner">
+      <div class="page-header">
+        <div><div class="page-title">Line Planner</div><div class="page-sub">Is the current shape leaving efficiency on the table? Re-solves a real week with the current SKU line assignments removed. Changes nothing.</div></div>
+      </div>
+      <div class="card">
+        <div class="card-title">1 · Week and days</div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <select class="form-select" id="lpWeekSel" style="width:190px" onchange="renderLinePlannerDays()"></select>
+          <div id="lpDays" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+        </div>
+        <div class="sb-note" style="margin-top:12px"><strong>Relaxed:</strong> each SKU's Lines column, and the category home-line preference. Those record current practice, which is the thing being tested — hold them fixed and the answer can only be "what you already do".</div>
+        <div class="sb-note" style="margin-top:6px"><strong>Never relaxed:</strong> allergen chain, sausage/sesame separation, USDA approval, capper and small-cup equipment, night restrictions, slot cap. Line seeds stay too — a seed is a low-allergen chain starter, not a line-assignment policy.</div>
+        <div class="sb-note" style="margin-top:6px">Both passes run with no curfew, so they balance on even hours and the comparison isn't distorted by start-time weighting.</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="btn btn-sm" style="background:var(--teal);color:#08131a" onclick="runLinePlanner()">▶ Run comparison</button>
+        <span class="sb-note" id="lpRunNote"></span>
+      </div>
+      <div id="lpReport" style="margin-top:14px"></div>
+    </div>
+
     <div class="view" id="view-demand">
       <div class="page-header"><div><div class="page-title">Load Demand</div><div class="page-sub">Pull from Compiled Forecast or Demands 2025 actuals</div></div></div>
       <div class="card" id="pushedDemandCard" style="display:none">
@@ -3351,7 +3375,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.147';
+var APP_VERSION='v0.5.148';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -5111,6 +5135,7 @@ function viewAllowed_(name){
   switch(name){
     case 'workbench': return !!(u.isAdmin||u.isPlanner||u.canEditRules);
     case 'sandbox':   return !!(u.isAdmin||u.canEditRules);
+    case 'lineplanner': return !!(u.isAdmin||u.canEditRules);
     case 'myline':    return !!(u.isAdmin||u.isFloorViewer);
     case 'demand': case 'skus': case 'lines': case 'users':
                       return !!(u.isAdmin||u.isPlanner||u.canEditRules);
@@ -5133,6 +5158,7 @@ function switchView(name,btn){
   if(name==='workbench'){document.querySelector('.main').classList.add('wb-active');renderWorkbench();}
   if(name==='myline')initMyLine();
   if(name==='sandbox')loadSandboxes();
+  if(name==='lineplanner')renderLinePlanner();
 }
 
 function renderDayStrip(containerId){
@@ -5165,6 +5191,184 @@ function renderDayStrip(containerId){
   });
 }
 function setWeekDay(wk,day){CURRENT_WEEK=wk;CURRENT_DAY=day;renderSequence();renderWorkbench();}
+
+// ─── LINE PLANNER (v0.5.148) ────────────────────────────────────────────────
+// A different question from Sandbox. Sandbox asks "what happens to this week if
+// I change the inputs". This asks "is the current SHAPE leaving efficiency on
+// the table" — the first step toward recommending how to structure a new line.
+//
+// Method: solve the same real week twice through the same real engine.
+//   BOUND   — exactly as today.
+//   UNBOUND — each SKU's admissibleLines dropped, and the category home-line
+//             preference cleared. Both record current practice, and current
+//             practice is what is under test; hold them fixed and the answer
+//             can only ever be "what you already do".
+//
+// NEVER relaxed: allergen chain, sausage/sesame separation, USDA approval,
+// capper and small-cup capability, night restrictions, slot cap. Food safety,
+// law and physics. A proposal that breaks those is not a proposal. Line seeds
+// stay as well — a seed is a low-allergen chain starter, a safety choice rather
+// than a line-assignment policy.
+//
+// Both passes run UNCAPPED so they balance on even hours and the comparison is
+// not distorted by start-time weighting (see v0.5.144).
+//
+// Reads STATE, writes nothing, publishes nothing.
+var LP_WEEK=null,LP_DAYS={};
+function lpUnboundLibrary_(){
+  var lib=JSON.parse(JSON.stringify(STATE.skuLibrary||{}));
+  Object.keys(lib).forEach(function(k){
+    var m=lib[k];if(!m)return;
+    delete m.admissibleLines;delete m.admissibleLinesFriSat;delete m.friSatOverride;
+  });
+  return lib;
+}
+function lpUnboundRules_(){
+  var r=getRules(),out={},k;
+  for(k in r){if(Object.prototype.hasOwnProperty.call(r,k))out[k]=r[k];}
+  out.homeLines={};   // truthy but empty, so getHomeLines returns no preference
+  return out;
+}
+function lpCtx_(day,unbound){
+  return {week:LP_WEEK,day:day,demand:STATE.demand,
+          skuLibrary:unbound?lpUnboundLibrary_():STATE.skuLibrary,
+          rules:unbound?lpUnboundRules_():getRules(),
+          lineConfig:STATE.lineConfig||DEFAULT_LINE_CONFIG,
+          overrides:{},excludedLines:[],finishBy:''};
+}
+function lpSelectedDays(){
+  return DAYS_ORDER.filter(function(d){
+    return LP_DAYS[d]&&STATE.demand[LP_WEEK]&&STATE.demand[LP_WEEK][d];
+  });
+}
+function renderLinePlanner(){
+  var sel=document.getElementById('lpWeekSel');if(!sel)return;
+  var weeks=getWeeks();
+  if(!LP_WEEK||weeks.indexOf(LP_WEEK)===-1)LP_WEEK=CURRENT_WEEK||weeks[0]||null;
+  sel.innerHTML=weeks.map(function(w){
+    return '<option value="'+w+'"'+(w===LP_WEEK?' selected':'')+'>'+w+'</option>';
+  }).join('');
+  renderLinePlannerDays();
+}
+function renderLinePlannerDays(){
+  var sel=document.getElementById('lpWeekSel');if(sel&&sel.value)LP_WEEK=sel.value;
+  var el=document.getElementById('lpDays');if(!el)return;
+  el.innerHTML='';
+  var days=getDays(LP_WEEK);
+  if(!days.length){el.appendChild(sbNote_('No demand loaded for this week.'));return;}
+  days.forEach(function(d){
+    if(!(d in LP_DAYS))LP_DAYS[d]=true;
+    var chip=document.createElement('div');chip.className='sb-linechip'+(LP_DAYS[d]?' on':'');
+    var cb=document.createElement('input');cb.type='checkbox';cb.checked=!!LP_DAYS[d];
+    chip.appendChild(cb);chip.appendChild(document.createTextNode(DAY_SHORT[d]));
+    chip.addEventListener('click',function(e){
+      e.preventDefault();LP_DAYS[d]=!LP_DAYS[d];renderLinePlannerDays();
+    });
+    el.appendChild(chip);
+  });
+}
+function lpSpread_(sum){
+  // How unevenly hours land across the lines that ran. Lower is flatter.
+  var mins=[];
+  Object.keys(sum.byLine||{}).forEach(function(k){mins.push(sum.byLine[k].min);});
+  if(mins.length<2)return 0;
+  var hi=Math.max.apply(null,mins),lo=Math.min.apply(null,mins);
+  return hi-lo;
+}
+function runLinePlanner(){
+  var rep=document.getElementById('lpReport'),note=document.getElementById('lpRunNote');
+  if(!rep)return;
+  rep.innerHTML='';if(note)note.textContent='';
+  var days=lpSelectedDays();
+  if(!days.length){if(note)note.textContent='Pick at least one day that has demand.';return;}
+  var rules=getRules();
+  var R=days.map(function(d){
+    var resB=runSequencer(lpCtx_(d,false)),resU=runSequencer(lpCtx_(d,true));
+    var B=sbSummarise(resB),U=sbSummarise(resU);
+    return {day:d,B:B,U:U,
+            otB:sbOvertime_(B,rules),otU:sbOvertime_(U,rules),
+            chainB:sbChainCheck(resB),chainU:sbChainCheck(resU),
+            moved:sbMoved(B,U)};
+  });
+
+  // ── headline table ──
+  var body=document.createElement('div');
+  var tbl=document.createElement('table');tbl.className='data-table';
+  var th=document.createElement('thead'),hr=document.createElement('tr');
+  ['Day','Latest finish now','Latest finish unbound','Δ','OT now','OT unbound','Hours spread now','Hours spread unbound','SKUs moved','Unplaced now','Unplaced unbound','Chain breaks unbound']
+    .forEach(function(h,i){var e=document.createElement('th');e.textContent=h;if(i>=3)e.style.textAlign='right';hr.appendChild(e);});
+  th.appendChild(hr);tbl.appendChild(th);
+  var tb=document.createElement('tbody');
+  var t={moved:0,otB:0,otU:0,chainU:0,unB:0,unU:0};
+  R.forEach(function(r){
+    var tr=document.createElement('tr');
+    function td(txt,align,color){var e=document.createElement('td');e.textContent=txt;if(align)e.style.textAlign=align;if(color)e.style.color=color;tr.appendChild(e);return e;}
+    var dm=(r.U.latestEnd||0)-(r.B.latestEnd||0);
+    td(r.day);
+    td(r.B.latestEnd?fmtClock(r.B.latestEnd):'—');
+    td(r.U.latestEnd?fmtClock(r.U.latestEnd):'—');
+    td(sbMin_(dm),'right',dm<=-1?'var(--green)':(dm>=1?'var(--red)':''));
+    td(sbMoney_(r.otB.cost),'right');
+    td(sbMoney_(r.otU.cost),'right',r.otU.cost<r.otB.cost?'var(--green)':(r.otU.cost>r.otB.cost?'var(--red)':''));
+    td(sbDur_(lpSpread_(r.B)),'right');
+    td(sbDur_(lpSpread_(r.U)),'right');
+    td(String(r.moved.length),'right',r.moved.length?'var(--amber)':'');
+    td(String(r.B.unplaced.length),'right',r.B.unplaced.length?'var(--red)':'');
+    td(String(r.U.unplaced.length),'right',r.U.unplaced.length?'var(--red)':'');
+    td(String(r.chainU.length),'right',r.chainU.length?'var(--red)':'');
+    tb.appendChild(tr);
+    t.moved+=r.moved.length;t.otB+=r.otB.cost;t.otU+=r.otU.cost;
+    t.chainU+=r.chainU.length;t.unB+=r.B.unplaced.length;t.unU+=r.U.unplaced.length;
+  });
+  tbl.appendChild(tb);body.appendChild(tbl);
+
+  // ── the verdict, stated rather than left to be inferred ──
+  var verdict,color;
+  if(t.chainU>0){
+    verdict='Unbound run produced '+t.chainU+' allergen chain break'+(t.chainU===1?'':'s')+
+      '. Discard this comparison — a faster shape that breaks the chain is not a shape.';
+    color='var(--red)';
+  } else if(t.unU>t.unB){
+    verdict='Unbound run left MORE unplaced ('+t.unU+' vs '+t.unB+'). The current assignments are doing useful work.';
+    color='var(--amber)';
+  } else if(t.otU<t.otB-1){
+    verdict='Efficiency on the table: '+sbMoney_(t.otB-t.otU)+' less overtime across '+days.length+
+      ' day'+(days.length===1?'':'s')+', at the cost of moving '+t.moved+' SKU placement'+(t.moved===1?'':'s')+'.';
+    color='var(--green)';
+  } else if(t.moved===0){
+    verdict='No change. Unbinding the Lines column moves nothing — the current assignments already match what the engine would choose.';
+    color='var(--green)';
+  } else {
+    verdict='Roughly neutral: '+t.moved+' SKU'+(t.moved===1?'':'s')+' would move for no overtime saving. Not worth the churn.';
+    color='var(--muted)';
+  }
+  var v=document.createElement('div');
+  v.className='sb-note';v.style.color=color;v.style.marginTop='12px';v.style.fontSize='12px';
+  v.appendChild(document.createTextNode(verdict));
+  body.appendChild(v);
+  sbCard_(rep,'Verdict · '+LP_WEEK+' · '+days.length+' day'+(days.length===1?'':'s'),body,true);
+
+  // ── what would actually move ──
+  R.forEach(function(r){
+    if(!r.moved.length&&!r.chainU.length)return;
+    var db=document.createElement('div');
+    if(r.moved.length){
+      var h=document.createElement('div');h.className='sb-note';h.style.color='var(--text)';
+      h.appendChild(document.createTextNode(r.moved.length+' placement change'+(r.moved.length===1?'':'s')));
+      db.appendChild(h);
+      r.moved.forEach(function(m){db.appendChild(sbNote_('• '+m));});
+    }
+    if(r.chainU.length){
+      var h2=document.createElement('div');h2.className='sb-note';h2.style.color='var(--red)';h2.style.marginTop='8px';
+      h2.appendChild(document.createTextNode('Chain breaks in the unbound run'));
+      db.appendChild(h2);
+      r.chainU.forEach(function(b){
+        db.appendChild(sbNote_('• '+b.line+': '+b.prev+' → '+b.cur+' drops ['+b.lost.join(', ')+']','var(--red)'));
+      });
+    }
+    sbCard_(rep,r.day,db);
+  });
+}
 
 // ─── MY LINE (floor tablet view) ───────────────────────────────────────────────
 // Deliberately independent of CURRENT_WEEK/CURRENT_DAY (Sequence/Workbench's
@@ -5833,6 +6037,8 @@ function setPreviewRole(role){
   document.getElementById('adminNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.isPlanner||CURRENT_USER.canEditRules)?'':'none';
   document.getElementById('workbenchNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.isPlanner||CURRENT_USER.canEditRules)?'':'none';
   document.getElementById('sandboxNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.canEditRules)?'':'none';
+  document.getElementById('linePlannerNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.canEditRules)?'':'none';
+  document.getElementById('linePlannerNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.canEditRules)?'':'none';
   document.getElementById('myLineNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.isFloorViewer)?'':'none';
   renderRulesAccess();
   document.getElementById('previewBannerText').textContent='Previewing as: '+def.label+' — this only changes what the UI shows. Server actions still run as your real Admin account.';
@@ -5873,6 +6079,7 @@ window.onload=function(){
     if(user.isAdmin||user.isPlanner||user.canEditRules)document.getElementById('adminNav').style.display='';
     if(user.isAdmin||user.isPlanner||user.canEditRules)document.getElementById('workbenchNav').style.display='';
     if(user.isAdmin||user.canEditRules)document.getElementById('sandboxNav').style.display='';
+    if(user.isAdmin||user.canEditRules)document.getElementById('linePlannerNav').style.display='';
     if(user.isAdmin||user.isFloorViewer)document.getElementById('myLineNav').style.display='';
     if(user.isAdmin)document.getElementById('previewNav').style.display='';
     window._canEditRules=!!(user.isAdmin||user.canEditRules);
