@@ -1,8 +1,8 @@
 /**
- * Sequins ✨ — Code.js    v0.4.80 — 2026-08-21    (pairs with Index.html v0.5.148)
+ * Sequins ✨ — Code.js    v0.4.81 — 2026-08-21    (pairs with Index.html v0.5.149)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.80  No server change — pairing bump. The Line Planner tab is entirely
+ * v0.4.81  No server change — pairing bump. Line Planner reporting is entirely
  *          client-side: it calls runSequencer(ctx) like Sandbox does, reads
  *          STATE, and writes nothing.
  */

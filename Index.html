@@ -1,13 +1,13 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.148 — 2026-08-21    (pairs with Code.js v0.4.80)
+  Sequins ✨ — Index.html    v0.5.149 — 2026-08-21    (pairs with Code.js v0.4.81)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.148 New Line Planner tab. Solves a real week twice through the same
-           engine — once as today, once with each SKU's Lines column and the
-           category home-line preference removed — and states whether the
-           current shape is leaving efficiency on the table. Allergen chain,
-           sausage/sesame, USDA, capper, small cup, night and slot cap are
-           never relaxed; seeds stay. Reads STATE, writes nothing.
+  v0.5.149 Line Planner says WHY, not just what. It reported the numbers and
+           left the reader to work out whether 26 moves were an optimisation
+           or noise — identical finish plus identical overtime plus a worse
+           hours spread means noise, and it now says so. Adds a chain-breaks
+           column for today's shape (half the comparison was missing), and
+           replaces the flat move list with a per-line net view.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -3375,7 +3375,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.148';
+var APP_VERSION='v0.5.149';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -5267,6 +5267,18 @@ function renderLinePlannerDays(){
     el.appendChild(chip);
   });
 }
+// Per-line net movement: what each line gave up and took on. A flat list of 26
+// "SKU: LINE-1 → LINE-3" rows hides the only readable question.
+function lpLineDelta_(B,U){
+  var out={};
+  function touch(id){if(!out[id])out[id]={id:id,left:[],came:[]};return out[id];}
+  Object.keys(B.placedOn).forEach(function(sku){
+    var b=B.placedOn[sku],u=U.placedOn[sku];
+    if(!u||u===b)return;
+    touch(b).left.push(sku);touch(u).came.push(sku);
+  });
+  return out;
+}
 function lpSpread_(sum){
   // How unevenly hours land across the lines that ran. Lower is flatter.
   var mins=[];
@@ -5295,11 +5307,13 @@ function runLinePlanner(){
   var body=document.createElement('div');
   var tbl=document.createElement('table');tbl.className='data-table';
   var th=document.createElement('thead'),hr=document.createElement('tr');
-  ['Day','Latest finish now','Latest finish unbound','Δ','OT now','OT unbound','Hours spread now','Hours spread unbound','SKUs moved','Unplaced now','Unplaced unbound','Chain breaks unbound']
+  // v0.5.149: "Chain breaks now" added. Reporting only the unbound count left
+  // no way to see whether today's shape is clean, which is half the comparison.
+  ['Day','Latest finish now','Latest finish unbound','Δ','OT now','OT unbound','Hours spread now','Hours spread unbound','SKUs moved','Unplaced now','Unplaced unbound','Chain breaks now','Chain breaks unbound']
     .forEach(function(h,i){var e=document.createElement('th');e.textContent=h;if(i>=3)e.style.textAlign='right';hr.appendChild(e);});
   th.appendChild(hr);tbl.appendChild(th);
   var tb=document.createElement('tbody');
-  var t={moved:0,otB:0,otU:0,chainU:0,unB:0,unU:0};
+  var t={moved:0,otB:0,otU:0,chainU:0,chainB:0,unB:0,unU:0,spreadB:0,spreadU:0,finB:0,finU:0};
   R.forEach(function(r){
     var tr=document.createElement('tr');
     function td(txt,align,color){var e=document.createElement('td');e.textContent=txt;if(align)e.style.textAlign=align;if(color)e.style.color=color;tr.appendChild(e);return e;}
@@ -5315,36 +5329,71 @@ function runLinePlanner(){
     td(String(r.moved.length),'right',r.moved.length?'var(--amber)':'');
     td(String(r.B.unplaced.length),'right',r.B.unplaced.length?'var(--red)':'');
     td(String(r.U.unplaced.length),'right',r.U.unplaced.length?'var(--red)':'');
+    td(String(r.chainB.length),'right',r.chainB.length?'var(--red)':'var(--green)');
     td(String(r.chainU.length),'right',r.chainU.length?'var(--red)':'');
     tb.appendChild(tr);
     t.moved+=r.moved.length;t.otB+=r.otB.cost;t.otU+=r.otU.cost;
-    t.chainU+=r.chainU.length;t.unB+=r.B.unplaced.length;t.unU+=r.U.unplaced.length;
+    t.chainU+=r.chainU.length;t.chainB+=r.chainB.length;
+    t.unB+=r.B.unplaced.length;t.unU+=r.U.unplaced.length;
+    t.spreadB+=lpSpread_(r.B);t.spreadU+=lpSpread_(r.U);
+    t.finB+=(r.B.latestEnd||0);t.finU+=(r.U.latestEnd||0);
   });
   tbl.appendChild(tb);body.appendChild(tbl);
 
   // ── the verdict, stated rather than left to be inferred ──
-  var verdict,color;
+  // v0.5.149: say WHY, not just what. The first version reported the numbers
+  // and left the reader to infer whether 26 moves were an optimisation or
+  // noise. Identical finish plus identical overtime plus a worse spread means
+  // noise — unbound, the engine has no reason to prefer one eligible line over
+  // another, so it fills whichever is least loaded and everything shuffles into
+  // a different arrangement of the same cost. Saying that plainly is the whole
+  // point of the tab.
+  var sameFinish=Math.abs(t.finU-t.finB)<=1;
+  var sameOt=Math.abs(t.otU-t.otB)<1;
+  var worseSpread=t.spreadU>t.spreadB+1;
+  var lines=[],color;
   if(t.chainU>0){
-    verdict='Unbound run produced '+t.chainU+' allergen chain break'+(t.chainU===1?'':'s')+
-      '. Discard this comparison — a faster shape that breaks the chain is not a shape.';
     color='var(--red)';
+    lines.push('Discard this comparison. The unbound run produced '+t.chainU+
+      ' allergen chain break'+(t.chainU===1?'':'s')+', and a shape that breaks the chain is not a shape.');
+    lines.push('Cause: with no Lines column, food-contact SKUs get crowded onto whichever line is least loaded, '+
+      'and some of those allergen sets cannot form a rising chain in any order. That is precisely the collision '+
+      'the Lines column prevents.');
   } else if(t.unU>t.unB){
-    verdict='Unbound run left MORE unplaced ('+t.unU+' vs '+t.unB+'). The current assignments are doing useful work.';
     color='var(--amber)';
-  } else if(t.otU<t.otB-1){
-    verdict='Efficiency on the table: '+sbMoney_(t.otB-t.otU)+' less overtime across '+days.length+
-      ' day'+(days.length===1?'':'s')+', at the cost of moving '+t.moved+' SKU placement'+(t.moved===1?'':'s')+'.';
+    lines.push('The unbound run left MORE unplaced ('+t.unU+' vs '+t.unB+'). The current assignments are doing useful work.');
+  } else if(!sameOt&&t.otU<t.otB-1){
     color='var(--green)';
+    lines.push('Efficiency on the table: '+sbMoney_(t.otB-t.otU)+' less overtime across '+days.length+
+      ' day'+(days.length===1?'':'s')+', for '+t.moved+' placement change'+(t.moved===1?'':'s')+'.');
   } else if(t.moved===0){
-    verdict='No change. Unbinding the Lines column moves nothing — the current assignments already match what the engine would choose.';
     color='var(--green)';
+    lines.push('No change. Unbinding moves nothing — the current assignments already match what the engine would pick on its own.');
   } else {
-    verdict='Roughly neutral: '+t.moved+' SKU'+(t.moved===1?'':'s')+' would move for no overtime saving. Not worth the churn.';
     color='var(--muted)';
+    lines.push(t.moved+' SKU'+(t.moved===1?'s':'')+' would move and it buys nothing.');
+  }
+  if(t.chainU===0&&sameFinish&&sameOt&&t.moved>0){
+    lines.push('These moves are lateral, not improvements: the day ends at the same time and costs the same overtime. '+
+      'Unbound the engine has no reason to prefer one eligible line over another, so it fills the least-loaded one '+
+      'and the result is a different arrangement of identical cost.');
+  }
+  if(worseSpread){
+    lines.push('Hours also land LESS evenly unbound ('+sbDur_(t.spreadU)+' spread vs '+sbDur_(t.spreadB)+
+      '), so the current assignments are actively helping balance the lines.');
+  }
+  if(t.chainB===0){
+    lines.push('Today’s shape produced no chain breaks across '+days.length+' day'+(days.length===1?'':'s')+'.');
   }
   var v=document.createElement('div');
-  v.className='sb-note';v.style.color=color;v.style.marginTop='12px';v.style.fontSize='12px';
-  v.appendChild(document.createTextNode(verdict));
+  v.style.marginTop='12px';
+  lines.forEach(function(txt,i){
+    var p=document.createElement('div');
+    p.className='sb-note';p.style.marginTop=i?'6px':'0';
+    p.style.color=i?'var(--muted)':color;if(!i)p.style.fontSize='12px';
+    p.appendChild(document.createTextNode(txt));
+    v.appendChild(p);
+  });
   body.appendChild(v);
   sbCard_(rep,'Verdict · '+LP_WEEK+' · '+days.length+' day'+(days.length===1?'':'s'),body,true);
 
@@ -5354,9 +5403,31 @@ function runLinePlanner(){
     var db=document.createElement('div');
     if(r.moved.length){
       var h=document.createElement('div');h.className='sb-note';h.style.color='var(--text)';
-      h.appendChild(document.createTextNode(r.moved.length+' placement change'+(r.moved.length===1?'':'s')));
+      h.appendChild(document.createTextNode(r.moved.length+' placement change'+(r.moved.length===1?'':'s')+', by line'));
       db.appendChild(h);
-      r.moved.forEach(function(m){db.appendChild(sbNote_('• '+m));});
+      // v0.5.149: grouped by line. A flat list of 26 "A: LINE-1 → LINE-3" rows
+      // is unreadable and hides the only thing that matters — what each line
+      // gave up and took on.
+      var mv=lpLineDelta_(r.B,r.U),ids=Object.keys(mv).sort();
+      var mt=document.createElement('table');mt.className='data-table';mt.style.marginTop='6px';
+      var mth=document.createElement('thead'),mhr=document.createElement('tr');
+      ['Line','Net','Off','On'].forEach(function(x,i){
+        var e=document.createElement('th');e.textContent=x;if(i===1)e.style.textAlign='right';mhr.appendChild(e);});
+      mth.appendChild(mhr);mt.appendChild(mth);
+      var mtb=document.createElement('tbody');
+      ids.forEach(function(id){
+        var m=mv[id],tr2=document.createElement('tr');
+        function c(txt,align,color){var e=document.createElement('td');e.textContent=txt;
+          if(align)e.style.textAlign=align;if(color)e.style.color=color;
+          e.style.fontFamily='var(--mono)';e.style.fontSize='10px';tr2.appendChild(e);}
+        var net=m.came.length-m.left.length;
+        c(sbShortLine_(id));
+        c((net>0?'+':'')+net,'right',net>0?'var(--green)':(net<0?'var(--red)':'var(--muted)'));
+        c(m.left.length?m.left.sort().join(', '):'—',null,'var(--muted)');
+        c(m.came.length?m.came.sort().join(', '):'—',null,'var(--teal)');
+        mtb.appendChild(tr2);
+      });
+      mt.appendChild(mtb);db.appendChild(mt);
     }
     if(r.chainU.length){
       var h2=document.createElement('div');h2.className='sb-note';h2.style.color='var(--red)';h2.style.marginTop='8px';
