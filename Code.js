@@ -1,9 +1,10 @@
 /**
- * Sequins ✨ — Code.js    v0.4.89 — 2026-08-21    (pairs with Index.html v0.5.157)
+ * Sequins ✨ — Code.js    v0.4.90 — 2026-08-21    (pairs with Index.html v0.5.158)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.89  No server change — pairing bump. SKU Library column pinning is
- *          entirely client-side CSS.
+ * v0.4.90  No server change — pairing bump. The Category column removal is
+ *          client-side; the field is still synced by fetchSkuAttributesFor and
+ *          still written to the config mirror.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────

@@ -1,11 +1,15 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.157 — 2026-08-21    (pairs with Code.js v0.4.89)
+  Sequins ✨ — Index.html    v0.5.158 — 2026-08-21    (pairs with Code.js v0.4.90)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.157 SKU Library pins the SKU name column to the left. v0.5.146 pinned
-           Active and Staging to the right but left the name scrolling away, so
-           scrolling right lost track of which row you were on — you could tick
-           a checkbox for a SKU you could no longer see. Both ends pinned now.
+  v0.5.158 SKU Library drops the Category column. The engine reads
+           meta.category exactly zero times — routing comes from packageType
+           and fcClass, and home lines are keyed by POOL, not category — so it
+           was 110px of real estate tying to nothing. The FIELD stays: still
+           searchable, still synced from Menu Library, still in the config
+           mirror, so restoring the column is one line if it turns out to
+           matter. Also pins the SKU name column left (v0.5.157), since
+           pinning Active right had left no way to tell which row you were on.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -729,7 +733,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         <div id="skuLibStatus" style="margin-bottom:10px"></div>
         <div style="overflow-x:auto">
           <table class="data-table"><thead><tr>
-            <th>SKU</th><th>Category</th><th title="Food-contact class — drives allergen compounding + line-type">FC</th><th>Package</th><th title="Units in a full tote. A SKU fact, not a package fact — the same package type carries different tote counts. Drives the tote split on My Line.">Units/Tote</th><th>UPM</th><th>Allergens</th><th>Label</th><th title="Lines this SKU may run on Sunday through Thursday">Lines Sun–Th</th><th title="Lines this SKU may run on Friday and Saturday. “same” means it inherits the Sun–Th list.">Lines F–Sat</th><th title="Non-USDA counterpart. Grouping the pair saves a changeover — the base build, jar and lid are shared.">USDA Pair</th>
+            <th>SKU</th><th title="Food-contact class — drives allergen compounding + line-type">FC</th><th>Package</th><th title="Units in a full tote. A SKU fact, not a package fact — the same package type carries different tote counts. Drives the tote split on My Line.">Units/Tote</th><th>UPM</th><th>Allergens</th><th>Label</th><th title="Lines this SKU may run on Sunday through Thursday">Lines Sun–Th</th><th title="Lines this SKU may run on Friday and Saturday. “same” means it inherits the Sun–Th list.">Lines F–Sat</th><th title="Non-USDA counterpart. Grouping the pair saves a changeover — the base build, jar and lid are shared.">USDA Pair</th>
             <th style="text-align:center"><div style="color:var(--teal);font-size:14px;font-weight:600" id="sc-capper">—</div>Capper</th>
             <th style="text-align:center"><div style="color:var(--teal);font-size:14px;font-weight:600" id="sc-night">—</div>Night</th>
             <th style="text-align:center"><div style="color:var(--teal);font-size:14px;font-weight:600" id="sc-preproc">—</div>Pre-Proc</th>
@@ -3137,7 +3141,7 @@ function filterSkuTable(){var search=(document.getElementById('skuSearch').value
       if(warn)sel+='<div style="font-family:var(--mono);font-size:10px;color:var(--amber);margin-top:3px;max-width:210px;line-height:1.3">\u26A0 '+warn+'</div>';
       return sel;
     })();
-    var fc=s.fcClass||'';var fcCell='<select class="inline-input" onchange="updateSkuField(\''+key+'\',\'fcClass\',this.value)" style="width:78px"><option value=""'+(fc===''?' selected':'')+'>—</option><option value="FC-W"'+(fc==='FC-W'?' selected':'')+'>FC-W</option><option value="FC-S"'+(fc==='FC-S'?' selected':'')+'>FC-S</option></select>';return'<tr><td><span class="sku-active-dot '+(s.active!==false?'dot-active':'dot-inactive')+'"></span>'+key+'</td><td><input class="inline-input" value="'+(s.category||'')+'" onchange="updateSkuField(\''+key+'\',\'category\',this.value)" style="width:110px"></td><td>'+fcCell+'</td><td><input class="inline-input" value="'+(s.packageType||'')+'" onchange="updateSkuField(\''+key+'\',\'packageType\',this.value)" style="width:100px"></td><td><input class="inline-input" type="number" min="1" value="'+(s.unitsPerTote||'')+'" onchange="updateSkuField(\''+key+'\',\'unitsPerTote\',parseFloat(this.value))" style="width:82px"></td><td><input class="inline-input" type="number" value="'+(s.upm||'')+'" onchange="updateSkuField(\''+key+'\',\'upm\',parseFloat(this.value))" style="width:120px"></td><td>'+(isAllergenUnknown_(s.allergens)?'<span style="background:var(--red-dim);color:var(--red);border:1px solid rgba(239,68,68,.25);border-radius:4px;padding:2px 6px;font-size:10px;white-space:nowrap" title="No allergen data — sequenced as worst case (all six allergens) so it can never seed a food-contact chain">\u26A0 NO ALLERGEN DATA</span>':'')+'<input class="inline-input" value="'+((s.allergens&&!isAllergenUnknown_(s.allergens))?s.allergens:'')+'" onchange="updateSkuField(\''+key+'\',\'allergens\',this.value)" style="width:140px'+(isAllergenUnknown_(s.allergens)?';margin-top:3px':'')+'"></td><td>'+labelCell+'</td><td>'+linesCell+'</td><td>'+linesLateCell+'</td><td>'+pairCell+'</td><td style="text-align:center">'+chk('capper')+'</td><td style="text-align:center">'+chk('nightShift')+'</td><td style="text-align:center">'+chk('preProcessed')+'</td><td style="text-align:center">'+chk('active')+'</td><td>'+stagingCell_(key,s)+'</td></tr>';}).join('');}
+    var fc=s.fcClass||'';var fcCell='<select class="inline-input" onchange="updateSkuField(\''+key+'\',\'fcClass\',this.value)" style="width:78px"><option value=""'+(fc===''?' selected':'')+'>—</option><option value="FC-W"'+(fc==='FC-W'?' selected':'')+'>FC-W</option><option value="FC-S"'+(fc==='FC-S'?' selected':'')+'>FC-S</option></select>';return'<tr><td><span class="sku-active-dot '+(s.active!==false?'dot-active':'dot-inactive')+'"></span>'+key+'</td><td>'+fcCell+'</td><td><input class="inline-input" value="'+(s.packageType||'')+'" onchange="updateSkuField(\''+key+'\',\'packageType\',this.value)" style="width:100px"></td><td><input class="inline-input" type="number" min="1" value="'+(s.unitsPerTote||'')+'" onchange="updateSkuField(\''+key+'\',\'unitsPerTote\',parseFloat(this.value))" style="width:82px"></td><td><input class="inline-input" type="number" value="'+(s.upm||'')+'" onchange="updateSkuField(\''+key+'\',\'upm\',parseFloat(this.value))" style="width:120px"></td><td>'+(isAllergenUnknown_(s.allergens)?'<span style="background:var(--red-dim);color:var(--red);border:1px solid rgba(239,68,68,.25);border-radius:4px;padding:2px 6px;font-size:10px;white-space:nowrap" title="No allergen data — sequenced as worst case (all six allergens) so it can never seed a food-contact chain">\u26A0 NO ALLERGEN DATA</span>':'')+'<input class="inline-input" value="'+((s.allergens&&!isAllergenUnknown_(s.allergens))?s.allergens:'')+'" onchange="updateSkuField(\''+key+'\',\'allergens\',this.value)" style="width:140px'+(isAllergenUnknown_(s.allergens)?';margin-top:3px':'')+'"></td><td>'+labelCell+'</td><td>'+linesCell+'</td><td>'+linesLateCell+'</td><td>'+pairCell+'</td><td style="text-align:center">'+chk('capper')+'</td><td style="text-align:center">'+chk('nightShift')+'</td><td style="text-align:center">'+chk('preProcessed')+'</td><td style="text-align:center">'+chk('active')+'</td><td>'+stagingCell_(key,s)+'</td></tr>';}).join('');}
 var _skuTimer=null;
 // ─── STAGING / PENDING SKUS (v0.5.72) ────────────────────────────────────────
 // A pending SKU is one entered in Sequins before Menu Library knows it exists —
@@ -3448,7 +3452,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.157';
+var APP_VERSION='v0.5.158';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
