@@ -1,11 +1,11 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.142 — 2026-08-21    (pairs with Code.js v0.4.74)
+  Sequins ✨ — Index.html    v0.5.143 — 2026-08-21    (pairs with Code.js v0.4.75)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.142 This header was stranded at v0.5.127 while APP_VERSION ran on to
-           .141 — fourteen versions of drift, invisible because the sidebar
-           reads APP_VERSION and nothing reads this. Both are now bumped
-           together, and CLAUDE.md records all three stamps rather than two.
+  v0.5.143 Sandbox shows the sequence per line per day (Samad). The data was
+           already computed — sbSummarise keeps byLine[].seq — and simply was
+           never rendered. Compact one-row-per-line list, not cards: eight
+           lines of SKU cards would bury the numbers above it.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -3325,7 +3325,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.142';
+var APP_VERSION='v0.5.143';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4934,6 +4934,32 @@ function runSandbox(){
     ttd(r.S.latestEnd?fmtClock(r.S.latestEnd):'—');
     ltb.appendChild(trT);
     lt.appendChild(ltb);body.appendChild(lt);
+    // v0.5.143 (Samad): run times alone don't say how the day breaks down. The
+    // sequence per line was already computed — sbSummarise keeps byLine[].seq —
+    // it just was never rendered. Deliberately a compact one-line-per-line list
+    // rather than cards: this is a summary, and eight lines of full SKU cards
+    // would bury the numbers above it.
+    var seqIds=Object.keys(r.S.byLine).sort();
+    if(seqIds.length){
+      var sh=document.createElement('div');
+      sh.className='sb-note';sh.style.color='var(--text)';sh.style.marginTop='12px';
+      sh.appendChild(document.createTextNode('Sequence'));
+      body.appendChild(sh);
+      seqIds.forEach(function(id){
+        var x=r.S.byLine[id];if(!x||!x.seq||!x.seq.length)return;
+        var row=document.createElement('div');row.style.margin='3px 0';
+        var lab=document.createElement('span');
+        lab.style.cssText='font-family:var(--mono);font-size:10px;color:var(--teal);display:inline-block;min-width:64px';
+        lab.appendChild(document.createTextNode(sbShortLine_(id)+' ('+x.seq.length+')'));
+        row.appendChild(lab);
+        var t=document.createElement('span');
+        t.style.cssText='font-family:var(--mono);font-size:10px;color:var(--muted)';
+        t.appendChild(document.createTextNode(x.seq.join(' › ')));
+        row.appendChild(t);
+        body.appendChild(row);
+      });
+      any=true;
+    }
     // v0.5.133 — "what would the extra table have to be?". Read entirely off the
     // run that just happened; there is no second solve. Answers the sizing half
     // of the staffing question: how long it runs, how much it carries, when it

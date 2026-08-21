@@ -1,12 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.74 — 2026-08-21    (pairs with Index.html v0.5.142)
+ * Sequins ✨ — Code.js    v0.4.75 — 2026-08-21    (pairs with Index.html v0.5.143)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.74  No server change — pairing bump. The sandbox work in v0.5.128-.142
- *          is entirely client-side. Trimmed this header to the latest entry:
- *          it still listed v0.4.61/.60/.59 and had nothing for .62 through
- *          .73, because CLAUDE.md documented an accumulating list rather than
- *          the latest-only style actually wanted.
+ * v0.4.75  No server change — pairing bump. Sandbox sequence display is
+ *          entirely client-side.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
