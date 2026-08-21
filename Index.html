@@ -1,13 +1,14 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.149 — 2026-08-21    (pairs with Code.js v0.4.81)
+  Sequins ✨ — Index.html    v0.5.150 — 2026-08-21    (pairs with Code.js v0.4.82)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.149 Line Planner says WHY, not just what. It reported the numbers and
-           left the reader to work out whether 26 moves were an optimisation
-           or noise — identical finish plus identical overtime plus a worse
-           hours spread means noise, and it now says so. Adds a chain-breaks
-           column for today's shape (half the comparison was missing), and
-           replaces the flat move list with a per-line net view.
+  v0.5.150 FIX (Samad): Sandbox was discarding SKU attributes for any SKU
+           swapped IN. The incoming-SKU path REPLACED the library entry with
+           an object built purely from the stub form, which does not collect
+           admissibleLines — so a SKU restricted to LINE-3 reached the engine
+           with no restriction and went wherever the balancer liked. Now
+           merges over the existing entry: stub fields win when filled, and
+           anything the form does not ask about survives.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -3375,7 +3376,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.149';
+var APP_VERSION='v0.5.150';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4668,22 +4669,42 @@ function sbBuildCtx(c,day,withOverlay,volPlan){
     } else if(vp.mode==='boost'&&vp.skus){
       Object.keys(skus).forEach(function(k){if(vp.skus[k])skus[k]=Math.round(skus[k]*vp.skus[k]);});
     }
+    // v0.5.150 FIX (Samad). This used to REPLACE lib[name] with a fresh object
+    // built purely from the stub form. Written for a genuinely new SKU that
+    // Menu Library has never heard of, where there is nothing to preserve — but
+    // an incoming SKU is very often one that already exists, being swapped back
+    // in. Replacing it silently discarded every attribute the stub form does not
+    // collect: admissibleLines above all, plus category, unitsPerTote and label
+    // version. So a SKU restricted to LINE-3 in the library arrived at the
+    // engine with no restriction at all and went wherever the balancer liked.
+    // Samad reported it as "it's not taking any of my SKU attributions", which
+    // was exactly right.
+    //
+    // Now MERGES over whatever the library already holds. A stub field wins when
+    // it has been filled in; anything the form does not ask about survives.
     sbIncoming().forEach(function(name){
-      var st=c.stubs[name]||{};
-      lib[name.toUpperCase()]={
-        active:true,
-        packageType:st.packageType||'',
-        fcClass:st.fcClass||'',
-        // Unanswered allergens deliberately land on the UNKNOWN sentinel so the
-        // engine's existing worst-case handling applies, rather than reading as
-        // allergen-free and producing a falsely clean report.
-        allergens:st.allergensSet?(st.allergens||'None'):ALLERGEN_UNKNOWN,
-        preProcessed:!!st.preProcessed,
-        capper:!!st.capper,
-        nightShift:!!st.nightShift,
-        upm:parseFloat(st.upm)||15,
-        usdaPairedSku:st.usdaPairedSku||''
-      };
+      var key=name.toUpperCase();
+      var st=c.stubs[name]||{},base=lib[key]||{},out={},k;
+      for(k in base){if(Object.prototype.hasOwnProperty.call(base,k))out[k]=base[k];}
+      out.active=true;
+      if(st.packageType)out.packageType=st.packageType;
+      else if(!out.packageType)out.packageType='';
+      if(st.fcClass)out.fcClass=st.fcClass;
+      else if(!out.fcClass)out.fcClass='';
+      // Unanswered allergens fall back to whatever the library already knows,
+      // and only then to the UNKNOWN sentinel — real allergen data always beats
+      // the sentinel, and the sentinel still beats reading as allergen-free.
+      if(st.allergensSet)out.allergens=st.allergens||'None';
+      else if(!out.allergens)out.allergens=ALLERGEN_UNKNOWN;
+      // These four are checkboxes: unticked is a real answer, so the stub owns
+      // them outright rather than falling back.
+      out.preProcessed=!!st.preProcessed;
+      out.capper=!!st.capper;
+      out.nightShift=!!st.nightShift;
+      if(parseFloat(st.upm))out.upm=parseFloat(st.upm);
+      else if(!parseFloat(out.upm))out.upm=15;
+      if(st.usdaPairedSku)out.usdaPairedSku=st.usdaPairedSku;
+      lib[key]=out;
     });
   }
   if(withOverlay)sbApplySandboxLineAccess_(lib);
