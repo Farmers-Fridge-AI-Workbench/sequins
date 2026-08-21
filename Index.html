@@ -1,16 +1,17 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.154 — 2026-08-21    (pairs with Code.js v0.4.86)
+  Sequins ✨ — Index.html    v0.5.155 — 2026-08-21    (pairs with Code.js v0.4.87)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.154 ROOT CAUSE of the LINE-4 egg drop. orderChainMonotonic_ began with
-           `if (jobs.length < 3) return jobs.slice()` — so a TWO-job
-           food-contact block was never ordered at all, just handed back in
-           placement order, and placement emits wraps before sandwiches. A line
-           carrying only SAUSAGE_BURRITO_BREAKFAST {egg,milk,soy,wheat} and
-           TURKEY_CLUB_SANDWICH {milk,soy,wheat} therefore ran the burrito
-           first and dropped egg, untouched. Two jobs are exactly enough to
-           break a chain; the guard is now < 2. Verified on that pair in
-           isolation, and a no-op across all 140 stored demand days.
+  v0.5.155 FIX: the 8s poll was silently discarding unsaved config edits. It
+           replaced STATE.skuLibrary / lineConfig / sequencingRules wholesale
+           and only re-rendered Line Sequence, so an edit sitting in its 1.5s
+           auto-save debounce was overwritten by the server copy, the debounced
+           save sent that copy back, and the edit vanished — while the input
+           kept showing what had been typed. lastModified changes whenever
+           ANYONE saves, so with two people in the app it fired constantly.
+           That is how STEAK_CUP and GRILLED_CHICKEN kept losing their package
+           type. The poll now leaves a section alone while it has unsaved local
+           edits; everything else still syncs.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -848,6 +849,23 @@ function admissibleLinesFor_(meta,day){
 var STATE={planEmail:{},demand:{},skuLibrary:{},lineConfig:null,planners:[],overrides:{},sequencingRules:null,publishedPlans:{},breakOverrides:{},floorViewers:[],finishBy:{},sandboxes:[]};
 var CURRENT_USER=null,CURRENT_WEEK=null,CURRENT_DAY=null;
 var _pendingForecast=null,_pendingActuals=null,_pollInterval=null,_lastModified=null;
+// ─── UNSAVED-CONFIG GUARD (v0.5.155) ────────────────────────────────────────
+// The 8s poll replaced STATE.skuLibrary / lineConfig / sequencingRules wholesale
+// and only ever re-rendered Line Sequence. So an edit sitting in its 1.5s
+// auto-save debounce was overwritten by the server copy, the debounced save then
+// sent that copy straight back, and the edit vanished — while the input kept
+// showing what had been typed, because the SKU Library and Line Config tables
+// were never re-rendered. The UI lied about what was stored.
+//
+// lastModified changes whenever ANYONE saves anything, so with two people in the
+// app this fires constantly. It is how STEAK_CUP and GRILLED_CHICKEN ended up
+// with no package type however many times it was entered.
+//
+// While a section has unsaved local edits the poll leaves it alone. Everything
+// else still syncs, so a second tab's demand or a colleague's publish still
+// lands. Cleared only when the save actually succeeds — a failed save keeps the
+// section dirty rather than exposing it to the next poll.
+var _cfgDirty={sku:false,line:false,rules:false};
 var _metricsCollapsed=false;
 var _wbDragSku=null,_wbDragFromLine=null,_pendingMove=null,_wbDragBreak=null;
 var _wbDropIndex=null,_wbDropLine=null,_wbHoverEl=null,_wbUndoStack=[];
@@ -3171,7 +3189,7 @@ function promoteSku(key){
 // One-time, reviewable, derived from THIS library's own packageType (synced from
 // Menu Library) rather than a hardcoded name list. Beverage_* and CPG_* packages
 // are the non-assembly types; everything else is a jar or a box and gets built.
-function updateSkuField(key,field,val){if(!STATE.skuLibrary[key])STATE.skuLibrary[key]={};STATE.skuLibrary[key][field]=val;updateSkuCounts();var el=document.getElementById('skuLibStatus');if(el)el.innerHTML='<div class="status status-info">Unsaved — auto-saving…</div>';if(_skuTimer)clearTimeout(_skuTimer);_skuTimer=setTimeout(function(){saveSkuLibrary(true);},1500);
+function updateSkuField(key,field,val){_cfgDirty.sku=true;if(!STATE.skuLibrary[key])STATE.skuLibrary[key]={};STATE.skuLibrary[key][field]=val;updateSkuCounts();var el=document.getElementById('skuLibStatus');if(el)el.innerHTML='<div class="status status-info">Unsaved — auto-saving…</div>';if(_skuTimer)clearTimeout(_skuTimer);_skuTimer=setTimeout(function(){saveSkuLibrary(true);},1500);
   // v0.5.57: deactivating a SKU used to leave its row sitting on screen — only
   // the Active counter moved. Re-render the table body, but ONLY for `active`,
   // so editing category/UPM/allergens can't yank the row out from under the
@@ -3232,6 +3250,7 @@ function toggleAdmissibleLineLate(lineId,checked){
 function closeAdmissibleLinesModal(){document.getElementById('admissibleLinesModal').classList.remove('active');_admModalKey=null;}
 function applyAdmissibleLinesModal(){
   if(!_admModalKey)return;
+  _cfgDirty.sku=true;
   if(!STATE.skuLibrary[_admModalKey])STATE.skuLibrary[_admModalKey]={};
   var rec=STATE.skuLibrary[_admModalKey];
   rec.admissibleLines=_admModalSelected.slice();
@@ -3246,7 +3265,7 @@ function applyAdmissibleLinesModal(){
   if(_skuTimer)clearTimeout(_skuTimer);_skuTimer=setTimeout(function(){saveSkuLibrary(true);},1500);
 }
 function updateSkuCounts(){var lib=STATE.skuLibrary,k=Object.keys(lib).filter(function(x){return !lib[x].pending;});var pend=Object.keys(lib).filter(function(x){return !!lib[x].pending;});var pEl=document.getElementById('sc-pending');if(pEl)pEl.textContent=pend.length?String(pend.length):'0';document.getElementById('sc-capper').textContent=k.filter(function(x){return lib[x].capper;}).length;document.getElementById('sc-night').textContent=k.filter(function(x){return lib[x].nightShift;}).length;document.getElementById('sc-preproc').textContent=k.filter(function(x){return lib[x].preProcessed;}).length;document.getElementById('sc-active').textContent=k.filter(function(x){return lib[x].active!==false;}).length;document.getElementById('sc-total').textContent=k.length;}
-function saveSkuLibrary(isAutoSave){var el=document.getElementById('skuLibStatus');if(el)el.innerHTML='<div class="status status-info"><span class="spinner"></span>Saving…</div>';google.script.run.withSuccessHandler(function(){if(el){el.innerHTML='<div class="status status-ok">✓ Saved'+(isAutoSave?' (auto)':'')+'</div>';setTimeout(function(){if(el.innerHTML.indexOf('Saved')!==-1)el.innerHTML='';},3000);}}).withFailureHandler(function(err){if(el)el.innerHTML='<div class="status status-err">⚠ SAVE FAILED: '+err.message+'</div>';}).saveSkuLibrary(STATE.skuLibrary);}
+function saveSkuLibrary(isAutoSave){var el=document.getElementById('skuLibStatus');if(el)el.innerHTML='<div class="status status-info"><span class="spinner"></span>Saving…</div>';google.script.run.withSuccessHandler(function(){_cfgDirty.sku=false;if(el){el.innerHTML='<div class="status status-ok">✓ Saved'+(isAutoSave?' (auto)':'')+'</div>';setTimeout(function(){if(el.innerHTML.indexOf('Saved')!==-1)el.innerHTML='';},3000);}}).withFailureHandler(function(err){if(el)el.innerHTML='<div class="status status-err">⚠ SAVE FAILED: '+err.message+'</div>';}).saveSkuLibrary(STATE.skuLibrary);}
 function importSkusFromForecast(){var allSkuNamesSet={};Object.keys(STATE.demand).forEach(function(wk){Object.keys(STATE.demand[wk]).forEach(function(day){Object.keys(STATE.demand[wk][day].skus||{}).forEach(function(sku){allSkuNamesSet[sku]=true;});});});Object.keys(STATE.skuLibrary).forEach(function(key){allSkuNamesSet[key]=true;});var allSkuNames=Object.keys(allSkuNamesSet),el=document.getElementById('skuLibStatus');if(!allSkuNames.length){el.innerHTML='<div class="status status-warn">No demand loaded yet — load demand first.</div>';return;}el.innerHTML='<div class="status status-info"><span class="spinner"></span>Pulling attributes…</div>';google.script.run.withSuccessHandler(function(result){var attributes=result.attributes,notFound=result.notFound,added=0,updated=0;allSkuNames.forEach(function(sku){var key=sku.toUpperCase(),normKey=key.replace(/[^A-Z0-9]/g,''),attrs=attributes[normKey];if(!STATE.skuLibrary[key]){STATE.skuLibrary[key]={active:true,category:'',packageType:'',unitsPerTote:'',upm:'',allergens:'',capper:false,nightShift:false,preProcessed:false};added++;}if(attrs){if(attrs.category)STATE.skuLibrary[key].category=attrs.category;if(attrs.packageType)STATE.skuLibrary[key].packageType=attrs.packageType;if(attrs.allergens)STATE.skuLibrary[key].allergens=attrs.allergens;if(attrs.upm)STATE.skuLibrary[key].upm=attrs.upm;updated++;}});renderSkuLibrary();var nfMsg=notFound.length?('<br><span style="color:var(--amber)">⚠ '+notFound.length+' not found: '+notFound.slice(0,10).join(', ')+(notFound.length>10?'…':'')+'</span>'):'';el.innerHTML='<div class="status status-info"><span class="spinner"></span>'+added+' new, '+updated+' matched — saving…</div>';google.script.run.withSuccessHandler(function(){el.innerHTML='<div class="status status-ok">✓ Saved — '+added+' new, '+updated+' matched'+nfMsg+'</div>';}).withFailureHandler(function(err){el.innerHTML='<div class="status status-err">⚠ Pull ok, SAVE FAILED: '+err.message+'</div>';}).saveSkuLibrary(STATE.skuLibrary);}).withFailureHandler(function(err){el.innerHTML='<div class="status status-err">'+err.message+'</div>';}).fetchSkuAttributesFor(allSkuNames);}
 
 // v0.5.58: rules consolidation — line seeds moved into the Active Lines table
@@ -3259,11 +3278,12 @@ function importSkusFromForecast(){var allSkuNamesSet={};Object.keys(STATE.demand
 // and all timing settings — those are edited rarely and stay manual.
 var _rulesAutosaveTimer=null;
 function autoSaveRulesDebounced(){
+  _cfgDirty.rules=true;
   var el=document.getElementById('rulesAutosaveStatus');
   if(el)el.innerHTML='<div class="status status-info">Unsaved — auto-saving…</div>';
   if(_rulesAutosaveTimer)clearTimeout(_rulesAutosaveTimer);
   _rulesAutosaveTimer=setTimeout(function(){
-    google.script.run.withSuccessHandler(function(){
+    google.script.run.withSuccessHandler(function(){_cfgDirty.rules=false;
       if(el){el.innerHTML='<div class="status status-ok">✓ Saved (auto)</div>';setTimeout(function(){el.innerHTML='';},2000);}
       renderSequence();renderWorkbench();
     }).withFailureHandler(function(err){
@@ -3278,18 +3298,18 @@ function renderHomeLines(){
   function homeField(cat,label){var val=hl[cat]||'';if(!ce)return'<div style="display:flex;gap:8px;align-items:center"><span style="color:var(--muted);width:220px">'+label+'</span><span style="color:var(--text)">'+val+'</span></div>';return'<div style="display:flex;gap:8px;align-items:center"><span style="color:var(--muted);width:220px">'+label+'</span><input class="inline-input" value="'+val+'" onchange="updateHomeLine(\''+cat+'\',this.value);autoSaveRulesDebounced()" style="width:200px" placeholder="(none)"></div>';}
   el.innerHTML=[homeField('wrap','Wraps prefer'),homeField('sandwich','Sandwiches prefer'),homeField('salad','Salads prefer'),homeField('bowl','Bowls prefer'),homeField('green','Small cups prefer'),'<div id="rulesAutosaveStatus" style="margin-top:4px"></div>'].join('');
 }
-function updateLineCap(i,cap,val){var l=STATE.lineConfig||DEFAULT_LINE_CONFIG;if(!l[i].caps)l[i].caps=lineCaps(l[i]);l[i].caps[cap]=val;STATE.lineConfig=l;}
-function updateLineDay(i,d,val){var l=STATE.lineConfig||DEFAULT_LINE_CONFIG;l[i].days[d]=val;STATE.lineConfig=l;}
+function updateLineCap(i,cap,val){_cfgDirty.line=true;var l=STATE.lineConfig||DEFAULT_LINE_CONFIG;if(!l[i].caps)l[i].caps=lineCaps(l[i]);l[i].caps[cap]=val;STATE.lineConfig=l;}
+function updateLineDay(i,d,val){_cfgDirty.line=true;var l=STATE.lineConfig||DEFAULT_LINE_CONFIG;l[i].days[d]=val;STATE.lineConfig=l;}
 // v0.5.128. Re-renders because the row grows a badge, and re-renders the live
 // views because a line just appeared in or vanished from all of them.
-function updateLineSandboxOnly(i,val){var l=STATE.lineConfig||DEFAULT_LINE_CONFIG;l[i].sandboxOnly=!!val;STATE.lineConfig=l;renderLineConfig();renderSequence();renderWorkbench();renderDayStrip('seqDayStrip');renderDayStrip('wbDayStrip');}
-function updateLineHC(i,val){var l=STATE.lineConfig||DEFAULT_LINE_CONFIG;l[i].hc=parseInt(val)||0;STATE.lineConfig=l;}
-function updateLineLead(i,val){var l=STATE.lineConfig||DEFAULT_LINE_CONFIG;l[i].lineLead=parseInt(val,10)||0;STATE.lineConfig=l;}
-function updateLinePool(i,val){var l=STATE.lineConfig||DEFAULT_LINE_CONFIG;l[i].pool=val;STATE.lineConfig=l;}
-function updateLineRoom(i,val){var l=STATE.lineConfig||DEFAULT_LINE_CONFIG;l[i].room=String(val||'').trim();STATE.lineConfig=l;}
-function updateLineStartTime(i,val){var l=STATE.lineConfig||DEFAULT_LINE_CONFIG;l[i].startTime=val;STATE.lineConfig=l;}
+function updateLineSandboxOnly(i,val){_cfgDirty.line=true;var l=STATE.lineConfig||DEFAULT_LINE_CONFIG;l[i].sandboxOnly=!!val;STATE.lineConfig=l;renderLineConfig();renderSequence();renderWorkbench();renderDayStrip('seqDayStrip');renderDayStrip('wbDayStrip');}
+function updateLineHC(i,val){_cfgDirty.line=true;var l=STATE.lineConfig||DEFAULT_LINE_CONFIG;l[i].hc=parseInt(val)||0;STATE.lineConfig=l;}
+function updateLineLead(i,val){_cfgDirty.line=true;var l=STATE.lineConfig||DEFAULT_LINE_CONFIG;l[i].lineLead=parseInt(val,10)||0;STATE.lineConfig=l;}
+function updateLinePool(i,val){_cfgDirty.line=true;var l=STATE.lineConfig||DEFAULT_LINE_CONFIG;l[i].pool=val;STATE.lineConfig=l;}
+function updateLineRoom(i,val){_cfgDirty.line=true;var l=STATE.lineConfig||DEFAULT_LINE_CONFIG;l[i].room=String(val||'').trim();STATE.lineConfig=l;}
+function updateLineStartTime(i,val){_cfgDirty.line=true;var l=STATE.lineConfig||DEFAULT_LINE_CONFIG;l[i].startTime=val;STATE.lineConfig=l;}
 var _lcTimer=null;
-function saveLineConfig(isAutoSave){var lines=STATE.lineConfig||DEFAULT_LINE_CONFIG,btn=document.getElementById('saveLineConfigBtn'),el=document.getElementById('lineConfigStatus'),orig=btn?btn.textContent:'';if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Saving…';}if(el)el.innerHTML='<div class="status status-info"><span class="spinner"></span>Saving…</div>';google.script.run.withSuccessHandler(function(){STATE.lineConfig=lines;renderLineConfig();renderSequence();renderWorkbench();renderDayStrip('seqDayStrip');renderDayStrip('wbDayStrip');if(btn){btn.disabled=false;btn.textContent='✓ Saved';setTimeout(function(){btn.textContent=orig||'Save changes';},2000);}if(el){el.innerHTML='<div class="status status-ok">✓ Saved'+(isAutoSave?' (auto)':'')+'</div>';setTimeout(function(){el.innerHTML='';},3000);}}).withFailureHandler(function(err){if(btn){btn.disabled=false;btn.textContent=orig||'Save changes';}if(el)el.innerHTML='<div class="status status-err">⚠ SAVE FAILED: '+err.message+'</div>';}).saveLineConfig(lines);}
+function saveLineConfig(isAutoSave){var lines=STATE.lineConfig||DEFAULT_LINE_CONFIG,btn=document.getElementById('saveLineConfigBtn'),el=document.getElementById('lineConfigStatus'),orig=btn?btn.textContent:'';if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Saving…';}if(el)el.innerHTML='<div class="status status-info"><span class="spinner"></span>Saving…</div>';google.script.run.withSuccessHandler(function(){_cfgDirty.line=false;STATE.lineConfig=lines;renderLineConfig();renderSequence();renderWorkbench();renderDayStrip('seqDayStrip');renderDayStrip('wbDayStrip');if(btn){btn.disabled=false;btn.textContent='✓ Saved';setTimeout(function(){btn.textContent=orig||'Save changes';},2000);}if(el){el.innerHTML='<div class="status status-ok">✓ Saved'+(isAutoSave?' (auto)':'')+'</div>';setTimeout(function(){el.innerHTML='';},3000);}}).withFailureHandler(function(err){if(btn){btn.disabled=false;btn.textContent=orig||'Save changes';}if(el)el.innerHTML='<div class="status status-err">⚠ SAVE FAILED: '+err.message+'</div>';}).saveLineConfig(lines);}
 
 // ── Add a line (v0.5.111) ──
 // Line config is already a plain stored array that the engine reads and
@@ -3425,7 +3445,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.154';
+var APP_VERSION='v0.5.155';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -3766,7 +3786,7 @@ function buildUnplacedOptions_(job,lineState,lines,rules,lcById,capMin){
   });
   return wrap;
 }
-function startPolling(){if(_pollInterval)return;_pollInterval=setInterval(function(){google.script.run.withSuccessHandler(function(ts){if(!ts||ts===_lastModified)return;_lastModified=ts;document.getElementById('syncIndicator').style.display='';google.script.run.withSuccessHandler(function(s){document.getElementById('syncIndicator').style.display='none';if(!s)return;if(s.demand)STATE.demand=s.demand;if(s.skuLibrary)STATE.skuLibrary=s.skuLibrary;if(s.lineConfig)STATE.lineConfig=s.lineConfig;if(s.planners)STATE.planners=s.planners;if(s.overrides)STATE.overrides=s.overrides;if(s.sequencingRules)STATE.sequencingRules=s.sequencingRules;if(s.breakOverrides)STATE.breakOverrides=s.breakOverrides;if(s.scenarios)STATE.scenarios=s.scenarios;if(s.floorViewers)STATE.floorViewers=s.floorViewers;renderSequence();}).withFailureHandler(function(){document.getElementById('syncIndicator').style.display='none';}).getState();}).withFailureHandler(function(){}).getLastModified();},8000);}
+function startPolling(){if(_pollInterval)return;_pollInterval=setInterval(function(){google.script.run.withSuccessHandler(function(ts){if(!ts||ts===_lastModified)return;_lastModified=ts;document.getElementById('syncIndicator').style.display='';google.script.run.withSuccessHandler(function(s){document.getElementById('syncIndicator').style.display='none';if(!s)return;if(s.demand)STATE.demand=s.demand;if(s.skuLibrary&&!_cfgDirty.sku)STATE.skuLibrary=s.skuLibrary;if(s.lineConfig&&!_cfgDirty.line)STATE.lineConfig=s.lineConfig;if(s.planners)STATE.planners=s.planners;if(s.overrides)STATE.overrides=s.overrides;if(s.sequencingRules&&!_cfgDirty.rules)STATE.sequencingRules=s.sequencingRules;if(s.breakOverrides)STATE.breakOverrides=s.breakOverrides;if(s.scenarios)STATE.scenarios=s.scenarios;if(s.floorViewers)STATE.floorViewers=s.floorViewers;renderSequence();}).withFailureHandler(function(){document.getElementById('syncIndicator').style.display='none';}).getState();}).withFailureHandler(function(){}).getLastModified();},8000);}
 
 function publishPlan(){
   var dayData=STATE.demand[CURRENT_WEEK]&&STATE.demand[CURRENT_WEEK][CURRENT_DAY];

@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.86 — 2026-08-21    (pairs with Index.html v0.5.154)
+ * Sequins ✨ — Code.js    v0.4.87 — 2026-08-21    (pairs with Index.html v0.5.155)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.86  No server change — pairing bump. The chain-ordering fix is entirely
- *          client-side, in orderChainMonotonic_.
+ * v0.4.87  No server change — pairing bump. The unsaved-config guard is
+ *          entirely client-side, in the 8s poll.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
