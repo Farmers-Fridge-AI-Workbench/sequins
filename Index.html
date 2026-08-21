@@ -1,12 +1,12 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.146 — 2026-08-21    (pairs with Code.js v0.4.78)
+  Sequins ✨ — Index.html    v0.5.147 — 2026-08-21    (pairs with Code.js v0.4.79)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.146 SKU Library's Active and Staging columns pin to the right edge. The
-           table is wider than any screen and its scrollbar sits below 46 rows,
-           so reaching Active meant scrolling to the bottom of the page and
-           back — which is why an inactive SKU looked impossible to reactivate
-           unless you searched to shorten the table first.
+  v0.5.147 SKU Library status moves ABOVE the table — below it, "saving…" and
+           the resync findings sat 46 rows off-screen and were only visible if
+           you filtered the list short. Plan email gains "Total Hours (A&P)"
+           (Samad): his (A&P $/unit x units) / rate, which reduces exactly to
+           the assembly hours plus the processing hours bank already reported.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -691,6 +691,11 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           <span id="skuCount" style="font-family:var(--mono);font-size:10px;color:var(--muted)"></span>
           <div style="margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--muted)"><span id="sc-total" style="color:var(--teal);font-weight:600">—</span> total SKUs</div>
         </div>
+        <!-- v0.5.147: status sits ABOVE the table. Below it, "saving…" and the
+             resync findings were 46 rows off-screen — invisible unless you
+             filtered the list short enough to scroll past. A flag nobody sees
+             is not a flag. -->
+        <div id="skuLibStatus" style="margin-bottom:10px"></div>
         <div style="overflow-x:auto">
           <table class="data-table"><thead><tr>
             <th>SKU</th><th>Category</th><th title="Food-contact class — drives allergen compounding + line-type">FC</th><th>Package</th><th title="Units in a full tote. A SKU fact, not a package fact — the same package type carries different tote counts. Drives the tote split on My Line.">Units/Tote</th><th>UPM</th><th>Allergens</th><th>Label</th><th title="Lines this SKU may run on Sunday through Thursday">Lines Sun–Th</th><th title="Lines this SKU may run on Friday and Saturday. “same” means it inherits the Sun–Th list.">Lines F–Sat</th><th title="Non-USDA counterpart. Grouping the pair saves a changeover — the base build, jar and lid are shared.">USDA Pair</th>
@@ -701,7 +706,6 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
             <th title="Staged SKUs only — what's still missing, and Promote once complete">Staging</th>
           </tr></thead><tbody id="skuTableBody"></tbody></table>
         </div>
-        <div id="skuLibStatus" style="margin-top:8px"></div>
       </div>
     </div>
 
@@ -2149,7 +2153,12 @@ function planEmailHtml_(snap){
   [['Total Units',fmtUnits(sum.units)],['Lines Running',String(sum.linesRunning)],
    ['Simulated $/unit','$'+sum.simPerUnit.toFixed(3)],['Processing (static)','$'+sum.proc.toFixed(3)],
    ['Total Simulated $/unit (A&P)','$'+sum.ap.toFixed(3)],['Hours Bank',sum.hoursBank.toFixed(1)],
-   ['Total Labor Hours',sum.totalLaborHrs.toFixed(1)]
+   ['Total Labor Hours',sum.totalLaborHrs.toFixed(1)],
+   // v0.5.147 (Samad): the two hour figures above already existed but never as
+   // one number, and hours are what the floor actually plans against. This is
+   // his (A&P $/unit x units) / rate, which reduces exactly to assembly hours
+   // plus the processing hours bank — same arithmetic, no new inputs.
+   ['Total Hours (A&P)',(sum.totalLaborHrs+sum.hoursBank).toFixed(1)]
   ].forEach(function(p){
     h+='<td style="'+TD+'background:#fafafa;text-align:center;min-width:92px">'+
        '<div style="font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.04em">'+esc(p[0])+'</div>'+
@@ -3342,7 +3351,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.146';
+var APP_VERSION='v0.5.147';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;

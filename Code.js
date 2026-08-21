@@ -1,13 +1,13 @@
 /**
- * Sequins ✨ — Code.js    v0.4.78 — 2026-08-21    (pairs with Index.html v0.5.146)
+ * Sequins ✨ — Code.js    v0.4.79 — 2026-08-21    (pairs with Index.html v0.5.147)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.78  FIX: the allergen sync was deactivating SKUs that have demand.
- *          demandedSkus_ enumerated days from the legacy Script Properties
- *          index only, so demand living in the Demand Store sheet was
- *          invisible and a scheduled SKU read as undemanded. It was switched
- *          off nightly and reactivating it by hand never held. Now reads the
- *          sheet first and the index second, matching getDemandDay_.
+ * v0.4.79  No server change — pairing bump. Follows the v0.4.78 fix to
+ *          demandedSkus_, which had enumerated demand days from the legacy
+ *          Script Properties index only and so could not see demand living in
+ *          the Demand Store sheet — leaving the daily allergen sync free to
+ *          deactivate SKUs that were actually scheduled, nightly, however
+ *          often someone reactivated them by hand.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
