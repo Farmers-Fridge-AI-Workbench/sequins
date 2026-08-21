@@ -1,12 +1,11 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.156 — 2026-08-21    (pairs with Code.js v0.4.88)
+  Sequins ✨ — Index.html    v0.5.157 — 2026-08-21    (pairs with Code.js v0.4.89)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.156 A failed config-mirror write now shows in the SKU Library status
-           line instead of vanishing into Logger.log. The mirror stopped
-           recording SKU Library saves while the app still reported success, so
-           a stale tab looked authoritative. Save is still the record and a
-           sheet problem still cannot cost an edit — it just says so now.
+  v0.5.157 SKU Library pins the SKU name column to the left. v0.5.146 pinned
+           Active and Staging to the right but left the name scrolling away, so
+           scrolling right lost track of which row you were on — you could tick
+           a checkbox for a SKU you could no longer see. Both ends pinned now.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -262,6 +261,15 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 }
 #view-skus .data-table th:nth-last-child(2),
 #view-skus .data-table td:nth-last-child(2){right:96px;}
+/* v0.5.157 — pin the SKU name too. Pinning Active/Staging to the right without
+   pinning the name meant scrolling right lost track of which row you were on,
+   so you could tick a checkbox for a SKU you could no longer see. Both ends
+   pinned, table scrolls between them. */
+#view-skus .data-table th:first-child,
+#view-skus .data-table td:first-child{
+  position:sticky;left:0;background:var(--surface);z-index:3;
+  box-shadow:6px 0 8px -6px rgba(0,0,0,0.55);
+}
 #view-skus .data-table th:last-child,
 #view-skus .data-table td:last-child{right:0;width:96px;box-shadow:none;}
 .empty{text-align:center;padding:60px 0;}
@@ -3440,7 +3448,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.156';
+var APP_VERSION='v0.5.157';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;

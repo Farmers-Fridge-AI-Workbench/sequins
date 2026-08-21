@@ -1,12 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.88 — 2026-08-21    (pairs with Index.html v0.5.156)
+ * Sequins ✨ — Code.js    v0.4.89 — 2026-08-21    (pairs with Index.html v0.5.157)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.88  Config-mirror failures are reported instead of swallowed. The three
- *          save functions return the message and the client surfaces it. The
- *          mirror had stopped recording SKU Library saves while the app
- *          reported success — a stale tab reading as authoritative is worse
- *          than a visible error. Still non-fatal.
+ * v0.4.89  No server change — pairing bump. SKU Library column pinning is
+ *          entirely client-side CSS.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
