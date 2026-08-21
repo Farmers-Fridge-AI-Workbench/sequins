@@ -1,14 +1,8 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.151 — 2026-08-21    (pairs with Code.js v0.4.83)
+  Sequins ✨ — Index.html    v0.5.152 — 2026-08-21    (pairs with Code.js v0.4.84)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.151 Two fixes. Allergen sync now reads Menu Library rows that are not
-           Status=Active — an "Upcoming" SKU has its allergens filled in and
-           they were being ignored, with NO ALLERGEN DATA stamped over real
-           data. And the Swaps SKU-OUT dropdown keeps an outgoing SKU that has
-           dropped out of this week's forecast: the list is built from demand,
-           so it silently fell back to blank and the row read as an addition
-           while quietly bringing across 0 units.
+  v0.5.152 Pairing bump for the Code.js rules mirror. No client change.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -3381,7 +3375,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.151';
+var APP_VERSION='v0.5.152';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;

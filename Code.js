@@ -1,14 +1,12 @@
 /**
- * Sequins ✨ — Code.js    v0.4.83 — 2026-08-21    (pairs with Index.html v0.5.151)
+ * Sequins ✨ — Code.js    v0.4.84 — 2026-08-21    (pairs with Index.html v0.5.152)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.83  FIX: the allergen sync ignored Menu Library rows that are not
- *          Status=Active, so a SKU being launched — sitting at "Upcoming" with
- *          its allergens already filled in — had NO ALLERGEN DATA stamped over
- *          real data, including over allergens hand-entered in Sequins. Now
- *          builds two maps: Active rows own ACTIVE STATUS as before, every
- *          named row owns ALLERGEN DATA. Allergens are allergens regardless of
- *          launch status; whether a SKU is active is a separate question.
+ * v0.4.84  Config mirror covers sequencing rules. They were the third thing
+ *          living only in Script Properties, and the one that decides
+ *          behaviour nobody can see — greenBeltPackages, homeLines and
+ *          lineSeeds are all in there and appear in no view. New "Sequencing
+ *          Rules" tab, key/value so a new rule needs no schema change.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -70,6 +68,12 @@ const SANDBOX_TAB           = 'Sandboxes';  // same spreadsheet — see SANDBOXE
 // the audit log still says who saved when.
 const SKU_LIB_MIRROR_TAB    = 'SKU Library';   // same spreadsheet
 const LINE_CFG_MIRROR_TAB   = 'Line Config';   // same spreadsheet
+// v0.4.84: rules were the third thing living only in Script Properties, and the
+// one that decides behaviour nobody can see — greenBeltPackages, homeLines and
+// lineSeeds are all in here, and none of them appear in any view. Key/value
+// rather than one column per rule, so a new rule needs no schema change.
+const RULES_MIRROR_TAB      = 'Sequencing Rules';
+const RULES_MIRROR_HEADER   = ['Key','Value','UpdatedAt','UpdatedBy'];
 const SKU_LIB_MIRROR_HEADER = ['SKU','Active','Pending','Category','FcClass','PackageType','UnitsPerTote','UPM','Allergens','LabelNumberVersion','LinesSunTh','LinesFriSat','FriSatOverride','UsdaPairedSku','Capper','NightShift','PreProcessed','UpdatedAt','UpdatedBy'];
 const LINE_CFG_MIRROR_HEADER = ['LineId','Label','Type','Room','HC','LineLead','Pool','StartTime','SandboxOnly','CapCapper','CapSmallCup','CapUsdaApproved','CapNight','Mon','Tue','Wed','Thu','Fri','Sat','Sun','UpdatedAt','UpdatedBy'];
 const DEMAND_ARCHIVE_TAB    = 'Demand Archive';  // same spreadsheet — see ARCHIVE OLD DEMAND
@@ -2197,11 +2201,25 @@ function mirrorLineConfig_(lines, email) {
   return writeConfigMirror_(LINE_CFG_MIRROR_TAB, LINE_CFG_MIRROR_HEADER, rows);
 }
 
+function mirrorRules_(rules, email) {
+  const at = new Date().toISOString();
+  const keys = Object.keys(rules || {}).sort();
+  const rows = keys.map(function (k) {
+    const v = rules[k];
+    // Objects and arrays go in as JSON so nested rules (homeLines, lineSeeds)
+    // stay readable and round-trippable rather than stringifying to [object].
+    const out = (v !== null && typeof v === 'object') ? JSON.stringify(v) : String(v);
+    return [k, out, at, email || ''];
+  });
+  return writeConfigMirror_(RULES_MIRROR_TAB, RULES_MIRROR_HEADER, rows);
+}
+
 // Best-effort, exactly like the publish fan-out. The save is the record; the
 // mirror is a courtesy. A sheet hiccup must never cost someone their edit.
 function mirrorConfigSafely_(kind, payload, email) {
   try {
-    const n = (kind === 'sku') ? mirrorSkuLibrary_(payload, email)
+    const n = (kind === 'sku')  ? mirrorSkuLibrary_(payload, email)
+            : (kind === 'rules') ? mirrorRules_(payload, email)
                                : mirrorLineConfig_(payload, email);
     Logger.log('config mirror: wrote ' + n + ' ' + kind + ' rows.');
   } catch (e) {
@@ -2223,6 +2241,7 @@ function saveSequencingRules(rules) {
   if (!user.isAdmin && !user.canEditRules) throw new Error('Not authorized');
   setSection_(STATE_KEYS.sequencingRules, rules);
   writeAuditLog_(user.email, 'save_rules', '', '', JSON.stringify(rules));
+  mirrorConfigSafely_('rules', rules, user.email);
   return { ok: true };
 }
 
