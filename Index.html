@@ -1,11 +1,13 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.143 — 2026-08-21    (pairs with Code.js v0.4.75)
+  Sequins ✨ — Index.html    v0.5.144 — 2026-08-21    (pairs with Code.js v0.4.76)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.143 Sandbox shows the sequence per line per day (Samad). The data was
-           already computed — sbSummarise keeps byLine[].seq — and simply was
-           never rendered. Compact one-row-per-line list, not cards: eight
-           lines of SKU cards would bury the numbers above it.
+  v0.5.144 Blank Finish by means NO curfew again. v0.5.131 defaulted it to
+           16:30, and a cap does not just impose a ceiling — it changes what
+           bal() optimises, from equal DURATION to equal FINISH TIME. With
+           staggered starts those are opposites, so LINE-3 (08:20) was handed
+           ~2h less than the 06:20 lines on sandboxes with no curfew entered.
+           That was Samad's "LINE-3 keeps getting shorted hours".
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -594,7 +596,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           <div class="sb-note" style="margin-bottom:10px">Tick the days each line runs. A row with nothing ticked is that line down for the whole run.</div>
           <div id="sbLines" class="sb-lines"></div>
           <div style="margin-top:18px;font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)">Finish by</div>
-          <div class="sb-note" style="margin:6px 0 10px">Latest end time per day — set one where Pick Pack starts early. Blank assumes 16:30.</div>
+          <div class="sb-note" style="margin:6px 0 10px">Latest end time per day — set one where Pick Pack starts early. <strong>Blank means no curfew:</strong> lines balance for even hours and finish when they finish. Set a time and the engine solves instead for everyone being out by then, which gives a late-starting line less work.</div>
           <div id="sbFinishBy"></div>
         </div>
 
@@ -3325,7 +3327,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.143';
+var APP_VERSION='v0.5.144';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -3986,17 +3988,23 @@ function toggleSbLineDay(lineId,dayShort){
 // real constraint and half the reason a week gets modelled at all, so it sits
 // next to line availability rather than in the live day's control.
 //
-// Blank means 16:30 — the normal end time. That is deliberately NOT the live
-// behaviour, where blank means no cap at all and the engine solves for even
-// run-hours instead. In a sandbox the question is always "can we still finish
-// in time", so there is always a clock to answer it against.
+// BLANK MEANS NO CURFEW (v0.5.144). v0.5.131 defaulted blank to 16:30, which
+// was wrong and had a non-obvious cost: a cap does not just impose a ceiling,
+// it changes what bal() optimises. Uncapped it compares totalMin and equalises
+// DURATION; capped it compares startMin+totalMin and equalises FINISH TIME.
+// With staggered starts those are opposites — LINE-3 opens at 08:20, so
+// equalising finishes gave it ~2h less work than the 06:20 lines. That is what
+// Samad saw as "LINE-3 keeps getting shorted hours", on a sandbox where he had
+// entered no curfew at all.
+//
+// So: blank = no cap = even hours (Cori, 2026-08-21). Enter a time and the
+// engine flips to solving for everyone finishing by it. Nothing is implied on
+// the operator's behalf.
 //
 // Times are 24h "HH:MM", which is what curfewToMin_ already parses and what
 // <input type="time"> already emits. No new format.
-var SB_DEFAULT_FINISH_BY='16:30';
 function sbFinishByFor(c,day){
-  var v=(c&&c.finishBy&&c.finishBy[day])||'';
-  return v||SB_DEFAULT_FINISH_BY;
+  return (c&&c.finishBy&&c.finishBy[day])||'';
 }
 function setSbFinishBy(day,val){
   var c=sbCurrent();if(!c)return;
@@ -4026,7 +4034,7 @@ function renderSandboxFinishBy(){
     var inp=document.createElement('input');
     inp.type='time';inp.className='inline-input';inp.style.width='120px';
     inp.value=(c.finishBy&&c.finishBy[d])||'';
-    inp.title='Blank assumes '+SB_DEFAULT_FINISH_BY;
+    inp.title='Blank = no curfew (even hours). A time solves for everyone out by then.';
     inp.addEventListener('change',function(){setSbFinishBy(d,inp.value);});
     tc.appendChild(inp);tr.appendChild(tc);
     tb.appendChild(tr);
@@ -4647,7 +4655,11 @@ function sbBuildCtx(c,day,withOverlay,volPlan){
           // Passed explicitly on BOTH passes: leaving it undefined let
           // runSequencer fall back to getFinishByForDay(), which reads the LIVE
           // view's selected day and has nothing to do with this sandbox.
-          finishBy:withOverlay?sbFinishByFor(c,day):SB_DEFAULT_FINISH_BY,
+          // Baseline is uncapped — the day as it stands, no deadline imposed.
+          // Overlay uses whatever this day was given, blank included. So a
+          // sandbox with no curfews entered runs BOTH passes on even hours,
+          // and entering one shows exactly what that deadline costs.
+          finishBy:withOverlay?sbFinishByFor(c,day):'',
           // Workbench overrides are decisions about the REAL day. A what-if
           // inherits none of them, or the report would blame the sandbox for a
           // manual move someone made last Tuesday.
