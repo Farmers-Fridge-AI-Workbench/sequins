@@ -1,5 +1,5 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.166 — 2026-08-24    (pairs with Code.js v0.4.98)
+  Sequins ✨ — Index.html    v0.5.167 — 2026-08-24    (pairs with Code.js v0.4.99)
   Full history: git log. This header carries the LATEST change only.
 
   v0.5.161 Pairing bump for the Code.js mirror local-time column. No client
@@ -3510,7 +3510,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.166';
+var APP_VERSION='v0.5.167';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -5713,12 +5713,33 @@ function lpSearchTarget_(){
 }
 // Library clone with the target line allowed on every SKU that carries a
 // restriction. An empty list already means "no restriction" and is left alone.
+// v0.5.167: a SKU pinned to EQUIPMENT stays pinned, even here. Granting every
+// SKU admissibility on the candidate line let 4oz green-belt items roam —
+// GRILLED_CHICKEN turned up on LINE-7 — because its package type is blank so
+// the smallCup capability never gated it. A green-belt or capper restriction is
+// physics, not policy, and shopping for a better shape is no reason to relax it.
+//
+// Test is the SKU's CURRENT list: if every line it is allowed on carries
+// smallCup or capper, it is equipment-bound and the candidate line is not
+// offered. A SKU allowed on any general line is fair game.
+function lpEquipmentBound_(list){
+  if(!list||!list.length)return false;
+  var cfg=STATE.lineConfig||DEFAULT_LINE_CONFIG,byId={};
+  cfg.forEach(function(l){byId[l.id]=lineCaps(l);});
+  for(var i=0;i<list.length;i++){
+    var c=byId[list[i]];
+    if(!c)return false;                    // unknown line: do not assume
+    if(!c.smallCup&&!c.capper)return false; // allowed on a general line already
+  }
+  return true;
+}
 function lpSearchLibrary_(lineId){
   var lib=JSON.parse(JSON.stringify(STATE.skuLibrary||{}));
   Object.keys(lib).forEach(function(k){
     var m=lib[k];if(!m)return;
     ['admissibleLines','admissibleLinesFriSat'].forEach(function(f){
       var list=m[f];if(!list||!list.length)return;
+      if(lpEquipmentBound_(list))return;   // green belt / capper stays put
       if(list.indexOf(lineId)===-1)list.push(lineId);
     });
   });
@@ -5793,9 +5814,13 @@ function runLineSearch(){
     // trivial difference cannot outrank simplicity. Unbucketed, a 5-minute
     // earlier finish was enough to recommend giving up USDA capability
     // permanently — a real operational restriction bought with noise.
+    // Ranked on EVENNESS, not finish time. "Starts earlier, ends earlier" is
+    // circular and tells nobody anything; the operational goal is lines that run
+    // roughly the same hours, because that is what balanced staffing means.
+    // Finish time is still reported, just not what decides.
     return a.unplaced-b.unplaced
         || Math.round(a.ot/50)-Math.round(b.ot/50)
-        || Math.round(a.latest/15)-Math.round(b.latest/15)
+        || Math.round(a.spread/15)-Math.round(b.spread/15)
         || a.capCost-b.capCost
         || a.churn-b.churn;
   });
@@ -5819,7 +5844,7 @@ function runLineSearch(){
     ', '+(dFin>0?sbMin_(-dFin)+' earlier finish':(dFin<0?sbMin_(-dFin)+' later finish':'same finish'))+
     ', '+(dUn>0?dUn+' fewer unplaced':(dUn<0?(-dUn)+' MORE unplaced':'same unplaced'))+'.');
   if(illegal)win.push(illegal+' of '+cands.length+' candidates were discarded for breaking the allergen chain.');
-  lpWhyNotes_(cands,legal,best).forEach(function(n){win.push(n);});
+  lpWhyNotes_(cands,legal,best,days.length).forEach(function(n){win.push(n);});
   win.forEach(function(t,i){
     var p=document.createElement('div');p.className='sb-note';p.style.marginTop=i?'6px':'0';
     p.style.color=i?'var(--muted)':'var(--green)';if(!i)p.style.fontSize='12px';
@@ -5828,13 +5853,13 @@ function runLineSearch(){
 
   var tbl=document.createElement('table');tbl.className='data-table';tbl.style.marginTop='12px';
   var th=document.createElement('thead'),hr=document.createElement('tr');
-  ['','Start','Capabilities','Units/day on it','Run time/day','Latest finish','Overtime (all days)','Unplaced','Moves/day']
+  ['','Start','Capabilities','Units/day on it','Run time/day','Hours spread/day','Latest finish','Overtime (all days)','Unplaced','Moves/day']
     .forEach(function(h,i){var e=document.createElement('th');e.textContent=h;if(i>=3)e.style.textAlign='right';hr.appendChild(e);});
   th.appendChild(hr);tbl.appendChild(th);
   var tb=document.createElement('tbody');
   var baseRow=document.createElement('tr');baseRow.className='total-row';
   [['today',null],['—',null],['as configured now',null],
-   [fmtUnits(0),'right'],['—','right'],[baseTot.latest?fmtClock(baseTot.latest):'—','right'],
+   [fmtUnits(0),'right'],['—','right'],[sbDur_(Math.round(baseTot.spread/Math.max(1,days.length))),'right'],[baseTot.latest?fmtClock(baseTot.latest):'—','right'],
    [sbMoney_(baseTot.ot),'right'],[String(baseTot.unplaced),'right'],['—','right']]
     .forEach(function(c){var e=document.createElement('td');e.textContent=c[0];if(c[1]==='right')e.style.textAlign='right';baseRow.appendChild(e);});
   tb.appendChild(baseRow);
@@ -5850,6 +5875,7 @@ function runLineSearch(){
     // a number anyone would believe, and rightly so.
     td(fmtUnits(Math.round(c.lineUnits/tDays)),'right');
     td(sbDur_(c.lineMin/tDays),'right');
+    td(sbDur_(Math.round(c.spread/Math.max(1,days.length))),'right',c.spread<baseTot.spread?'var(--green)':'');
     td(c.latest?fmtClock(c.latest):'—','right');
     td(sbMoney_(c.ot),'right',c.ot<baseTot.ot?'var(--green)':(c.ot>baseTot.ot?'var(--red)':''));
     td(String(c.unplaced),'right',c.unplaced>baseTot.unplaced?'var(--red)':'');
@@ -5940,44 +5966,67 @@ function lpRenderVariant_(rep,title,cfg,days,lib,targetId){
 // performed identically so the simplest won" is a very different claim from
 // "this one genuinely finished earlier", and only one of them justifies giving
 // up a capability.
-function lpWhyNotes_(cands,legal,best){
+// v0.5.167: report what separated the winner from the RUNNER-UP, not how many
+// candidates are worse overall. The old version counted losers and announced
+// "finish time decided it" while the winner finished five minutes LATER than the
+// runner-up — a stated reason that contradicted the table beside it.
+function lpWhyNotes_(cands,legal,best,nDays){
   var out=[],dq=cands.length-legal.length;
   out.push(cands.length+' configurations tried'+
     (dq?', '+dq+' discarded for breaking the allergen chain'
        :', none broke the allergen chain')+'.');
-  var worseUn=0,worseOt=0,worseFin=0;
+  // the first candidate that is genuinely different from the winner
+  var rival=null;
+  for(var i=1;i<legal.length;i++){
+    var c=legal[i];
+    if(c.unplaced!==best.unplaced||Math.round(c.ot/50)!==Math.round(best.ot/50)||
+       Math.round(c.spread/15)!==Math.round(best.spread/15)||c.capCost!==best.capCost){
+      rival=c;break;
+    }
+  }
+  if(!rival){
+    out.push('Every configuration scored the same on everything that matters. '+
+      'The pick is arbitrary among equals — choose on whatever the floor prefers.');
+  } else if(rival.unplaced!==best.unplaced){
+    out.push('Decided on unplaced: this leaves '+best.unplaced+' with nowhere to go against '+
+      rival.unplaced+' for the next best.');
+  } else if(Math.round(rival.ot/50)!==Math.round(best.ot/50)){
+    out.push('Unplaced tied, so overtime decided it: '+sbMoney_(best.ot)+' against '+
+      sbMoney_(rival.ot)+' for the next best.');
+  } else if(Math.round(rival.spread/15)!==Math.round(best.spread/15)){
+    out.push('Unplaced and overtime tied, so evenness decided it: lines run within '+
+      sbDur_(Math.round(best.spread/Math.max(1,nDays)))+' of each other on an average day, '+
+      'which is tighter than the next best.');
+  } else {
+    out.push('Unplaced, overtime and evenness all tied with the next best ('+
+      rival.capName+' at '+fmtClock(curfewToMin_(rival.start))+'). Nothing separated them '+
+      'on outcome, so the SIMPLEST line won — fewer capabilities given up.');
+  }
+  // start time: say plainly which starts are equivalent
+  var same=[],diff=0;
   legal.forEach(function(c){
-    if(c.unplaced>best.unplaced)worseUn++;
-    else if(Math.round(c.ot/50)>Math.round(best.ot/50))worseOt++;
-    else if(Math.round(c.latest/15)>Math.round(best.latest/15))worseFin++;
+    if(c.capName!==best.capName)return;
+    if(Math.round(c.spread/15)===Math.round(best.spread/15)&&
+       Math.round(c.ot/50)===Math.round(best.ot/50)&&c.unplaced===best.unplaced)same.push(c.start);
+    else diff++;
   });
-  if(worseUn)out.push('Decided on unplaced: '+worseUn+' other configuration'+
-    (worseUn===1?'':'s')+' left more SKUs with nowhere to go.');
-  else if(worseOt)out.push('Unplaced tied, so overtime decided it: '+worseOt+
-    ' other configuration'+(worseOt===1?'':'s')+' cost more.');
-  else if(worseFin)out.push('Unplaced and overtime tied, so finish time decided it: '+
-    worseFin+' other configuration'+(worseFin===1?'':'s')+' finished materially later.');
-  else out.push('Every legal configuration performed identically on unplaced, '+
-    'overtime and finish time. Nothing separated them on outcome, so the SIMPLEST '+
-    'line won rather than an arbitrary pick.');
-  var sameCaps=legal.filter(function(c){return c.capName===best.capName;});
-  var startMatters=false;
-  sameCaps.forEach(function(c){
-    if(Math.round(c.latest/15)!==Math.round(best.latest/15))startMatters=true;
-  });
-  out.push(startMatters
-    ?'Start time mattered: '+fmtClock(curfewToMin_(best.start))+' finished ahead of the other options.'
-    :'Start time made no material difference — every option landed within 15 minutes of the others, so '+
-      fmtClock(curfewToMin_(best.start))+' was taken because it matches a shift you already run.');
+  out.push(same.length>1
+    ?'Start time is a free choice among '+same.sort().join(', ')+' — they score identically'+
+      (diff?'; only the later starts do worse':'')+'. '+fmtClock(curfewToMin_(best.start))+
+      ' is suggested because it matches a shift you already run.'
+    :'Start time mattered: '+fmtClock(curfewToMin_(best.start))+' scored ahead of every alternative.');
   out.push(best.capCost===0
     ?'No extra equipment recommended: a capper or small-cup belt changed nothing here, and USDA approval is kept because dropping it bought nothing.'
     :'Capabilities — '+best.capName+' — genuinely outperformed the plain configuration. This is not a tie-break.');
+  out.push('Ranked on unplaced, then overtime, then how evenly hours land across '+
+    'lines. Finish time is reported but does not decide — a line that starts '+
+    'earlier finishing earlier says nothing on its own.');
   return out;
 }
 // One scored pass over the selected days. ctxFn lets the caller supply either
 // the baseline context or a candidate configuration.
 function lpScoreRun_(days,ctxFn,targetId){
-  var out={unplaced:0,ot:0,chain:0,latest:0,churn:0,lineUnits:0,lineMin:0,lineSkus:[],seen:{}};
+  var out={unplaced:0,ot:0,chain:0,latest:0,churn:0,lineUnits:0,lineMin:0,lineSkus:[],seen:{},spread:0};
   var rules=getRules();
   days.forEach(function(day){
     var res=runSequencer(ctxFn(day));
@@ -5987,6 +6036,7 @@ function lpScoreRun_(days,ctxFn,targetId){
     out.ot+=sbOvertime_(sum,rules).cost;
     out.chain+=sbChainCheck(res).length;
     if(sum.latestEnd>out.latest)out.latest=sum.latestEnd;
+    out.spread+=lpSpread_(sum);   // how unevenly hours land that day
     var mine=sum.byLine[targetId];
     if(mine){
       out.lineUnits+=mine.units;out.lineMin+=mine.min;
