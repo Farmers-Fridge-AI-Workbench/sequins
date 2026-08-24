@@ -1,10 +1,16 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.159 — 2026-08-21    (pairs with Code.js v0.4.91)
+  Sequins ✨ — Index.html    v0.5.160 — 2026-08-24    (pairs with Code.js v0.4.92)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.159 Pairing bump for the Code.js mirror fix — StartTime was landing in
-           the Line Config mirror as a time serial (0.2708333) instead of
-           '06:30'. No client change.
+  v0.5.160 Warns when demanded SKUs are never sequenced. runSequencer filters
+           demand down to jobs before planning — dropping anything not in the
+           SKU Library, staged, or inactive — and said nothing, so a day could
+           be planned short in silence. That is how FUJI_APPLE_PECAN_SALAD sat
+           in Wk 42 demand from Wk 40 while every plan was built without it.
+           Red card on Line Sequence, and a line per SKU in the Sandbox's
+           'Read this first'. Distinct from Unplaced: unplaced means the engine
+           tried and could not fit it; this is demand it never saw. Non-assembly
+           is excluded deliberately and never reported.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -409,6 +415,11 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         <div class="card" style="padding-bottom:0">
           <div class="card-title metrics-toggle-row" onclick="toggleMetrics()" style="margin-bottom:0;padding-bottom:12px">Per-Line Summary <span class="metrics-arrow" id="seqMetricsArrow">▾</span></div>
           <div class="metrics-body" id="seqMetricsBody"><div style="overflow-x:auto;padding-bottom:4px" id="lineMetricsTable"></div></div>
+        </div>
+        <div class="card" id="droppedCard" style="display:none;border:2px solid var(--red);background:var(--red-dim)">
+          <div class="card-title" style="font-size:13px;color:var(--red)">DEMANDED BUT NOT SEQUENCED — these units are missing from the plan</div>
+          <div id="droppedList" style="font-family:var(--mono);font-size:11px;margin-top:8px"></div>
+          <div id="droppedUnits" style="font-family:var(--mono);font-size:13px;color:var(--red);margin-top:10px;font-weight:600"></div>
         </div>
         <div class="card" id="noAttrsCard" style="display:none;border-color:rgba(239,68,68,.3)">
           <div class="card-title"><span style="color:var(--red)">⚠ SKUs sequenced without real attributes</span></div>
@@ -1228,6 +1239,46 @@ function escHtml(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/<
 // manual override seats it somewhere (see applyWorkbenchOverrides). The
 // raw list from runSequencer() doesn't know about overrides, so anything
 // displayed or saved needs to be run through this first.
+// ─── DEMANDED BUT NOT SEQUENCED (v0.5.160) ──────────────────────────────────
+// runSequencer filters the demand down to jobs before it plans anything:
+//
+//   !!meta && meta.active !== false && !isNonAssemblyPkg_(...) && !meta.pending
+//
+// Anything that fails is dropped SILENTLY. The day then gets planned short and
+// nothing says so — which is how FUJI_APPLE_PECAN_SALAD sat in Wk 42 demand
+// from Wk 40 onward while every plan for those weeks was built without it.
+//
+// "Unplaced" is a different thing and already surfaced: unplaced means the
+// engine tried and could not fit it. This is demand the engine never saw.
+//
+// Non-assembly is excluded on purpose (beverage/CPG never touch a line) and is
+// not reported — it would be noise on every single day.
+function droppedDemand_(dayData,lib){
+  var out=[];
+  var skus=(dayData&&dayData.skus)||{};
+  Object.keys(skus).forEach(function(name){
+    var qty=skus[name];if(!(qty>0))return;
+    var meta=lib[String(name).toUpperCase()];
+    if(!meta){out.push({sku:name,qty:qty,why:'not in the SKU Library'});return;}
+    if(isNonAssemblyPkg_(meta.packageType))return;   // deliberate, never a warning
+    if(meta.pending){out.push({sku:name,qty:qty,why:'staged — promote it in SKU Library'});return;}
+    if(meta.active===false){out.push({sku:name,qty:qty,why:'marked inactive'});return;}
+  });
+  return out.sort(function(a,b){return b.qty-a.qty;});
+}
+function renderDroppedCard(dayData){
+  var card=document.getElementById('droppedCard');if(!card)return;
+  var list=droppedDemand_(dayData,STATE.skuLibrary||{});
+  if(!list.length){card.style.display='none';return;}
+  card.style.display='';
+  document.getElementById('droppedList').innerHTML=list.map(function(d){
+    return '<div style="margin:3px 0"><span style="color:var(--red);font-weight:600">'+escHtml(d.sku)+
+      '</span> <span style="color:var(--muted)">'+fmtUnits(Math.round(d.qty))+' units — '+escHtml(d.why)+'</span></div>';
+  }).join('');
+  var tot=list.reduce(function(s,d){return s+d.qty;},0);
+  document.getElementById('droppedUnits').textContent=
+    fmtUnits(Math.round(tot))+' units of demand are not in this plan at all.';
+}
 function trueUnplaced(unplaced){
   var ov=(STATE.overrides[CURRENT_WEEK]&&STATE.overrides[CURRENT_WEEK][CURRENT_DAY])||{};
   return (unplaced||[]).filter(function(j){return!ov[j.sku];});
@@ -2847,6 +2898,7 @@ function renderSequence(){
   var days=getDays(CURRENT_WEEK);if(!CURRENT_DAY||days.indexOf(CURRENT_DAY)===-1)CURRENT_DAY=days[0];
   if(!planCached_(CURRENT_WEEK,CURRENT_DAY))ensurePlanLoaded(CURRENT_WEEK,CURRENT_DAY,_afterPlanLoad); // fetch from archive, re-render when it lands
   var dayData=STATE.demand[CURRENT_WEEK]&&STATE.demand[CURRENT_WEEK][CURRENT_DAY],mb=document.getElementById('seqModeBadge');
+  renderDroppedCard(dayData);
   if(dayData){mb.style.display='';mb.textContent=dayData.mode;mb.className='mode-badge mode-'+dayData.mode;}else{mb.style.display='none';}
   document.getElementById('seqSubtitle').textContent=(CURRENT_WEEK&&CURRENT_DAY)?CURRENT_WEEK+' · '+CURRENT_DAY:'';
   var pub=STATE.publishedPlans&&STATE.publishedPlans[CURRENT_WEEK]&&STATE.publishedPlans[CURRENT_WEEK][CURRENT_DAY];
@@ -3447,7 +3499,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.159';
+var APP_VERSION='v0.5.160';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4981,10 +5033,26 @@ function runSandbox(){
     vb.appendChild(sbNote_(volPlan.warn||volPlan.note,volPlan.warn?'var(--amber)':'var(--text)'));
     sbCard_(rep,volPlan.mode==='target'?'Volume \u00b7 week scaled to target':(volPlan.mode==='boost'?'Volume \u00b7 selected SKUs boosted':'Volume'),vb);
   }
-  if(unanswered.length||missingUnits.length){
+  // v0.5.160: demand the engine never even saw. Collected across the selected
+  // days from the sandbox's OWN library clone, so a stub added in this sandbox
+  // counts as known and does not warn.
+  var dropped={};
+  days.forEach(function(d){
+    var bd=sbDay(d);if(!bd)return;
+    droppedDemand_(bd,sbBuildCtx(c,d,true,volPlan).skuLibrary).forEach(function(x){
+      if(!dropped[x.sku])dropped[x.sku]={sku:x.sku,why:x.why,qty:0,days:0};
+      dropped[x.sku].qty+=x.qty;dropped[x.sku].days++;
+    });
+  });
+  var droppedList=Object.keys(dropped).map(function(k){return dropped[k];})
+    .sort(function(a,b){return b.qty-a.qty;});
+  if(unanswered.length||missingUnits.length||droppedList.length){
     var g=document.createElement('div');
     if(unanswered.length)g.appendChild(sbNote_(unanswered.join(', ')+' — allergens not answered. Treated as NO ALLERGEN DATA, which the engine handles as worst case, so every chain result below is pessimistic.','var(--amber)'));
     if(missingUnits.length)g.appendChild(sbNote_(missingUnits.map(function(w){return w['in'];}).join(', ')+' — pure additions with no Units/day, so nothing was added for them. Give them a number.','var(--amber)'));
+    droppedList.forEach(function(x){
+      g.appendChild(sbNote_(x.sku+' — '+fmtUnits(Math.round(x.qty))+' units across '+x.days+' day'+(x.days===1?'':'s')+' are NOT in this model: '+x.why+'.','var(--red)'));
+    });
     sbCard_(rep,'\u26A0 Read this first',g);
   }
 

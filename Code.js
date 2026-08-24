@@ -1,12 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.91 — 2026-08-21    (pairs with Index.html v0.5.159)
+ * Sequins ✨ — Code.js    v0.4.92 — 2026-08-24    (pairs with Index.html v0.5.160)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.91  FIX: the config mirror wrote StartTime as a time serial. Sheets
- *          coerces '06:30' on setValues, and formatting the column afterwards
- *          cannot recover the string, so Line Config mirrored as
- *          0.2708333333333333 and was unreadable. Text format is now applied
- *          to StartTime and UpdatedAt BEFORE the write.
+ * v0.4.92  No server change — pairing bump. The dropped-demand warning is
+ *          entirely client-side.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
