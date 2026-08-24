@@ -1,10 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.94 — 2026-08-24    (pairs with Index.html v0.5.162)
+ * Sequins ✨ — Code.js    v0.4.95 — 2026-08-24    (pairs with Index.html v0.5.163)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.94  No server change — pairing bump. The Line Planner config search is
- *          entirely client-side: it calls runSequencer(ctx) per candidate,
- *          reads STATE, and writes nothing.
+ * v0.4.95  No server change — pairing bump. The config-search corrections are
+ *          entirely client-side.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────

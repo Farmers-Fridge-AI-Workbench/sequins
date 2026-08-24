@@ -1,5 +1,5 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.162 — 2026-08-24    (pairs with Code.js v0.4.94)
+  Sequins ✨ — Index.html    v0.5.163 — 2026-08-24    (pairs with Code.js v0.4.95)
   Full history: git log. This header carries the LATEST change only.
 
   v0.5.161 Pairing bump for the Code.js mirror local-time column. No client
@@ -657,7 +657,13 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 
       <div class="card" style="margin-top:20px">
         <div class="card-title">2 · What should the new line be?</div>
-        <div class="sb-note">Tries every combination of start time and capabilities for <strong id="lpSearchLine">the staged line</strong>, solving the selected days through the real engine each time, and ranks them. Every SKU is made admissible on it for the search — capabilities still gate what can actually land — so whatever the engine puts there is the proposed SKU list.</div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px">
+          <span class="sb-note">Line to add:</span>
+          <select class="form-select" id="lpTargetSel" style="width:200px" onchange="renderLpTargetDays()"></select>
+          <span class="sb-note">runs on:</span>
+          <div id="lpTargetDays" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+        </div>
+        <div class="sb-note">Tries every combination of start time and capabilities for that line, solving the days you ticked above through the real engine each time, and ranks them. Every SKU is made admissible on it for the search — capabilities still gate what can actually land — so whatever the engine puts there is the proposed SKU list. Nothing is changed and nothing goes live; this is a simulation.</div>
         <div class="sb-note" style="margin-top:6px">Any candidate that produces an allergen chain break is disqualified outright, not ranked lower. Ranked by unplaced, then overtime, then latest finish, then churn — a config that moves five SKUs for most of the gain beats one that moves thirty.</div>
         <div class="sb-note" style="margin-top:6px">It cannot recommend headcount: runtime is qty ÷ upm and upm is a per-SKU constant, so every candidate would say the same thing.</div>
       </div>
@@ -3504,7 +3510,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.162';
+var APP_VERSION='v0.5.163';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -5427,8 +5433,7 @@ function renderLinePlanner(){
   sel.innerHTML=weeks.map(function(w){
     return '<option value="'+w+'"'+(w===LP_WEEK?' selected':'')+'>'+w+'</option>';
   }).join('');
-  var tl=lpSearchTarget_(),tlEl=document.getElementById('lpSearchLine');
-  if(tlEl&&tl)tlEl.textContent=tl.label||tl.id;
+  renderLpTarget();
   renderLinePlannerDays();
 }
 function renderLinePlannerDays(){
@@ -5443,7 +5448,7 @@ function renderLinePlannerDays(){
     var cb=document.createElement('input');cb.type='checkbox';cb.checked=!!LP_DAYS[d];
     chip.appendChild(cb);chip.appendChild(document.createTextNode(DAY_SHORT[d]));
     chip.addEventListener('click',function(e){
-      e.preventDefault();LP_DAYS[d]=!LP_DAYS[d];renderLinePlannerDays();
+      e.preventDefault();LP_DAYS[d]=!LP_DAYS[d];renderLinePlannerDays();renderLpTargetDays();
     });
     el.appendChild(chip);
   });
@@ -5639,7 +5644,62 @@ function runLinePlanner(){
 // for a staged line. Capabilities still gate what can legitimately land, so the
 // set that ends up on the line IS the proposed SKU list — derived rather than
 // guessed.
-var LP_SEARCH_STARTS=['06:00','06:20','07:00','08:00'];
+// v0.5.163: candidate start times are DERIVED from the shifts already in use,
+// not invented. The first version offered 06:00 and 07:00, which this plant does
+// not run — everything starts on a :20 or :30 boundary. Proposing a start nobody
+// staffs is worse than proposing nothing, and the real config is right there.
+function lpSearchStarts_(){
+  var seen={},out=[];
+  (STATE.lineConfig||DEFAULT_LINE_CONFIG).forEach(function(l){
+    if(isSandboxOnlyLine_(l))return;        // the staged line's own guess is not evidence
+    if(lineCaps(l).night)return;            // a night start is not a day-line option
+    var t=l.startTime||'';
+    if(!t||seen[t])return;
+    seen[t]=true;out.push(t);
+  });
+  out.sort();
+  return out.length?out:['06:20'];
+}
+// Lines you could stand up: flagged sandbox-only, or configured with no days
+// ticked — which is how a line is parked ahead of go-live.
+var LP_TARGET=null,LP_TARGET_DAYS={};
+function lpTargetCandidates_(){
+  var out=[];
+  sbAllLines_().forEach(function(l){
+    var any=false;
+    ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach(function(d){if(l.days&&l.days[d])any=true;});
+    if(isSandboxOnlyLine_(l)||!any)out.push(l);
+  });
+  return out;
+}
+function renderLpTarget(){
+  var sel=document.getElementById('lpTargetSel');if(!sel)return;
+  var cands=lpTargetCandidates_();
+  if(!cands.length){sel.innerHTML='<option value="">— no staged line —</option>';return;}
+  if(!LP_TARGET||!cands.some(function(l){return l.id===LP_TARGET;}))LP_TARGET=cands[0].id;
+  sel.innerHTML=cands.map(function(l){
+    return '<option value="'+l.id+'"'+(l.id===LP_TARGET?' selected':'')+'>'+escHtml(l.label||l.id)+'</option>';
+  }).join('');
+  renderLpTargetDays();
+}
+function renderLpTargetDays(){
+  var sel=document.getElementById('lpTargetSel');if(sel&&sel.value)LP_TARGET=sel.value;
+  var el=document.getElementById('lpTargetDays');if(!el)return;
+  el.innerHTML='';
+  var days=lpSelectedDays();
+  if(!days.length){el.appendChild(sbNote_('pick days above'));return;}
+  days.forEach(function(d){
+    var sd=DAY_SHORT[d];
+    if(!(sd in LP_TARGET_DAYS))LP_TARGET_DAYS[sd]=true;
+    var lab=document.createElement('label');
+    lab.style.cssText='display:flex;align-items:center;gap:3px;font-family:var(--mono);font-size:10px;color:var(--muted);cursor:pointer';
+    var cb=document.createElement('input');cb.type='checkbox';cb.checked=!!LP_TARGET_DAYS[sd];
+    cb.style.accentColor='var(--amber)';
+    cb.addEventListener('change',function(){LP_TARGET_DAYS[sd]=this.checked;});
+    lab.appendChild(cb);lab.appendChild(document.createTextNode(sd));
+    el.appendChild(lab);
+  });
+}
 var LP_SEARCH_CAPS=[
   {name:'general',      cost:0, caps:{capper:false,smallCup:false,usdaApproved:true, night:false}},
   {name:'+ capper',     cost:1, caps:{capper:true, smallCup:false,usdaApproved:true, night:false}},
@@ -5647,7 +5707,9 @@ var LP_SEARCH_CAPS=[
   {name:'no USDA',      cost:1, caps:{capper:false,smallCup:false,usdaApproved:false,night:false}}
 ];
 function lpSearchTarget_(){
-  return SANDBOX_ONLY_LINES.length?SANDBOX_ONLY_LINES[0]:null;
+  var c=lpTargetCandidates_(),hit=null;
+  c.forEach(function(l){if(l.id===LP_TARGET)hit=l;});
+  return hit||c[0]||null;
 }
 // Library clone with the target line allowed on every SKU that carries a
 // restriction. An empty list already means "no restriction" and is left alone.
@@ -5694,15 +5756,18 @@ function runLineSearch(){
   var days=lpSelectedDays();
   if(!days.length){if(note)note.textContent='Pick at least one day that has demand.';return;}
   var rules=getRules(),lib=lpSearchLibrary_(target.id);
+  var targetDays=days.filter(function(d){return LP_TARGET_DAYS[DAY_SHORT[d]]!==false;});
+  if(!targetDays.length){if(note)note.textContent='Tick at least one day for '+(target.label||target.id)+'.';return;}
+  var STARTS=lpSearchStarts_();
 
   // Baseline: today's shape, target line absent. Everything is measured against
   // this, so "better" always means better than what you run now.
   var baseTot=lpScoreRun_(days,function(day){return lpCtx_(day,false);},target.id);
 
   var cands=[];
-  LP_SEARCH_STARTS.forEach(function(start){
+  STARTS.forEach(function(start){
     LP_SEARCH_CAPS.forEach(function(cap){
-      var cfg=lpSearchConfig_(target,start,cap.caps,days);
+      var cfg=lpSearchConfig_(target,start,cap.caps,targetDays);
       var s=lpScoreRun_(days,function(day){
         return {week:LP_WEEK,day:day,demand:STATE.demand,skuLibrary:lib,rules:rules,
                 lineConfig:cfg,overrides:{},excludedLines:[],finishBy:'',
@@ -5738,9 +5803,10 @@ function runLineSearch(){
   var win=[];
   win.push(target.label+' should start at '+fmtClock(curfewToMin_(best.start))+
     ' with capabilities: '+best.capName+'.');
-  win.push('Across '+days.length+' day'+(days.length===1?'':'s')+' it would carry '+
-    fmtUnits(Math.round(best.lineUnits))+' units in '+sbDur_(best.lineMin)+
-    ', and move '+best.churn+' SKU placement'+(best.churn===1?'':'s')+'.');
+  win.push('Running '+targetDays.length+' day'+(targetDays.length===1?'':'s')+', it averages '+
+    fmtUnits(Math.round(best.lineUnits/targetDays.length))+' units and '+
+    sbDur_(best.lineMin/targetDays.length)+' per day — '+
+    fmtUnits(Math.round(best.lineUnits))+' units and '+sbDur_(best.lineMin)+' in total.');
   var dOt=baseTot.ot-best.ot, dFin=baseTot.latest-best.latest, dUn=baseTot.unplaced-best.unplaced;
   win.push('Against today: '+(dOt>0?sbMoney_(dOt)+' less overtime':(dOt<0?sbMoney_(-dOt)+' MORE overtime':'no overtime change'))+
     ', '+(dFin>0?sbMin_(-dFin)+' earlier finish':(dFin<0?sbMin_(-dFin)+' later finish':'same finish'))+
@@ -5754,7 +5820,7 @@ function runLineSearch(){
 
   var tbl=document.createElement('table');tbl.className='data-table';tbl.style.marginTop='12px';
   var th=document.createElement('thead'),hr=document.createElement('tr');
-  ['','Start','Capabilities','Units on it','Run time','Latest finish','Overtime','Unplaced','SKUs moved']
+  ['','Start','Capabilities','Units/day on it','Run time/day','Latest finish','Overtime (all days)','Unplaced','Moves/day']
     .forEach(function(h,i){var e=document.createElement('th');e.textContent=h;if(i>=3)e.style.textAlign='right';hr.appendChild(e);});
   th.appendChild(hr);tbl.appendChild(th);
   var tb=document.createElement('tbody');
@@ -5764,18 +5830,22 @@ function runLineSearch(){
    [sbMoney_(baseTot.ot),'right'],[String(baseTot.unplaced),'right'],['—','right']]
     .forEach(function(c){var e=document.createElement('td');e.textContent=c[0];if(c[1]==='right')e.style.textAlign='right';baseRow.appendChild(e);});
   tb.appendChild(baseRow);
+  var tDays=targetDays.length||1;
   legal.slice(0,8).forEach(function(c,i){
     var tr=document.createElement('tr');
     function td(t,al,col){var e=document.createElement('td');e.textContent=t;if(al)e.style.textAlign=al;if(col)e.style.color=col;tr.appendChild(e);}
     td(i===0?'★':String(i+1),null,i===0?'var(--green)':'var(--muted)');
     td(fmtClock(curfewToMin_(c.start)));
     td(c.capName);
-    td(fmtUnits(Math.round(c.lineUnits)),'right');
-    td(sbDur_(c.lineMin),'right');
+    // Per DAY. These were period totals under a bare "Units on it" header,
+    // which read as a daily figure — 41,200 units on one line in one day is not
+    // a number anyone would believe, and rightly so.
+    td(fmtUnits(Math.round(c.lineUnits/tDays)),'right');
+    td(sbDur_(c.lineMin/tDays),'right');
     td(c.latest?fmtClock(c.latest):'—','right');
     td(sbMoney_(c.ot),'right',c.ot<baseTot.ot?'var(--green)':(c.ot>baseTot.ot?'var(--red)':''));
     td(String(c.unplaced),'right',c.unplaced>baseTot.unplaced?'var(--red)':'');
-    td(String(c.churn),'right',c.churn>20?'var(--amber)':'');
+    td((c.churn/tDays).toFixed(1),'right',(c.churn/tDays)>6?'var(--amber)':'');
     tb.appendChild(tr);
   });
   tbl.appendChild(tb);body.appendChild(tbl);
