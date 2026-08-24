@@ -1,5 +1,5 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.163 — 2026-08-24    (pairs with Code.js v0.4.95)
+  Sequins ✨ — Index.html    v0.5.164 — 2026-08-24    (pairs with Code.js v0.4.96)
   Full history: git log. This header carries the LATEST change only.
 
   v0.5.161 Pairing bump for the Code.js mirror local-time column. No client
@@ -3510,7 +3510,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.163';
+var APP_VERSION='v0.5.164';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -5778,7 +5778,7 @@ function runLineSearch(){
                 // is filtered out of every run and every candidate scores zero.
                 includeSandboxOnly:true};
       },target.id);
-      s.start=start;s.capName=cap.name;s.capCost=cap.cost;
+      s.start=start;s.capName=cap.name;s.capCost=cap.cost;s.caps=cap.caps;
       cands.push(s);
     });
   });
@@ -5863,6 +5863,74 @@ function runLineSearch(){
     sb.appendChild(p);
     sbCard_(rep,'SKUs to allow on '+target.label,sb,true);
   }
+
+  // v0.5.164: the winning configuration as an actual SEQUENCE, week-long, not a
+  // row of metrics. "It works" is not something a line lead can run from.
+  //
+  // Two variants, because the real question when adding a line is whether it
+  // lets you stand the night shift down. Identical day-line configuration in
+  // both; the only difference is whether the night lines run at all.
+  var winCfg=lpSearchConfig_(target,best.start,best.caps,days);
+  lpRenderVariant_(rep,'Proposed week · night shift AS CONFIGURED',lpNightVariant_(winCfg,true),days,lib,target.id);
+  lpRenderVariant_(rep,'Proposed week · night shift STOOD DOWN',lpNightVariant_(winCfg,false),days,lib,target.id);
+}
+// Night lines cleared to no days, so the same day-line plan can be read with and
+// without them. Nothing else about the configuration changes.
+function lpNightVariant_(cfg,nightOn){
+  return cfg.map(function(l){
+    if(nightOn||!lineCaps(l).night)return l;
+    var c={},k;for(k in l){if(Object.prototype.hasOwnProperty.call(l,k))c[k]=l[k];}
+    var d={};['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach(function(x){d[x]=false;});
+    c.days=d;return c;
+  });
+}
+// The full week under one configuration: headline numbers, then every line's run
+// order per day, with the new line picked out in amber.
+function lpRenderVariant_(rep,title,cfg,days,lib,targetId){
+  var rules=getRules(),body=document.createElement('div');
+  var tot={units:0,unplaced:0,ot:0,latest:0,chain:0},perDay=[];
+  days.forEach(function(day){
+    var res=runSequencer({week:LP_WEEK,day:day,demand:STATE.demand,skuLibrary:lib,
+      rules:rules,lineConfig:cfg,overrides:{},excludedLines:[],finishBy:'',
+      includeSandboxOnly:true});
+    if(!res)return;
+    var sum=sbSummarise(res);
+    tot.units+=sum.units;tot.unplaced+=sum.unplaced.length;
+    tot.ot+=sbOvertime_(sum,rules).cost;tot.chain+=sbChainCheck(res).length;
+    if(sum.latestEnd>tot.latest)tot.latest=sum.latestEnd;
+    perDay.push({day:day,sum:sum});
+  });
+  var head=document.createElement('div');head.className='sb-note';head.style.fontSize='12px';
+  head.style.color=(tot.unplaced||tot.chain)?'var(--red)':'var(--green)';
+  head.appendChild(document.createTextNode(
+    fmtUnits(Math.round(tot.units))+' units · latest finish '+(tot.latest?fmtClock(tot.latest):'—')+
+    ' · '+sbMoney_(tot.ot)+' overtime · '+tot.unplaced+' unplaced · '+tot.chain+
+    ' chain break'+(tot.chain===1?'':'s')));
+  body.appendChild(head);
+  perDay.forEach(function(d){
+    var h=document.createElement('div');h.className='sb-note';
+    h.style.color='var(--text)';h.style.marginTop='10px';
+    h.appendChild(document.createTextNode(d.day+' · '+fmtUnits(Math.round(d.sum.units))+
+      ' units · out at '+(d.sum.latestEnd?fmtClock(d.sum.latestEnd):'—')));
+    body.appendChild(h);
+    Object.keys(d.sum.byLine).sort().forEach(function(id){
+      var x=d.sum.byLine[id];if(!x||!x.seq.length)return;
+      var mine=(id===targetId),col=mine?'var(--amber)':'var(--muted)';
+      var row=document.createElement('div');row.style.margin='2px 0';
+      var lab=document.createElement('span');
+      lab.style.cssText='font-family:var(--mono);font-size:10px;display:inline-block;min-width:54px;color:'+(mine?'var(--amber)':'var(--teal)');
+      lab.appendChild(document.createTextNode(sbShortLine_(id)+' ('+x.seq.length+')'));
+      row.appendChild(lab);
+      var t=document.createElement('span');
+      t.style.cssText='font-family:var(--mono);font-size:10px;color:'+col;
+      t.appendChild(document.createTextNode(x.seq.join(' › ')));
+      row.appendChild(t);body.appendChild(row);
+    });
+    (d.sum.unplaced||[]).forEach(function(u){
+      body.appendChild(sbNote_('   unplaced: '+u.sku+' — '+(u.reason||u.unplacedReason||''),'var(--red)'));
+    });
+  });
+  sbCard_(rep,title,body);
 }
 // One scored pass over the selected days. ctxFn lets the caller supply either
 // the baseline context or a candidate configuration.
