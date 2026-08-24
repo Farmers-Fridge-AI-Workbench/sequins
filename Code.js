@@ -1,12 +1,10 @@
 /**
- * Sequins ✨ — Code.js    v0.4.93 — 2026-08-24    (pairs with Index.html v0.5.161)
+ * Sequins ✨ — Code.js    v0.4.94 — 2026-08-24    (pairs with Index.html v0.5.162)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.93  Config mirrors gain an UpdatedLocal column beside the ISO one. UTC
- *          is right for machines and misleading in a sheet a human reads —
- *          15:44Z reads as afternoon when it is 10:44 in Chicago, which sent a
- *          debugging session down the wrong path. Uses the script timezone, so
- *          it follows appsscript.json rather than hardcoding.
+ * v0.4.94  No server change — pairing bump. The Line Planner config search is
+ *          entirely client-side: it calls runSequencer(ctx) per candidate,
+ *          reads STATE, and writes nothing.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────

@@ -4,68 +4,15 @@ Open items only. Delete an entry when it's done — git history is the record,
 this file is the "what's still hanging" list. Each entry should stand alone:
 enough context to act on without the conversation that created it.
 
-Opened 2026-08-19. Last refreshed 2026-08-21.
+Opened 2026-08-19. Last refreshed 2026-08-24.
 
 ---
 
 ## Ready to build
 
-### Config search — what should a new line BE?
-
-The original ask, and everything built on 2026-08-21 was groundwork for it. When
-standing up a line (LINE-7 for holiday volume), have Sequins propose its pool,
-capabilities, start time and seed rather than someone guessing.
-
-Method, settled: don't write a recommender, **brute-force the real engine**.
-Enumerate candidate configs (≈4 pools × 3 start times × a few capability sets),
-run each through `runSequencer` on a real week, score on unplaced count, latest
-finish, overtime, chain breaks and hours spread, and show the top few with their
-actual numbers. No new assumptions — the same engine that makes the plans, asked
-thirty times instead of once.
-
-Two things it must do that aren't obvious:
-
-- **Score churn.** A config that moves 5 SKUs for 90% of the gain beats one that
-  moves 30. "SKUs moved" has to be a cost in the ranking, not just an output.
-- **Also propose which SKUs to make admissible** on the new line. Without that
-  every config scores identically badly.
-
-It cannot recommend headcount — throughput is not a function of HC in the model,
-so every config would say the same thing. Needs the floor tracker first.
-
-Groundwork already done: the Line Planner tab (v0.5.148/.149) proved the
-*existing* shape is not the lever — unbinding SKU line assignments across Wk 34
-and Wk 35 produced identical finish times, identical overtime, a worse hours
-spread and new chain breaks. The Lines column is earning its keep, so the
-interesting question really is the new line.
-
-### Warn when demanded SKUs aren't sequenced
-
-The engine silently drops any demanded SKU that is `pending`, absent from the
-SKU Library, or non-assembly. A week then gets planned short with nothing said.
-That is how FUJI_APPLE_PECAN_SALAD went missing from Wk 42 planning.
-
-2026-08-21 proved this class of silent failure is the expensive one — the same
-shape as the config mirror failing quietly and the poll discarding edits without
-a word. One line in Sandbox and Workbench: "3 demanded SKUs not sequenced:
-FUJI_APPLE_PECAN_SALAD (pending), …".
-
 ---
 
 ## Small, mine to do
-
-### Local-time column in the config mirrors
-
-The mirrors stamp UTC ISO, which is right for machines and confusing in a sheet —
-`15:44Z` read as afternoon when it was 10:44 Chicago. Add a local-time column
-beside it.
-
-### Sheet sharing audit — the 9 spreadsheets in `Code.js`
-
-The public repo exposed the file IDs of all nine source/destination sheets. IDs
-are addresses, not keys; what gates the data is each sheet's own sharing setting.
-Check all nine for "anyone with the link". Read-only, about a minute. Worth doing
-whichever way the repo visibility decision lands.
 
 ---
 

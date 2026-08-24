@@ -1,5 +1,5 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.161 — 2026-08-24    (pairs with Code.js v0.4.93)
+  Sequins ✨ — Index.html    v0.5.162 — 2026-08-24    (pairs with Code.js v0.4.94)
   Full history: git log. This header carries the LATEST change only.
 
   v0.5.161 Pairing bump for the Code.js mirror local-time column. No client
@@ -654,6 +654,18 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         <span class="sb-note" id="lpRunNote"></span>
       </div>
       <div id="lpReport" style="margin-top:14px"></div>
+
+      <div class="card" style="margin-top:20px">
+        <div class="card-title">2 · What should the new line be?</div>
+        <div class="sb-note">Tries every combination of start time and capabilities for <strong id="lpSearchLine">the staged line</strong>, solving the selected days through the real engine each time, and ranks them. Every SKU is made admissible on it for the search — capabilities still gate what can actually land — so whatever the engine puts there is the proposed SKU list.</div>
+        <div class="sb-note" style="margin-top:6px">Any candidate that produces an allergen chain break is disqualified outright, not ranked lower. Ranked by unplaced, then overtime, then latest finish, then churn — a config that moves five SKUs for most of the gain beats one that moves thirty.</div>
+        <div class="sb-note" style="margin-top:6px">It cannot recommend headcount: runtime is qty ÷ upm and upm is a per-SKU constant, so every candidate would say the same thing.</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="btn btn-sm" style="background:var(--amber);color:#0b0d10" onclick="runLineSearch()">▶ Search configurations</button>
+        <span class="sb-note" id="lpSearchNote"></span>
+      </div>
+      <div id="lpSearchReport" style="margin-top:14px"></div>
     </div>
 
     <div class="view" id="view-demand">
@@ -3492,7 +3504,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.161';
+var APP_VERSION='v0.5.162';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -5415,6 +5427,8 @@ function renderLinePlanner(){
   sel.innerHTML=weeks.map(function(w){
     return '<option value="'+w+'"'+(w===LP_WEEK?' selected':'')+'>'+w+'</option>';
   }).join('');
+  var tl=lpSearchTarget_(),tlEl=document.getElementById('lpSearchLine');
+  if(tlEl&&tl)tlEl.textContent=tl.label||tl.id;
   renderLinePlannerDays();
 }
 function renderLinePlannerDays(){
@@ -5606,6 +5620,201 @@ function runLinePlanner(){
     }
     sbCard_(rep,r.day,db);
   });
+}
+
+// ─── CONFIG SEARCH (v0.5.162) ───────────────────────────────────────────────
+// "What should the new line BE?" — the question Line Planner section 1 cleared
+// the way for by showing the EXISTING shape is not the lever.
+//
+// Not a recommender. A search: enumerate candidate configurations, solve the
+// real week through the real engine once per candidate, and rank the results.
+// No new assumptions, no scoring model invented on top — the same engine that
+// makes the plans, asked sixteen times instead of once.
+//
+// What varies: start time and capabilities. Pool deliberately does not — it only
+// feeds the home-line PREFERENCE, which barely moves the outcome, so varying it
+// would quadruple the runtime to distinguish near-identical candidates.
+//
+// Admissibility is granted to every SKU for the search, exactly as Sandbox does
+// for a staged line. Capabilities still gate what can legitimately land, so the
+// set that ends up on the line IS the proposed SKU list — derived rather than
+// guessed.
+var LP_SEARCH_STARTS=['06:00','06:20','07:00','08:00'];
+var LP_SEARCH_CAPS=[
+  {name:'general',      cost:0, caps:{capper:false,smallCup:false,usdaApproved:true, night:false}},
+  {name:'+ capper',     cost:1, caps:{capper:true, smallCup:false,usdaApproved:true, night:false}},
+  {name:'+ small cup',  cost:1, caps:{capper:false,smallCup:true, usdaApproved:true, night:false}},
+  {name:'no USDA',      cost:1, caps:{capper:false,smallCup:false,usdaApproved:false,night:false}}
+];
+function lpSearchTarget_(){
+  return SANDBOX_ONLY_LINES.length?SANDBOX_ONLY_LINES[0]:null;
+}
+// Library clone with the target line allowed on every SKU that carries a
+// restriction. An empty list already means "no restriction" and is left alone.
+function lpSearchLibrary_(lineId){
+  var lib=JSON.parse(JSON.stringify(STATE.skuLibrary||{}));
+  Object.keys(lib).forEach(function(k){
+    var m=lib[k];if(!m)return;
+    ['admissibleLines','admissibleLinesFriSat'].forEach(function(f){
+      var list=m[f];if(!list||!list.length)return;
+      if(list.indexOf(lineId)===-1)list.push(lineId);
+    });
+  });
+  return lib;
+}
+function lpSearchConfig_(target,start,caps,days){
+  var base=STATE.lineConfig||DEFAULT_LINE_CONFIG;
+  var out=[],seen={};
+  base.forEach(function(l){
+    seen[l.id]=true;
+    if(l.id!==target.id){out.push(l);return;}
+    out.push(lpMakeCandidate_(l,start,caps,days));
+  });
+  if(!seen[target.id])out.push(lpMakeCandidate_(target,start,caps,days));
+  return out;
+}
+function lpMakeCandidate_(src,start,caps,days){
+  var copy={},k;
+  for(k in src){if(Object.prototype.hasOwnProperty.call(src,k))copy[k]=src[k];}
+  copy.startTime=start;
+  copy.caps={capper:caps.capper,smallCup:caps.smallCup,usdaApproved:caps.usdaApproved,night:caps.night};
+  copy.sandboxOnly=false;   // the whole point is to evaluate it as a real line
+  var d={};
+  ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach(function(x){d[x]=false;});
+  days.forEach(function(day){d[DAY_SHORT[day]]=true;});
+  copy.days=d;
+  return copy;
+}
+function runLineSearch(){
+  var rep=document.getElementById('lpSearchReport'),note=document.getElementById('lpSearchNote');
+  if(!rep)return;
+  rep.innerHTML='';if(note)note.textContent='';
+  var target=lpSearchTarget_();
+  if(!target){if(note)note.textContent='No staged line defined to configure.';return;}
+  var days=lpSelectedDays();
+  if(!days.length){if(note)note.textContent='Pick at least one day that has demand.';return;}
+  var rules=getRules(),lib=lpSearchLibrary_(target.id);
+
+  // Baseline: today's shape, target line absent. Everything is measured against
+  // this, so "better" always means better than what you run now.
+  var baseTot=lpScoreRun_(days,function(day){return lpCtx_(day,false);},target.id);
+
+  var cands=[];
+  LP_SEARCH_STARTS.forEach(function(start){
+    LP_SEARCH_CAPS.forEach(function(cap){
+      var cfg=lpSearchConfig_(target,start,cap.caps,days);
+      var s=lpScoreRun_(days,function(day){
+        return {week:LP_WEEK,day:day,demand:STATE.demand,skuLibrary:lib,rules:rules,
+                lineConfig:cfg,overrides:{},excludedLines:[],finishBy:'',
+                // The staged line is the thing under evaluation, so the search
+                // opts in explicitly. isSandboxOnlyLine_ checks the code list as
+                // well as the stored flag (v0.5.134), so clearing sandboxOnly on
+                // the candidate is not enough on its own — without this the line
+                // is filtered out of every run and every candidate scores zero.
+                includeSandboxOnly:true};
+      },target.id);
+      s.start=start;s.capName=cap.name;s.capCost=cap.cost;
+      cands.push(s);
+    });
+  });
+
+  // Chain breaks disqualify. Everything else is a ranking.
+  var legal=cands.filter(function(c){return c.chain===0;});
+  var illegal=cands.length-legal.length;
+  legal.sort(function(a,b){
+    // Final tie-break: the SIMPLEST line wins. If a capper makes no difference
+    // to the outcome, recommending one is recommending equipment nobody needs.
+    return a.unplaced-b.unplaced || a.ot-b.ot || a.latest-b.latest ||
+           a.churn-b.churn || a.capCost-b.capCost;
+  });
+
+  var body=document.createElement('div');
+  if(!legal.length){
+    body.appendChild(sbNote_('Every candidate produced an allergen chain break. None is usable — the constraint is the allergen data, not the line configuration.','var(--red)'));
+    sbCard_(rep,'No usable configuration',body,true);
+    return;
+  }
+  var best=legal[0];
+  var win=[];
+  win.push(target.label+' should start at '+fmtClock(curfewToMin_(best.start))+
+    ' with capabilities: '+best.capName+'.');
+  win.push('Across '+days.length+' day'+(days.length===1?'':'s')+' it would carry '+
+    fmtUnits(Math.round(best.lineUnits))+' units in '+sbDur_(best.lineMin)+
+    ', and move '+best.churn+' SKU placement'+(best.churn===1?'':'s')+'.');
+  var dOt=baseTot.ot-best.ot, dFin=baseTot.latest-best.latest, dUn=baseTot.unplaced-best.unplaced;
+  win.push('Against today: '+(dOt>0?sbMoney_(dOt)+' less overtime':(dOt<0?sbMoney_(-dOt)+' MORE overtime':'no overtime change'))+
+    ', '+(dFin>0?sbMin_(-dFin)+' earlier finish':(dFin<0?sbMin_(-dFin)+' later finish':'same finish'))+
+    ', '+(dUn>0?dUn+' fewer unplaced':(dUn<0?(-dUn)+' MORE unplaced':'same unplaced'))+'.');
+  if(illegal)win.push(illegal+' of '+cands.length+' candidates were discarded for breaking the allergen chain.');
+  win.forEach(function(t,i){
+    var p=document.createElement('div');p.className='sb-note';p.style.marginTop=i?'6px':'0';
+    p.style.color=i?'var(--muted)':'var(--green)';if(!i)p.style.fontSize='12px';
+    p.appendChild(document.createTextNode(t));body.appendChild(p);
+  });
+
+  var tbl=document.createElement('table');tbl.className='data-table';tbl.style.marginTop='12px';
+  var th=document.createElement('thead'),hr=document.createElement('tr');
+  ['','Start','Capabilities','Units on it','Run time','Latest finish','Overtime','Unplaced','SKUs moved']
+    .forEach(function(h,i){var e=document.createElement('th');e.textContent=h;if(i>=3)e.style.textAlign='right';hr.appendChild(e);});
+  th.appendChild(hr);tbl.appendChild(th);
+  var tb=document.createElement('tbody');
+  var baseRow=document.createElement('tr');baseRow.className='total-row';
+  [['today',null],['—',null],['as configured now',null],
+   [fmtUnits(0),'right'],['—','right'],[baseTot.latest?fmtClock(baseTot.latest):'—','right'],
+   [sbMoney_(baseTot.ot),'right'],[String(baseTot.unplaced),'right'],['—','right']]
+    .forEach(function(c){var e=document.createElement('td');e.textContent=c[0];if(c[1]==='right')e.style.textAlign='right';baseRow.appendChild(e);});
+  tb.appendChild(baseRow);
+  legal.slice(0,8).forEach(function(c,i){
+    var tr=document.createElement('tr');
+    function td(t,al,col){var e=document.createElement('td');e.textContent=t;if(al)e.style.textAlign=al;if(col)e.style.color=col;tr.appendChild(e);}
+    td(i===0?'★':String(i+1),null,i===0?'var(--green)':'var(--muted)');
+    td(fmtClock(curfewToMin_(c.start)));
+    td(c.capName);
+    td(fmtUnits(Math.round(c.lineUnits)),'right');
+    td(sbDur_(c.lineMin),'right');
+    td(c.latest?fmtClock(c.latest):'—','right');
+    td(sbMoney_(c.ot),'right',c.ot<baseTot.ot?'var(--green)':(c.ot>baseTot.ot?'var(--red)':''));
+    td(String(c.unplaced),'right',c.unplaced>baseTot.unplaced?'var(--red)':'');
+    td(String(c.churn),'right',c.churn>20?'var(--amber)':'');
+    tb.appendChild(tr);
+  });
+  tbl.appendChild(tb);body.appendChild(tbl);
+  sbCard_(rep,'Recommended configuration · '+LP_WEEK+' · '+days.length+' day'+(days.length===1?'':'s'),body,true);
+
+  // The SKU list is the other half of the answer: a configuration nobody makes
+  // admissible is a line that runs empty.
+  if(best.lineSkus.length){
+    var sb=document.createElement('div');
+    sb.appendChild(sbNote_('Add '+target.label+' to the Lines column of these '+best.lineSkus.length+
+      ' SKU'+(best.lineSkus.length===1?'':'s')+' in SKU Library, or it will run empty:','var(--text)'));
+    var p=document.createElement('div');
+    p.style.cssText='font-family:var(--mono);font-size:10px;color:var(--teal);margin-top:6px';
+    p.appendChild(document.createTextNode(best.lineSkus.sort().join(', ')));
+    sb.appendChild(p);
+    sbCard_(rep,'SKUs to allow on '+target.label,sb,true);
+  }
+}
+// One scored pass over the selected days. ctxFn lets the caller supply either
+// the baseline context or a candidate configuration.
+function lpScoreRun_(days,ctxFn,targetId){
+  var out={unplaced:0,ot:0,chain:0,latest:0,churn:0,lineUnits:0,lineMin:0,lineSkus:[],seen:{}};
+  var rules=getRules();
+  days.forEach(function(day){
+    var res=runSequencer(ctxFn(day));
+    if(!res)return;
+    var sum=sbSummarise(res);
+    out.unplaced+=sum.unplaced.length;
+    out.ot+=sbOvertime_(sum,rules).cost;
+    out.chain+=sbChainCheck(res).length;
+    if(sum.latestEnd>out.latest)out.latest=sum.latestEnd;
+    var mine=sum.byLine[targetId];
+    if(mine){
+      out.lineUnits+=mine.units;out.lineMin+=mine.min;
+      mine.seq.forEach(function(s){if(!out.seen[s]){out.seen[s]=true;out.lineSkus.push(s);}});
+      out.churn+=mine.seq.length;
+    }
+  });
+  return out;
 }
 
 // ─── MY LINE (floor tablet view) ───────────────────────────────────────────────
