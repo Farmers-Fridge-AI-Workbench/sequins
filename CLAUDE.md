@@ -258,12 +258,25 @@ Windows / PowerShell — chain with `;` not `&&`.
 1. `clasp push`
 2. Commit and push to GitHub — **separate from the clasp push.** Version
    drift between the two has happened before.
-3. **Cori deploys manually**: Manage Deployments → Edit → New Version → Deploy
+3. `clasp deploy -i <deploymentId> -d "v0.5.x"`
 
-Never deploy. Step 3 is hers.
+**Deploy when Cori asks — not on your own.** Changed 2026-08-24; this used to
+be hers alone. `clasp push` changes nothing anyone sees, so pushing stays free
+and *when it goes live* stays her call. Deploying unasked takes that away.
+
+`clasp deployments` lists two. Only ever update the **versioned** one — the
+`@<number>` entry, which is the live `/exec` the floor and planners open. The
+`@HEAD` entry already follows every push and is not what anyone loads; deploying
+to it does nothing. (IDs deliberately not recorded here — the repo is public and
+a deployment ID is the app URL. Read them off `clasp deployments`.)
+
+`clasp deploy` versions **whatever was last pushed**, not the working tree —
+so push first, or you ship stale code. Confirm the version number it prints
+went up.
 
 The sidebar version stamp is how Cori verifies a deploy landed. If it
-disagrees with the changelog header, trust the header.
+disagrees with the changelog header, trust the header. A deploy can take a
+minute to propagate, and she has needed a hard refresh to see it.
 
 `SequinsDemandPush.gs` lives in the Production Planner's Apps Script
 project, not this repo.
