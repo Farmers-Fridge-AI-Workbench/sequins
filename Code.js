@@ -1,9 +1,12 @@
 /**
- * Sequins ✨ — Code.js    v0.4.92 — 2026-08-24    (pairs with Index.html v0.5.160)
+ * Sequins ✨ — Code.js    v0.4.93 — 2026-08-24    (pairs with Index.html v0.5.161)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.92  No server change — pairing bump. The dropped-demand warning is
- *          entirely client-side.
+ * v0.4.93  Config mirrors gain an UpdatedLocal column beside the ISO one. UTC
+ *          is right for machines and misleading in a sheet a human reads —
+ *          15:44Z reads as afternoon when it is 10:44 in Chicago, which sent a
+ *          debugging session down the wrong path. Uses the script timezone, so
+ *          it follows appsscript.json rather than hardcoding.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -70,9 +73,9 @@ const LINE_CFG_MIRROR_TAB   = 'Line Config';   // same spreadsheet
 // lineSeeds are all in here, and none of them appear in any view. Key/value
 // rather than one column per rule, so a new rule needs no schema change.
 const RULES_MIRROR_TAB      = 'Sequencing Rules';
-const RULES_MIRROR_HEADER   = ['Key','Value','UpdatedAt','UpdatedBy'];
-const SKU_LIB_MIRROR_HEADER = ['SKU','Active','Pending','Category','FcClass','PackageType','UnitsPerTote','UPM','Allergens','LabelNumberVersion','LinesSunTh','LinesFriSat','FriSatOverride','UsdaPairedSku','Capper','NightShift','PreProcessed','UpdatedAt','UpdatedBy'];
-const LINE_CFG_MIRROR_HEADER = ['LineId','Label','Type','Room','HC','LineLead','Pool','StartTime','SandboxOnly','CapCapper','CapSmallCup','CapUsdaApproved','CapNight','Mon','Tue','Wed','Thu','Fri','Sat','Sun','UpdatedAt','UpdatedBy'];
+const RULES_MIRROR_HEADER   = ['Key','Value','UpdatedAt','UpdatedLocal','UpdatedBy'];
+const SKU_LIB_MIRROR_HEADER = ['SKU','Active','Pending','Category','FcClass','PackageType','UnitsPerTote','UPM','Allergens','LabelNumberVersion','LinesSunTh','LinesFriSat','FriSatOverride','UsdaPairedSku','Capper','NightShift','PreProcessed','UpdatedAt','UpdatedLocal','UpdatedBy'];
+const LINE_CFG_MIRROR_HEADER = ['LineId','Label','Type','Room','HC','LineLead','Pool','StartTime','SandboxOnly','CapCapper','CapSmallCup','CapUsdaApproved','CapNight','Mon','Tue','Wed','Thu','Fri','Sat','Sun','UpdatedAt','UpdatedLocal','UpdatedBy'];
 const DEMAND_ARCHIVE_TAB    = 'Demand Archive';  // same spreadsheet — see ARCHIVE OLD DEMAND
 const DEMAND_STORE_TAB     = 'Demand Store';    // same spreadsheet — see DEMAND STORE below
 const DEMAND_STORE_HEADER  = ['Week','Day','Payload','History','UpdatedAt'];
@@ -2161,7 +2164,7 @@ function writeConfigMirror_(tabName, header, rows) {
   // as 0.2708333333333333 and the Line Config mirror stopped being readable —
   // and formatting it afterwards cannot recover the original string. Same
   // reason getDisplayValues() exists on the read side.
-  ['UpdatedAt', 'StartTime'].forEach(function (name) {
+  ['UpdatedAt', 'UpdatedLocal', 'StartTime'].forEach(function (name) {
     const c = header.indexOf(name) + 1;
     if (c > 0) sheet.getRange(1, c, block.length, 1).setNumberFormat('@');
   });
@@ -2169,8 +2172,16 @@ function writeConfigMirror_(tabName, header, rows) {
   return rows.length;
 }
 
+// v0.4.93: a plain local stamp beside the ISO one. UTC is right for machines
+// and misleading in a sheet a human reads — 15:44Z reads as afternoon when it is
+// 10:44 in Chicago. Script timezone, not hardcoded, so it follows appsscript.json.
+function mirrorStampLocal_() {
+  return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm:ss');
+}
+
 function mirrorSkuLibrary_(library, email) {
   const at = new Date().toISOString();
+  const local = mirrorStampLocal_();
   const keys = Object.keys(library || {}).sort();
   const rows = keys.map(function (k) {
     const s = library[k] || {};
@@ -2181,7 +2192,7 @@ function mirrorSkuLibrary_(library, email) {
       (s.admissibleLines || []).join(', '),
       (s.admissibleLinesFriSat || []).join(', '),
       !!s.friSatOverride, s.usdaPairedSku || '',
-      !!s.capper, !!s.nightShift, !!s.preProcessed, at, email || ''
+      !!s.capper, !!s.nightShift, !!s.preProcessed, at, local, email || ''
     ];
   });
   return writeConfigMirror_(SKU_LIB_MIRROR_TAB, SKU_LIB_MIRROR_HEADER, rows);
@@ -2189,6 +2200,7 @@ function mirrorSkuLibrary_(library, email) {
 
 function mirrorLineConfig_(lines, email) {
   const at = new Date().toISOString();
+  const local = mirrorStampLocal_();
   const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
   const rows = (lines || []).map(function (l) {
     const caps = l.caps || {};
@@ -2198,20 +2210,21 @@ function mirrorLineConfig_(lines, email) {
       Number(l.hc) || 0, Number(l.lineLead) || 0, l.pool || '',
       l.startTime || '', !!l.sandboxOnly,
       !!caps.capper, !!caps.smallCup, caps.usdaApproved !== false, !!caps.night
-    ].concat(days.map(function (x) { return !!d[x]; })).concat([at, email || '']);
+    ].concat(days.map(function (x) { return !!d[x]; })).concat([at, local, email || '']);
   });
   return writeConfigMirror_(LINE_CFG_MIRROR_TAB, LINE_CFG_MIRROR_HEADER, rows);
 }
 
 function mirrorRules_(rules, email) {
   const at = new Date().toISOString();
+  const local = mirrorStampLocal_();
   const keys = Object.keys(rules || {}).sort();
   const rows = keys.map(function (k) {
     const v = rules[k];
     // Objects and arrays go in as JSON so nested rules (homeLines, lineSeeds)
     // stay readable and round-trippable rather than stringifying to [object].
     const out = (v !== null && typeof v === 'object') ? JSON.stringify(v) : String(v);
-    return [k, out, at, email || ''];
+    return [k, out, at, local, email || ''];
   });
   return writeConfigMirror_(RULES_MIRROR_TAB, RULES_MIRROR_HEADER, rows);
 }

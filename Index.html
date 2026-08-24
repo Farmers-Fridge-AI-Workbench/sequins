@@ -1,16 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.160 — 2026-08-24    (pairs with Code.js v0.4.92)
+  Sequins ✨ — Index.html    v0.5.161 — 2026-08-24    (pairs with Code.js v0.4.93)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.160 Warns when demanded SKUs are never sequenced. runSequencer filters
-           demand down to jobs before planning — dropping anything not in the
-           SKU Library, staged, or inactive — and said nothing, so a day could
-           be planned short in silence. That is how FUJI_APPLE_PECAN_SALAD sat
-           in Wk 42 demand from Wk 40 while every plan was built without it.
-           Red card on Line Sequence, and a line per SKU in the Sandbox's
-           'Read this first'. Distinct from Unplaced: unplaced means the engine
-           tried and could not fit it; this is demand it never saw. Non-assembly
-           is excluded deliberately and never reported.
+  v0.5.161 Pairing bump for the Code.js mirror local-time column. No client
+           change.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -3499,7 +3492,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.160';
+var APP_VERSION='v0.5.161';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
