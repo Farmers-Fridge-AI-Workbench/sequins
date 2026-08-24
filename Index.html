@@ -1,5 +1,5 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.164 — 2026-08-24    (pairs with Code.js v0.4.96)
+  Sequins ✨ — Index.html    v0.5.166 — 2026-08-24    (pairs with Code.js v0.4.98)
   Full history: git log. This header carries the LATEST change only.
 
   v0.5.161 Pairing bump for the Code.js mirror local-time column. No client
@@ -3510,7 +3510,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.164';
+var APP_VERSION='v0.5.166';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -5789,8 +5789,15 @@ function runLineSearch(){
   legal.sort(function(a,b){
     // Final tie-break: the SIMPLEST line wins. If a capper makes no difference
     // to the outcome, recommending one is recommending equipment nobody needs.
-    return a.unplaced-b.unplaced || a.ot-b.ot || a.latest-b.latest ||
-           a.churn-b.churn || a.capCost-b.capCost;
+    // Overtime to the nearest $50 and finish to the nearest 15 minutes, so a
+    // trivial difference cannot outrank simplicity. Unbucketed, a 5-minute
+    // earlier finish was enough to recommend giving up USDA capability
+    // permanently — a real operational restriction bought with noise.
+    return a.unplaced-b.unplaced
+        || Math.round(a.ot/50)-Math.round(b.ot/50)
+        || Math.round(a.latest/15)-Math.round(b.latest/15)
+        || a.capCost-b.capCost
+        || a.churn-b.churn;
   });
 
   var body=document.createElement('div');
@@ -5812,6 +5819,7 @@ function runLineSearch(){
     ', '+(dFin>0?sbMin_(-dFin)+' earlier finish':(dFin<0?sbMin_(-dFin)+' later finish':'same finish'))+
     ', '+(dUn>0?dUn+' fewer unplaced':(dUn<0?(-dUn)+' MORE unplaced':'same unplaced'))+'.');
   if(illegal)win.push(illegal+' of '+cands.length+' candidates were discarded for breaking the allergen chain.');
+  lpWhyNotes_(cands,legal,best).forEach(function(n){win.push(n);});
   win.forEach(function(t,i){
     var p=document.createElement('div');p.className='sb-note';p.style.marginTop=i?'6px':'0';
     p.style.color=i?'var(--muted)':'var(--green)';if(!i)p.style.fontSize='12px';
@@ -5870,19 +5878,14 @@ function runLineSearch(){
   // Two variants, because the real question when adding a line is whether it
   // lets you stand the night shift down. Identical day-line configuration in
   // both; the only difference is whether the night lines run at all.
+  // v0.5.165: ONE week view, under the configuration as it actually stands.
+  // A night-shift on/off comparison was built here on a misread — "with and
+  // without night shift" meant nights run five nights a week, not seven, which
+  // the stored config already does (NIGHT-1 is Mon-Thu + Sun, and the hard rule
+  // is no nights Friday or Saturday). Comparing against no-nights-at-all
+  // answered a question nobody asked.
   var winCfg=lpSearchConfig_(target,best.start,best.caps,days);
-  lpRenderVariant_(rep,'Proposed week · night shift AS CONFIGURED',lpNightVariant_(winCfg,true),days,lib,target.id);
-  lpRenderVariant_(rep,'Proposed week · night shift STOOD DOWN',lpNightVariant_(winCfg,false),days,lib,target.id);
-}
-// Night lines cleared to no days, so the same day-line plan can be read with and
-// without them. Nothing else about the configuration changes.
-function lpNightVariant_(cfg,nightOn){
-  return cfg.map(function(l){
-    if(nightOn||!lineCaps(l).night)return l;
-    var c={},k;for(k in l){if(Object.prototype.hasOwnProperty.call(l,k))c[k]=l[k];}
-    var d={};['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach(function(x){d[x]=false;});
-    c.days=d;return c;
-  });
+  lpRenderVariant_(rep,'Proposed week · '+target.label+' added',winCfg,days,lib,target.id);
 }
 // The full week under one configuration: headline numbers, then every line's run
 // order per day, with the new line picked out in amber.
@@ -5931,6 +5934,45 @@ function lpRenderVariant_(rep,title,cfg,days,lib,targetId){
     });
   });
   sbCard_(rep,title,body);
+}
+// v0.5.166: say WHY, not just what. The ranking is a chain of tie-breaks, and
+// which link actually decided it is the useful thing to know — "every option
+// performed identically so the simplest won" is a very different claim from
+// "this one genuinely finished earlier", and only one of them justifies giving
+// up a capability.
+function lpWhyNotes_(cands,legal,best){
+  var out=[],dq=cands.length-legal.length;
+  out.push(cands.length+' configurations tried'+
+    (dq?', '+dq+' discarded for breaking the allergen chain'
+       :', none broke the allergen chain')+'.');
+  var worseUn=0,worseOt=0,worseFin=0;
+  legal.forEach(function(c){
+    if(c.unplaced>best.unplaced)worseUn++;
+    else if(Math.round(c.ot/50)>Math.round(best.ot/50))worseOt++;
+    else if(Math.round(c.latest/15)>Math.round(best.latest/15))worseFin++;
+  });
+  if(worseUn)out.push('Decided on unplaced: '+worseUn+' other configuration'+
+    (worseUn===1?'':'s')+' left more SKUs with nowhere to go.');
+  else if(worseOt)out.push('Unplaced tied, so overtime decided it: '+worseOt+
+    ' other configuration'+(worseOt===1?'':'s')+' cost more.');
+  else if(worseFin)out.push('Unplaced and overtime tied, so finish time decided it: '+
+    worseFin+' other configuration'+(worseFin===1?'':'s')+' finished materially later.');
+  else out.push('Every legal configuration performed identically on unplaced, '+
+    'overtime and finish time. Nothing separated them on outcome, so the SIMPLEST '+
+    'line won rather than an arbitrary pick.');
+  var sameCaps=legal.filter(function(c){return c.capName===best.capName;});
+  var startMatters=false;
+  sameCaps.forEach(function(c){
+    if(Math.round(c.latest/15)!==Math.round(best.latest/15))startMatters=true;
+  });
+  out.push(startMatters
+    ?'Start time mattered: '+fmtClock(curfewToMin_(best.start))+' finished ahead of the other options.'
+    :'Start time made no material difference — every option landed within 15 minutes of the others, so '+
+      fmtClock(curfewToMin_(best.start))+' was taken because it matches a shift you already run.');
+  out.push(best.capCost===0
+    ?'No extra equipment recommended: a capper or small-cup belt changed nothing here, and USDA approval is kept because dropping it bought nothing.'
+    :'Capabilities — '+best.capName+' — genuinely outperformed the plain configuration. This is not a tie-break.');
+  return out;
 }
 // One scored pass over the selected days. ctxFn lets the caller supply either
 // the baseline context or a candidate configuration.

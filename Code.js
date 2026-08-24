@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.96 — 2026-08-24    (pairs with Index.html v0.5.164)
+ * Sequins ✨ — Code.js    v0.4.98 — 2026-08-24    (pairs with Index.html v0.5.166)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.96  No server change — pairing bump. The week sequence and night-shift
- *          variants are entirely client-side.
+ * v0.4.98  No server change — pairing bump. All three config-search
+ *          corrections are client-side.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
