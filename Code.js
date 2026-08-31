@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.99 — 2026-08-24    (pairs with Index.html v0.5.167)
+ * Sequins ✨ — Code.js    v0.4.100 — 2026-08-31    (pairs with Index.html v0.5.168)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.99  No server change — pairing bump. All three config-search changes
- *          are client-side.
+ * v0.4.100 No server change — pairing bump. The plan email body renders
+ *          client-side; only Index.html moved.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────

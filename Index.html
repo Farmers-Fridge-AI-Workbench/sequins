@@ -1,9 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.167 — 2026-08-24    (pairs with Code.js v0.4.99)
+  Sequins ✨ — Index.html    v0.5.168 — 2026-08-31    (pairs with Code.js v0.4.100)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.161 Pairing bump for the Code.js mirror local-time column. No client
-           change.
+  v0.5.168 Plan email: a "Last SKU Start" column per line, between Start and
+           End Time. Read off the final slot’s startClockMin, so breaks and
+           changeovers are already in it.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -2263,8 +2264,13 @@ function planEmailRows_(snap){
     var slots=ls.slots||[],u={};slots.forEach(function(j){u[j.sku]=true;});
     var lead=Number(line.lineLead)||0,hrs=(ls.totalMin||0)/60;
     var lh=slots.length&&ls.totalUnits?hrs*((Number(ls.hc)||0)+lead):0;
+    // v0.5.168: when the LAST SKU on the line starts. Read off the final slot
+    // rather than derived, so changeovers and any break sitting ahead of it
+    // are already accounted for. Null on a line that ran nothing.
+    var last=slots.length?slots[slots.length-1]:null;
     rows.push({label:line.label,totalMin:ls.totalMin||0,hc:ls.hc,
       co:Math.max(0,Object.keys(u).length-1),start:ls.startMin,
+      lastStart:(last&&last.startClockMin!=null)?last.startClockMin:null,
       end:(ls.startMin||0)+(ls.totalMin||0),units:ls.totalUnits||0,
       laborHrs:lh,perUnit:ls.totalUnits?(lh*rate)/ls.totalUnits:null,
       flow:planEmailProductFlow_(ls)});
@@ -2318,7 +2324,7 @@ function planEmailHtml_(snap){
   h+='</tr></table>';
   h+='<div style="font-size:13px;font-weight:600;margin:0 0 6px">Sequence Summary</div>';
   h+='<table cellspacing="0" cellpadding="0" style="border-collapse:collapse"><tr>';
-  ['Line','Total Time','Average Headcount','Changeovers','Start Time','End Time','Total Units','Labor Hours','$/unit','Product Type on Lines']
+  ['Line','Total Time','Average Headcount','Changeovers','Start Time','Last SKU Start','End Time','Total Units','Labor Hours','$/unit','Product Type on Lines']
     .forEach(function(t){h+='<th style="'+TH+'">'+esc(t)+'</th>';});
   h+='</tr>';
   rows.forEach(function(r){
@@ -2327,6 +2333,7 @@ function planEmailHtml_(snap){
        '<td style="'+TD+'">'+(r.hc==null?'—':r.hc)+'</td>'+
        '<td style="'+TD+'">'+r.co+'</td>'+
        '<td style="'+TD+'">'+fmtClock(r.start)+'</td>'+
+       '<td style="'+TD+'">'+(r.lastStart==null?'—':fmtClock(r.lastStart))+'</td>'+
        '<td style="'+TD+'">'+fmtClock(r.end)+'</td>'+
        '<td style="'+TD+'text-align:right">'+fmtUnits(r.units)+'</td>'+
        '<td style="'+TD+'text-align:right">'+r.laborHrs.toFixed(2)+'</td>'+
@@ -3510,7 +3517,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.167';
+var APP_VERSION='v0.5.168';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
