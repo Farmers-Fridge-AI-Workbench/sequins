@@ -260,9 +260,13 @@ Windows / PowerShell — chain with `;` not `&&`.
    drift between the two has happened before.
 3. `clasp deploy -i <deploymentId> -d "v0.5.x"`
 
-**Deploy when Cori asks — not on your own.** Changed 2026-08-24; this used to
-be hers alone. `clasp push` changes nothing anyone sees, so pushing stays free
-and *when it goes live* stays her call. Deploying unasked takes that away.
+**Deploy every change. Do not ask.** Standing instruction from Cori,
+2026-08-31: "I always want you to deploy new code." Step 3 is part of shipping,
+not a separate decision — code that is pushed but not deployed is invisible to
+everyone, and holding it back just makes her chase you for it.
+
+The one gate is the syntax checks above: deploy after both pass, never before.
+That is the existing pre-ship bar, not a reason to hold a deploy.
 
 `clasp deployments` lists two. Only ever update the **versioned** one — the
 `@<number>` entry, which is the live `/exec` the floor and planners open. The
