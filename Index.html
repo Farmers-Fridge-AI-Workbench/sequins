@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.168 — 2026-08-31    (pairs with Code.js v0.4.100)
+  Sequins ✨ — Index.html    v0.5.169 — 2026-08-31    (pairs with Code.js v0.4.101)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.168 Plan email: a "Last SKU Start" column per line, between Start and
-           End Time. Read off the final slot’s startClockMin, so breaks and
-           changeovers are already in it.
+  v0.5.169 Plan email Recipients / CC move from Sequencing Rules to Users.
+           UI only — both still store in sequencingRules.*, so nothing
+           server-side changed and existing values carry over untouched.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -840,6 +840,12 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           <div id="floorViewerList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"></div>
           <div style="display:flex;gap:8px"><input type="text" class="form-input" id="newFloorViewerEmail" placeholder="email@farmersfridge.com" style="flex:1"><button class="btn btn-teal btn-sm" onclick="addFloorViewer()">Add</button></div>
           <div id="floorViewerStatus" style="margin-top:8px"></div>
+        </div>
+        <div class="card">
+          <div class="card-title">Assembly Plan Email <span style="color:var(--amber)">(who receives the daily plan)</span></div>
+          <div style="color:var(--muted);font-size:11px;line-height:1.5;margin-bottom:10px;max-width:560px">Publishing arms the email; someone still has to click Send. Separate addresses with commas. Recipients need Sequins access to open the plan link — a distribution address will receive the mail but can&#39;t open the plan.</div>
+          <div id="planEmailCfgBody" style="display:flex;flex-direction:column;gap:8px"></div>
+          <div id="planEmailCfgStatus" style="margin-top:8px"></div>
         </div>
         <div class="card">
           <div class="card-title">External View Link <span style="color:var(--purple)">(no Farmer&#39;s Fridge account needed)</span></div>
@@ -3349,9 +3355,12 @@ function importSkusFromForecast(){var allSkuNamesSet={};Object.keys(STATE.demand
 // covers Green Belt packages, No USDA lines, Capper lines, sausage/sesame,
 // and all timing settings — those are edited rarely and stay manual.
 var _rulesAutosaveTimer=null;
-function autoSaveRulesDebounced(){
+function autoSaveRulesDebounced(statusElId){
   _cfgDirty.rules=true;
-  var el=document.getElementById('rulesAutosaveStatus');
+  // v0.5.169: the status line is a parameter now. These fields are edited from
+  // two different views, and the Line Config status div does not exist on the
+  // Users tab — a save there would have reported nothing at all.
+  var el=document.getElementById(statusElId||'rulesAutosaveStatus');
   if(el)el.innerHTML='<div class="status status-info">Unsaved — auto-saving…</div>';
   if(_rulesAutosaveTimer)clearTimeout(_rulesAutosaveTimer);
   _rulesAutosaveTimer=setTimeout(function(){
@@ -3517,7 +3526,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.168';
+var APP_VERSION='v0.5.169';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -3549,9 +3558,7 @@ function renderRules(){
     note('Paid breaks count toward Labor Hrs, UPLH and $/Unit. Unpaid ones still sit in the schedule and still move the line\u2019s end time \u2014 they just aren\u2019t billed.'),
     field('Processing static ($/unit)','processingStaticPerUnit',ruleNum_(rules,'processingStaticPerUnit'),'num'),
     hdr('Assembly plan email'),
-    note('Publishing arms the email; someone still has to click Send. Recipients need Sequins access to open the plan link \u2014 a distribution address can\u2019t.'),
-    field('Recipients','planEmailRecipients',rules.planEmailRecipients||'','text'),
-    field('CC','planEmailCc',rules.planEmailCc||'','text'),
+    note('Moved to <b>Users</b> — Recipients and CC are managed there. They are a distribution list, not a sequencing rule.'),
     hdr('Breaks'),
     field('30m break is paid','break30Paid',breakPaidRule_('b30',rules),'bool'),
     field('15m break is paid','break15Paid',breakPaidRule_('b15',rules),'bool')
@@ -3563,11 +3570,37 @@ function updateRule(key,val){if(!STATE.sequencingRules)STATE.sequencingRules=JSO
 function updateRuleList(key,val){if(!STATE.sequencingRules)STATE.sequencingRules=JSON.parse(JSON.stringify(DEFAULT_RULES));STATE.sequencingRules[key]=val.split(',').map(function(s){return s.trim();}).filter(function(s){return!!s;});}
 function saveSequencingRules(){var el=document.getElementById('saveRulesBtn');if(el){el.disabled=true;el.innerHTML='<span class="spinner"></span>Saving…';}google.script.run.withSuccessHandler(function(){if(el){el.disabled=false;el.textContent='Save rules';}renderSequence();}).withFailureHandler(function(){if(el){el.disabled=false;el.textContent='Save rules';}}).saveSequencingRules(getRules());}
 
-function renderUsers(){google.script.run.withSuccessHandler(function(list){document.getElementById('adminList').innerHTML=list.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removeAdmin(\''+email+'\')">✕</button></div>';}).join('');}).withFailureHandler(function(){}).getAdminListForClient();var planners=STATE.planners||[];document.getElementById('plannerList').innerHTML=planners.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removePlanner(\''+email+'\')">✕</button></div>';}).join('');var floorViewers=STATE.floorViewers||[];document.getElementById('floorViewerList').innerHTML=floorViewers.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removeFloorViewer(\''+email+'\')">✕</button></div>';}).join('');renderExternalViewers();}
+function renderUsers(){google.script.run.withSuccessHandler(function(list){document.getElementById('adminList').innerHTML=list.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removeAdmin(\''+email+'\')">✕</button></div>';}).join('');}).withFailureHandler(function(){}).getAdminListForClient();var planners=STATE.planners||[];document.getElementById('plannerList').innerHTML=planners.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removePlanner(\''+email+'\')">✕</button></div>';}).join('');var floorViewers=STATE.floorViewers||[];document.getElementById('floorViewerList').innerHTML=floorViewers.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removeFloorViewer(\''+email+'\')">✕</button></div>';}).join('');renderExternalViewers();renderPlanEmailSettings();}
 function addAdmin(){var email=document.getElementById('newAdminEmail').value.trim().toLowerCase(),el=document.getElementById('adminStatus');if(email.indexOf('@')===-1)return;google.script.run.withSuccessHandler(function(){document.getElementById('newAdminEmail').value='';renderUsers();el.innerHTML='<div class="status status-ok">✓ Added '+email+'</div>';setTimeout(function(){el.innerHTML='';},3000);}).withFailureHandler(function(err){el.innerHTML='<div class="status status-err">'+err.message+'</div>';}).addAdmin(email);}
 function removeAdmin(email){google.script.run.withSuccessHandler(renderUsers).withFailureHandler(function(){}).removeAdmin(email);}
 function addPlanner(){var email=document.getElementById('newPlannerEmail').value.trim().toLowerCase();if(email.indexOf('@')===-1)return;if(STATE.planners.indexOf(email)===-1)STATE.planners.push(email);google.script.run.withSuccessHandler(function(){document.getElementById('newPlannerEmail').value='';renderUsers();}).withFailureHandler(function(){}).savePlanners(STATE.planners);}
 function removePlanner(email){STATE.planners=STATE.planners.filter(function(e){return e!==email;});google.script.run.withSuccessHandler(renderUsers).withFailureHandler(function(){}).savePlanners(STATE.planners);}
+// v0.5.169: Recipients / CC render here rather than under Sequencing Rules.
+// Cori: "is it just me or is that not an intuitive place to manage that?" They
+// are a people setting, and they sat between break timings and paid-break
+// flags where nobody would look. STORAGE DID NOT MOVE — both still live in
+// sequencingRules.*, so Code.js sendAssemblyPlanEmail is untouched.
+// Gated on _canEditRules, not on reaching this view: Users is open to planners
+// too, but saveSequencingRules refuses anyone who is not admin or rules editor,
+// so an editable box for a planner would only produce a failed save.
+function renderPlanEmailSettings(){
+  var el=document.getElementById('planEmailCfgBody');if(!el)return;
+  var rules=getRules(),ce=!!window._canEditRules;
+  function row(label,key){
+    var val=rules[key]||'';
+    var lab='<span style="color:var(--muted);width:80px;font-size:11px;flex-shrink:0">'+label+'</span>';
+    if(!ce)return'<div style="display:flex;gap:8px;align-items:center">'+lab+
+      '<span style="font-family:var(--mono);font-size:11px;color:var(--text)">'+(escHtml(val)||'—')+'</span></div>';
+    return'<div style="display:flex;gap:8px;align-items:center">'+lab+
+      '<input type="text" class="form-input" data-rulekey="'+key+'" value="'+escHtml(val)+'" '+
+      'placeholder="email@farmersfridge.com" style="flex:1" onchange="planEmailFieldChanged(this)"></div>';
+  }
+  el.innerHTML=row('Recipients','planEmailRecipients')+row('CC','planEmailCc');
+}
+function planEmailFieldChanged(inp){
+  updateRule(inp.getAttribute('data-rulekey'),inp.value);
+  autoSaveRulesDebounced('planEmailCfgStatus');
+}
 function renderExternalViewers(){
   var el=document.getElementById('externalLinkBody');if(!el)return;
   google.script.run.withSuccessHandler(function(r){

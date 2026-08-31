@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.100 — 2026-08-31    (pairs with Index.html v0.5.168)
+ * Sequins ✨ — Code.js    v0.4.101 — 2026-08-31    (pairs with Index.html v0.5.169)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.100 No server change — pairing bump. The plan email body renders
- *          client-side; only Index.html moved.
+ * v0.4.101 No server change — pairing bump. Plan email recipients moved views
+ *          but not storage; sendAssemblyPlanEmail still reads sequencingRules.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────

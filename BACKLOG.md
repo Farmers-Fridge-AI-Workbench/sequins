@@ -4,27 +4,13 @@ Open items only. Delete an entry when it's done — git history is the record,
 this file is the "what's still hanging" list. Each entry should stand alone:
 enough context to act on without the conversation that created it.
 
-Opened 2026-08-19. Last refreshed 2026-08-24.
+Opened 2026-08-19. Last refreshed 2026-08-31.
 
 ---
 
 ## Ready to build
 
-### Move the plan-email recipients out of Sequencing Rules
-
-Cori, 2026-08-24: "is it just me or is that not an intuitive place to manage
-that? I think it belongs in admin." Agreed — Recipients and CC currently sit in
-the Sequencing Rules panel at the bottom of Line Config, between break timings
-and paid-break flags. They are a people/distribution setting, not a sequencing
-rule, and nobody would think to look there.
-
-Move the two fields to the Users tab. The values live in
-`sequencingRules.planEmailRecipients` / `.planEmailCc` and are read by
-`planEmailAll_` in Code.js — moving the UI does not have to move the storage,
-so this can be a pure relocation of the two `field()` calls plus a save path.
-Keep the existing caveat visible wherever it lands: recipients need Sequins
-access to open the plan link, so a distribution address will receive the mail
-but cannot open the plan.
+_Nothing queued._
 
 ---
 
