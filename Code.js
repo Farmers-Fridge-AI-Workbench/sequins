@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.101 — 2026-08-31    (pairs with Index.html v0.5.169)
+ * Sequins ✨ — Code.js    v0.4.102 — 2026-08-31    (pairs with Index.html v0.5.170)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.101 No server change — pairing bump. Plan email recipients moved views
- *          but not storage; sendAssemblyPlanEmail still reads sequencingRules.
+ * v0.4.102 No server change — pairing bump. Both changes are client-side and
+ *          nothing was deleted: Loaded Demand only stops DISPLAYING old days.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────

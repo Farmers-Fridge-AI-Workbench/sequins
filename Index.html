@@ -1,10 +1,11 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.169 — 2026-08-31    (pairs with Code.js v0.4.101)
+  Sequins ✨ — Index.html    v0.5.170 — 2026-08-31    (pairs with Code.js v0.4.102)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.169 Plan email Recipients / CC move from Sequencing Rules to Users.
-           UI only — both still store in sequencingRules.*, so nothing
-           server-side changed and existing values carry over untouched.
+  v0.5.170 Line Sequence is read-only again: the interactive scenario bar is
+           gone (it silently re-pointed Workbench), replaced by a static
+           "Published as" note. Loaded Demand hides days older than 14 —
+           hidden, not deleted; Show all restores them.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -1020,7 +1021,7 @@ function getHomeLines(r){
 }
 var SLOT_CAP=14,TARGET_MIN=510;
 
-function forceResequence(){renderSequence();renderWorkbench();renderScenarioBar('seqScenarioBar');renderFinishByControl('seqFinishBy');renderScenarioBar('wbScenarioBar');renderFinishByControl('wbFinishBy');['seqResequenceBtn','wbResequenceBtn'].forEach(function(id){var b=document.getElementById(id);if(!b)return;var orig=b.textContent;b.textContent='✓ Re-sequenced';setTimeout(function(){b.textContent=orig;},1200);});}
+function forceResequence(){renderSequence();renderWorkbench();renderFinishByControl('seqFinishBy');renderScenarioBar('wbScenarioBar');renderFinishByControl('wbFinishBy');['seqResequenceBtn','wbResequenceBtn'].forEach(function(id){var b=document.getElementById(id);if(!b)return;var orig=b.textContent;b.textContent='✓ Re-sequenced';setTimeout(function(){b.textContent=orig;},1200);});}
 function toggleMetrics(){_metricsCollapsed=!_metricsCollapsed;['seqMetricsBody','wbMetricsBody'].forEach(function(id){var el=document.getElementById(id);if(el)el.classList.toggle('collapsed',_metricsCollapsed);});['seqMetricsArrow','wbMetricsArrow'].forEach(function(id){var el=document.getElementById(id);if(el)el.classList.toggle('collapsed',_metricsCollapsed);});}
 // UNKNOWN is not the same as NONE. Menu Library writes allergen-free three ways
 // ("None", "N/A", "No Allergens") and writes "No import" when nothing has been
@@ -2918,7 +2919,6 @@ function renderSequence(){
   document.getElementById('seqContent').style.display=hasDemand?'':'none';
   if(!hasDemand)return;
   renderDayStrip('seqDayStrip');renderWeekDropdowns();renderFloatingTeamControl('seqFloatingTeam');
-  renderScenarioBar('seqScenarioBar');
   var days=getDays(CURRENT_WEEK);if(!CURRENT_DAY||days.indexOf(CURRENT_DAY)===-1)CURRENT_DAY=days[0];
   if(!planCached_(CURRENT_WEEK,CURRENT_DAY))ensurePlanLoaded(CURRENT_WEEK,CURRENT_DAY,_afterPlanLoad); // fetch from archive, re-render when it lands
   var dayData=STATE.demand[CURRENT_WEEK]&&STATE.demand[CURRENT_WEEK][CURRENT_DAY],mb=document.getElementById('seqModeBadge');
@@ -2930,7 +2930,7 @@ function renderSequence(){
   var npc=document.getElementById('seqNoPlan');
   if(!pub){
     var seqMsg=perr?planReadErrorHtml_(perr,CURRENT_WEEK,CURRENT_DAY):'<div style="text-align:center;padding:32px"><span style="font-family:var(--mono);font-size:12px;color:var(--muted)">No published plan for this day. Open Workbench and click Publish Plan.</span></div>';
-    renderFinishByReadout('seqFinishBy',null);
+    renderFinishByReadout('seqFinishBy',null);renderPublishedScenario_(null);
     if(!npc){var np=document.createElement('div');np.id='seqNoPlan';np.className='card';np.style.borderColor=perr?'rgba(239,68,68,.45)':'rgba(245,158,11,.25)';np.innerHTML=seqMsg;document.getElementById('lineCards').parentNode.insertBefore(np,document.getElementById('lineCards'));}else{npc.style.display='';npc.style.borderColor=perr?'rgba(239,68,68,.45)':'rgba(245,158,11,.25)';npc.innerHTML=seqMsg;}
     document.getElementById('lineCards').innerHTML='';
     document.getElementById('lineMetricsTable').innerHTML='';
@@ -2944,7 +2944,7 @@ function renderSequence(){
   // Frozen at publish: the published view flags against the curfew that was in
   // force when it was published, not whatever the toolbar says right now.
   CURFEW_MIN=curfewToMin_(pub.finishBy);
-  renderFinishByReadout('seqFinishBy',CURFEW_MIN);
+  renderFinishByReadout('seqFinishBy',CURFEW_MIN);renderPublishedScenario_(pub);
   var tu=jobs.reduce(function(s,j){return s+j.qty;},0),al=lines.filter(function(l){return lineState[l.id]&&lineState[l.id].slots.length>0;}).length,naj=jobs.filter(function(j){return!j.hasAttrs;});
   document.getElementById('k-skus').textContent=fmtUnits(jobs.length);
   document.getElementById('k-units').textContent=fmtUnits(tu);
@@ -3010,10 +3010,50 @@ function renderWorkbench(){
   updateUndoBtn();
 }
 
-function renderLoadedDemand(){var weeks=getWeeks(),el=document.getElementById('loadedDemandTable');if(!weeks.length){el.innerHTML='<div style="font-family:var(--mono);font-size:11px;color:var(--muted)">No demand loaded.</div>';return;}var html='<table class="data-table"><thead><tr><th>Week</th><th>Day</th><th>Date</th><th>Mode</th><th style="text-align:right">SKUs</th><th style="text-align:right">Total Units</th><th>Published by</th><th>Published at</th><th></th></tr></thead><tbody>';weeks.forEach(function(wk){getDays(wk).forEach(function(day){var dd=STATE.demand[wk][day],tot=Object.keys(dd.skus||{}).reduce(function(s,k){return s+dd.skus[k];},0),date=dd.date?new Date(dd.date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'—',publishedAt=dd.publishedAt?new Date(dd.publishedAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}):'—';html+='<tr><td>'+wk+'</td><td>'+day+'</td><td>'+date+'</td><td><span class="mode-badge mode-'+dd.mode+'">'+dd.mode+'</span></td><td style="text-align:right">'+Object.keys(dd.skus||{}).length+'</td><td style="text-align:right">'+fmtUnits(Math.round(tot))+'</td><td style="color:var(--muted)">'+(dd.publishedBy||'—')+'</td><td style="color:var(--muted);font-size:11px">'+publishedAt+'</td><td style="text-align:right"><button class="btn btn-danger btn-sm" onclick="clearDemandDayUI(\''+wk+'\',\''+day+'\')" title="Clear this day">Clear</button></td></tr>';});});html+='</tbody></table>';el.innerHTML=html;}
-// Demand lives in the 'Demand Store' tab now, not Script Properties. Any day
-// still sitting in properties is shown here with a button, because a cleanup
-// that only exists in the Apps Script editor is a cleanup that doesn't happen.
+// v0.5.170: this table listed every day ever loaded — Wk 33 was still on screen
+// in Wk 36. Cori: "no one is looking for W33." Old days are HIDDEN, never
+// removed: the archive rows are untouched and Show all brings them straight
+// back. Deleting demand needs her explicit per-instance sign-off, and none was
+// given. Upcoming days are never hidden — planning ahead is the point of the
+// tab. A day whose date will not parse is always shown rather than quietly
+// filtered on a field we could not read.
+var _demandShowAll=false,DEMAND_RECENT_DAYS=14;
+function toggleDemandHistory(){_demandShowAll=!_demandShowAll;renderLoadedDemand();}
+function clearDemandRow(btn){clearDemandDayUI(btn.getAttribute('data-wk'),btn.getAttribute('data-day'));}
+function renderLoadedDemand(){
+  var weeks=getWeeks(),el=document.getElementById('loadedDemandTable');
+  if(!weeks.length){el.innerHTML='<div style="font-family:var(--mono);font-size:11px;color:var(--muted)">No demand loaded.</div>';return;}
+  var cutoff=new Date();cutoff.setHours(0,0,0,0);cutoff.setDate(cutoff.getDate()-DEMAND_RECENT_DAYS);
+  var rows=[],hidden=0;
+  weeks.forEach(function(wk){getDays(wk).forEach(function(day){
+    var dd=STATE.demand[wk][day],dt=dd.date?new Date(dd.date+'T12:00:00'):null;
+    if(dt&&isNaN(dt.getTime()))dt=null;
+    if(dt&&dt<cutoff&&!_demandShowAll){hidden++;return;}
+    rows.push({wk:wk,day:day,dd:dd,dt:dt});
+  });});
+  var html='';
+  if(hidden>0||_demandShowAll){
+    html+='<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
+      '<span>'+(_demandShowAll?'Showing every loaded day.'
+        :'Showing the last '+DEMAND_RECENT_DAYS+' days and everything upcoming — '+hidden+' older '+(hidden===1?'day':'days')+' hidden.')+
+      ' Nothing is deleted.</span>'+
+      '<button class="btn btn-sm" onclick="toggleDemandHistory()">'+(_demandShowAll?'Show recent only':'Show all')+'</button></div>';
+  }
+  html+='<table class="data-table"><thead><tr><th>Week</th><th>Day</th><th>Date</th><th>Mode</th><th style="text-align:right">SKUs</th><th style="text-align:right">Total Units</th><th>Published by</th><th>Published at</th><th></th></tr></thead><tbody>';
+  rows.forEach(function(r){
+    var dd=r.dd,tot=Object.keys(dd.skus||{}).reduce(function(a,k){return a+dd.skus[k];},0);
+    var date=r.dt?r.dt.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'—';
+    var publishedAt=dd.publishedAt?new Date(dd.publishedAt).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}):'—';
+    html+='<tr><td>'+escHtml(r.wk)+'</td><td>'+escHtml(r.day)+'</td><td>'+date+'</td>'+
+      '<td><span class="mode-badge mode-'+dd.mode+'">'+dd.mode+'</span></td>'+
+      '<td style="text-align:right">'+Object.keys(dd.skus||{}).length+'</td>'+
+      '<td style="text-align:right">'+fmtUnits(Math.round(tot))+'</td>'+
+      '<td style="color:var(--muted)">'+(dd.publishedBy||'—')+'</td>'+
+      '<td style="color:var(--muted);font-size:11px">'+publishedAt+'</td>'+
+      '<td style="text-align:right"><button class="btn btn-danger btn-sm" data-wk="'+escHtml(r.wk)+'" data-day="'+escHtml(r.day)+'" onclick="clearDemandRow(this)" title="Clear this day">Clear</button></td></tr>';
+  });
+  el.innerHTML=html+'</tbody></table>';
+}
 function checkDemandMigration(){
   if(!CURRENT_USER||!CURRENT_USER.isAdmin)return;
   google.script.run.withSuccessHandler(function(st){
@@ -3526,7 +3566,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.169';
+var APP_VERSION='v0.5.170';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -6675,6 +6715,21 @@ function refreshMyLine(btn){
   }).getState();
 }
 
+// v0.5.170: Line Sequence shows the PUBLISHED plan and nothing else, so the
+// interactive scenario bar had no business on it. It never changed this view —
+// renderSequence reads pub.lineState — but clicking a scenario there DID mutate
+// the day's active scenario and persist it, silently changing what Workbench
+// would re-sequence, and + Add / ✕ were live to anyone who could open the view.
+// Cori: "it's supposed to be published and static." What replaces it is a
+// read-only note of which scenario actually produced the published plan —
+// scenarioName is frozen into the snapshot at publish time. Workbench keeps the
+// real bar; that is where scenario modelling belongs.
+function renderPublishedScenario_(pub){
+  var el=document.getElementById('seqScenarioBar');if(!el)return;
+  if(!pub){el.innerHTML='';return;}
+  el.innerHTML='<span style="font-family:var(--mono);font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Published as</span>'+
+    '<span class="scn-tab active" style="cursor:default">'+escHtml(pub.scenarioName||'Baseline')+'</span>';
+}
 function renderScenarioBar(containerId){
   var el=document.getElementById(containerId);if(!el)return;
   if(!CURRENT_WEEK||!CURRENT_DAY){el.innerHTML='';return;}
