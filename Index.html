@@ -1,11 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.170 — 2026-08-31    (pairs with Code.js v0.4.102)
+  Sequins ✨ — Index.html    v0.5.171 — 2026-08-31    (pairs with Code.js v0.4.103)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.170 Line Sequence is read-only again: the interactive scenario bar is
-           gone (it silently re-pointed Workbench), replaced by a static
-           "Published as" note. Loaded Demand hides days older than 14 —
-           hidden, not deleted; Show all restores them.
+  v0.5.171 Loaded Demand shows last week and forward, on the Monday boundary
+           rather than a rolling 14 days. Still hidden, never deleted.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -3017,13 +3015,22 @@ function renderWorkbench(){
 // given. Upcoming days are never hidden — planning ahead is the point of the
 // tab. A day whose date will not parse is always shown rather than quietly
 // filtered on a field we could not read.
-var _demandShowAll=false,DEMAND_RECENT_DAYS=14;
+var _demandShowAll=false;
+// v0.5.171: last week and forward, not a rolling 14 days. Cori asked for the
+// week boundary, and a rolling window drifts across it — by Thursday, 14 days
+// back reaches into the week before last and puts a week she is done with back
+// on screen. Monday-based, matching DAYS_ORDER.
+function demandCutoff_(){
+  var d=new Date();d.setHours(0,0,0,0);
+  d.setDate(d.getDate()-((d.getDay()+6)%7)-7);
+  return d;
+}
 function toggleDemandHistory(){_demandShowAll=!_demandShowAll;renderLoadedDemand();}
 function clearDemandRow(btn){clearDemandDayUI(btn.getAttribute('data-wk'),btn.getAttribute('data-day'));}
 function renderLoadedDemand(){
   var weeks=getWeeks(),el=document.getElementById('loadedDemandTable');
   if(!weeks.length){el.innerHTML='<div style="font-family:var(--mono);font-size:11px;color:var(--muted)">No demand loaded.</div>';return;}
-  var cutoff=new Date();cutoff.setHours(0,0,0,0);cutoff.setDate(cutoff.getDate()-DEMAND_RECENT_DAYS);
+  var cutoff=demandCutoff_();
   var rows=[],hidden=0;
   weeks.forEach(function(wk){getDays(wk).forEach(function(day){
     var dd=STATE.demand[wk][day],dt=dd.date?new Date(dd.date+'T12:00:00'):null;
@@ -3035,7 +3042,7 @@ function renderLoadedDemand(){
   if(hidden>0||_demandShowAll){
     html+='<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">'+
       '<span>'+(_demandShowAll?'Showing every loaded day.'
-        :'Showing the last '+DEMAND_RECENT_DAYS+' days and everything upcoming — '+hidden+' older '+(hidden===1?'day':'days')+' hidden.')+
+        :'Showing last week and forward — '+hidden+' older '+(hidden===1?'day':'days')+' hidden.')+
       ' Nothing is deleted.</span>'+
       '<button class="btn btn-sm" onclick="toggleDemandHistory()">'+(_demandShowAll?'Show recent only':'Show all')+'</button></div>';
   }
@@ -3566,7 +3573,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.170';
+var APP_VERSION='v0.5.171';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;

@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.102 — 2026-08-31    (pairs with Index.html v0.5.170)
+ * Sequins ✨ — Code.js    v0.4.103 — 2026-08-31    (pairs with Index.html v0.5.171)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.102 No server change — pairing bump. Both changes are client-side and
- *          nothing was deleted: Loaded Demand only stops DISPLAYING old days.
+ * v0.4.103 No server change — pairing bump. Display window only; the Demand
+ *          Store sheet is untouched and is still the only copy of that data.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
