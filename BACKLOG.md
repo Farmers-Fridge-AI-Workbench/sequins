@@ -10,7 +10,24 @@ Opened 2026-08-19. Last refreshed 2026-08-31.
 
 ## Ready to build
 
-_Nothing queued._
+### Week labels sort as text, so Wk 1 lands at the top
+
+`getWeeks()` in Index.html is `Object.keys(STATE.demand).sort()` — a plain
+lexicographic sort on labels like `Wk 33 · 2026`. So `Wk 1 · 2027` sorts ahead
+of `Wk 33 · 2026`, and `Wk 5` sorts after `Wk 33`.
+
+Cori, 2026-08-31: "the W1 data that’s in the Compiled Forecast is for the end
+of 2026 and beginning of 2027 but it’s sitting at the top of the weeks
+available. We’ll need for Sequins to be smart enough to see that."
+
+Harmless while every loaded week was Wk 33-52 of a single year and two digits
+wide. Now that 2027 forecast weeks are loading it shows up in the week dropdown,
+the Loaded Demand table, and anywhere else that walks getWeeks().
+
+Fix is a comparator on (year, week) parsed out of the label, inside getWeeks()
+alone — callers all go through it. Grep for other places that sort week labels
+directly before assuming one change covers it. Note the label is also the
+storage key, so parse it, do not renumber it.
 
 ---
 
