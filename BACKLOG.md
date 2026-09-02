@@ -33,6 +33,31 @@ storage key, so parse it, do not renumber it.
 
 ## Small, mine to do
 
+### Sandbox week table: label a line that is new in the scenario
+
+v0.5.172 made a line switched OFF read "off in scenario" instead of a bare dash,
+after Samad asked why finish times differed by hours. The mirror case is still
+open: a line running in the scenario but not in the baseline — LINE-7 being
+stood up — shows a bare dash under Base units / Base run time / Finish base, and
+reads as the same puzzle from the other direction.
+
+Same spot, `sbCard_` per-day line table in Index.html: the `b` half of each
+ternary. Something like "not live yet". Flagged to Cori 2026-08-31, not asked
+for yet.
+
+### Confirm before Clear on Loaded Demand
+
+Each row in Loaded Demand has a Clear button. `clearDemandDay` in Code.js calls
+`deleteRow` on the Demand Store sheet and drops the legacy Script Properties
+keys — and that sheet IS the storage, not a backup of it. So Clear is a
+one-click permanent delete of the only copy of that day, with no confirmation.
+
+Admin-only, which is the reason it has not bitten. A confirm naming the day and
+saying the copy is the only one would fit the existing browser-confirm pattern
+(popups are fine in the web app; the no-popup rule is Sheets/Apps Script UI
+only). Raised 2026-08-31 while answering "we have that in the archives right?"
+— the answer being yes, and this button is what removes it.
+
 ---
 
 ## Blocked on Cori
