@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.172 — 2026-08-31    (pairs with Code.js v0.4.104)
+  Sequins ✨ — Index.html    v0.5.173 — 2026-08-31    (pairs with Code.js v0.4.105)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.172 Sandbox week table names a line that is off in the scenario instead
-           of showing a bare dash. Display only — no numbers change.
+  v0.5.173 Weeks sort by (year, week), not as text. Sandbox names a line that
+           is new in a scenario. Clear says the Demand Store is the only copy.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -1222,7 +1222,29 @@ function packageToPool(pkg){
 // Beverage_* and CPG_* are Menu Library's non-assembly package types. Kept in
 // sync with NON_ASSEMBLY_PACKAGE_RE in Code.js — if one changes, change both.
 function isNonAssemblyPkg_(pkg){return /^(beverage|cpg|bev)/i.test(String(pkg||'').trim());}
-function getWeeks(){return Object.keys(STATE.demand).sort();}
+// v0.5.173: week labels were sorted as plain text, so 'Wk 1 · 2027' came out
+// ahead of 'Wk 33 · 2026' and 'Wk 5' landed after 'Wk 33'. Sort on (year, week)
+// read out of the label. Every view goes through getWeeks(), so this one
+// comparator covers the week dropdowns, Loaded Demand, Sandbox and Line Planner.
+// Parsed by hand rather than by regex because the label is also the storage key
+// and must never be rewritten — only read. Anything that does not parse keeps a
+// stable spot at the end instead of shuffling between renders.
+function weekOrder_(label){
+  var t=String(label),i=t.indexOf('·');
+  if(i<0)return null;
+  var w=parseInt(t.slice(0,i).replace('Wk','').trim(),10);
+  var y=parseInt(t.slice(i+1).trim(),10);
+  if(!(w>0)||!(y>1900))return null;
+  return y*100+w;
+}
+function getWeeks(){
+  return Object.keys(STATE.demand).sort(function(a,b){
+    var ka=weekOrder_(a),kb=weekOrder_(b);
+    if(ka!==null&&kb!==null)return ka-kb;
+    if(ka===null&&kb===null)return a<b?-1:(a>b?1:0);
+    return ka===null?1:-1;
+  });
+}
 function getDays(week){if(!STATE.demand[week])return[];return DAYS_ORDER.filter(function(d){return!!STATE.demand[week][d];});}
 function fmtUnits(n){return Number(n).toLocaleString();}
 function fmtClock(totalMin){var m=Math.round(totalMin),do_=Math.floor(m/1440);m=((m%1440)+1440)%1440;var hh=Math.floor(m/60),mm=m%60,ap=hh>=12?'PM':'AM',h12=hh%12===0?12:hh%12;return h12+':'+String(mm).padStart(2,'0')+' '+ap+(do_>0?' +'+do_:'');}
@@ -3097,7 +3119,7 @@ function runDemandMigration(){
     }).withFailureHandler(fail).migrateStateToSheet();
   }).withFailureHandler(fail).migrateDemandToSheet();
 }
-function clearDemandDayUI(weekLabel,day){var dd=STATE.demand[weekLabel]&&STATE.demand[weekLabel][day];var dateStr=dd&&dd.date?new Date(dd.date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):day;if(!confirm('Clear '+weekLabel+' — '+day+' ('+dateStr+')?\n\nThis removes this one day\'s loaded demand. This cannot be undone.'))return;google.script.run.withSuccessHandler(function(){if(STATE.demand[weekLabel])delete STATE.demand[weekLabel][day];renderLoadedDemand();renderSequence();renderWorkbench();}).withFailureHandler(function(err){alert('Failed to clear: '+err.message);}).clearDemandDay(weekLabel,day);}
+function clearDemandDayUI(weekLabel,day){var dd=STATE.demand[weekLabel]&&STATE.demand[weekLabel][day];var dateStr=dd&&dd.date?new Date(dd.date+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):day;if(!confirm('Clear '+weekLabel+' — '+day+' ('+dateStr+')?\n\nThis removes this one day\'s loaded demand from the Demand Store sheet. That sheet is the only copy Sequins keeps - it is not archived anywhere else - and this cannot be undone.'))return;google.script.run.withSuccessHandler(function(){if(STATE.demand[weekLabel])delete STATE.demand[weekLabel][day];renderLoadedDemand();renderSequence();renderWorkbench();}).withFailureHandler(function(err){alert('Failed to clear: '+err.message);}).clearDemandDay(weekLabel,day);}
 function loadForecastWeeks(){google.script.run.withSuccessHandler(function(weeks){var sel=document.getElementById('forecastWeekSel');sel.innerHTML=weeks.length?weeks.map(function(w){return'<option value="'+w.label+'">'+w.label+'</option>';}).join(''):'<option value="">— no weeks found —</option>';}).withFailureHandler(function(){document.getElementById('forecastWeekSel').innerHTML='<option value="">— error —</option>';}).fetchForecastWeeks();}
 function fetchForecastPreview(){var weekLabel=document.getElementById('forecastWeekSel').value;if(!weekLabel)return;var btn=document.getElementById('fetchFcBtn');btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Fetching…';document.getElementById('fcPreview').innerHTML='';document.getElementById('fcPublishRow').style.display='none';google.script.run.withSuccessHandler(function(data){btn.disabled=false;btn.textContent='Fetch week';_pendingForecast=data;renderForecastPreview(data);document.getElementById('fcPublishRow').style.display='';document.getElementById('fcStatus').innerHTML='';}).withFailureHandler(function(err){btn.disabled=false;btn.textContent='Fetch week';document.getElementById('fcStatus').innerHTML='<div class="status status-err">'+err.message+'</div>';}).fetchForecastWeekData(weekLabel);}
 function renderForecastPreview(data){var skuData=data.skuData,dates=data.dates,weekLabel=data.weekLabel;var days=DAYS_ORDER.filter(function(d){return skuData[d]&&Object.keys(skuData[d]).length;});var skuSet={};days.forEach(function(d){Object.keys(skuData[d]).forEach(function(s){skuSet[s]=true;});});var allSkus=Object.keys(skuSet).sort(),totals={};days.forEach(function(d){totals[d]=Object.keys(skuData[d]).reduce(function(s,k){return s+skuData[d][k];},0);});var html='<div class="preview-wrap"><table class="preview-table"><thead><tr><th>SKU</th>'+days.map(function(d){return'<th>'+DAY_SHORT[d]+'<br><span style="font-size:9px;opacity:.6;font-weight:400">'+(dates[d]?new Date(dates[d]+'T12:00:00').toLocaleDateString('en-US',{month:'numeric',day:'numeric'}):'—')+'</span></th>';}).join('')+'</tr></thead><tbody>';allSkus.forEach(function(sku){html+='<tr><td>'+sku+'</td>'+days.map(function(d){return'<td>'+fmtUnits(skuData[d][sku]||0)+'</td>';}).join('')+'</tr>';});html+='<tr class="total-row"><td>Total</td>'+days.map(function(d){return'<td>'+fmtUnits(Math.round(totals[d]))+'</td>';}).join('')+'</tr></tbody></table></div><div style="font-size:10px;font-family:var(--mono);color:var(--muted);margin-top:8px">'+allSkus.length+' SKUs · '+days.length+' days · <strong style="color:var(--amber)">'+weekLabel+' · forecast</strong></div>';document.getElementById('fcPreview').innerHTML=html;}
@@ -3573,7 +3595,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.172';
+var APP_VERSION='v0.5.173';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -5297,7 +5319,7 @@ function runSandbox(){
       // switched off, but nothing on the row said so. Say it plainly. ids is
       // the union of both passes and sbSummarise drops lines that ran nothing
       // in BOTH, so a missing x always means it ran in base and is off here.
-      td(b?fmtClock(b.end):'\u2014');
+      td(b?fmtClock(b.end):'not live yet');
       td(x?fmtClock(x.end):'off in scenario');
       ltb.appendChild(tr);
     });

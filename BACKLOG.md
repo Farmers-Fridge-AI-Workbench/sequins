@@ -10,53 +10,13 @@ Opened 2026-08-19. Last refreshed 2026-08-31.
 
 ## Ready to build
 
-### Week labels sort as text, so Wk 1 lands at the top
-
-`getWeeks()` in Index.html is `Object.keys(STATE.demand).sort()` — a plain
-lexicographic sort on labels like `Wk 33 · 2026`. So `Wk 1 · 2027` sorts ahead
-of `Wk 33 · 2026`, and `Wk 5` sorts after `Wk 33`.
-
-Cori, 2026-08-31: "the W1 data that’s in the Compiled Forecast is for the end
-of 2026 and beginning of 2027 but it’s sitting at the top of the weeks
-available. We’ll need for Sequins to be smart enough to see that."
-
-Harmless while every loaded week was Wk 33-52 of a single year and two digits
-wide. Now that 2027 forecast weeks are loading it shows up in the week dropdown,
-the Loaded Demand table, and anywhere else that walks getWeeks().
-
-Fix is a comparator on (year, week) parsed out of the label, inside getWeeks()
-alone — callers all go through it. Grep for other places that sort week labels
-directly before assuming one change covers it. Note the label is also the
-storage key, so parse it, do not renumber it.
+_Nothing queued._
 
 ---
 
 ## Small, mine to do
 
-### Sandbox week table: label a line that is new in the scenario
-
-v0.5.172 made a line switched OFF read "off in scenario" instead of a bare dash,
-after Samad asked why finish times differed by hours. The mirror case is still
-open: a line running in the scenario but not in the baseline — LINE-7 being
-stood up — shows a bare dash under Base units / Base run time / Finish base, and
-reads as the same puzzle from the other direction.
-
-Same spot, `sbCard_` per-day line table in Index.html: the `b` half of each
-ternary. Something like "not live yet". Flagged to Cori 2026-08-31, not asked
-for yet.
-
-### Confirm before Clear on Loaded Demand
-
-Each row in Loaded Demand has a Clear button. `clearDemandDay` in Code.js calls
-`deleteRow` on the Demand Store sheet and drops the legacy Script Properties
-keys — and that sheet IS the storage, not a backup of it. So Clear is a
-one-click permanent delete of the only copy of that day, with no confirmation.
-
-Admin-only, which is the reason it has not bitten. A confirm naming the day and
-saying the copy is the only one would fit the existing browser-confirm pattern
-(popups are fine in the web app; the no-popup rule is Sheets/Apps Script UI
-only). Raised 2026-08-31 while answering "we have that in the archives right?"
-— the answer being yes, and this button is what removes it.
+_Nothing queued._
 
 ---
 
@@ -74,12 +34,6 @@ becomes a date comparison at the same chokepoint in `runSequencer`, plus a date
 input. Nothing else should move — every live surface already routes through
 `liveLines_`. The per-sandbox `lineDays` map stays regardless; it answers "how
 many days do we need it", not "when does it become real".
-
-### Wraps → LINE-3 / Sandwiches → LINE-2
-
-Still unconfirmed — see the "In transition" section of CLAUDE.md. The code has
-moved to soft home-line preferences; whether the *stated* rule retires is Cori's
-call. Don't encode either reading without asking.
 
 ---
 

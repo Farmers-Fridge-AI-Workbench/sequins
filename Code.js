@@ -1,8 +1,10 @@
 /**
- * Sequins ✨ — Code.js    v0.4.104 — 2026-08-31    (pairs with Index.html v0.5.172)
+ * Sequins ✨ — Code.js    v0.4.105 — 2026-08-31    (pairs with Index.html v0.5.173)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.104 No server change — pairing bump. Sandbox label wording only.
+ * v0.4.105 fetchForecastWeeks derives each week label’s year from the real
+ *          dates in row 3 instead of stamping the current year on all of them,
+ *          and returns them ordered by (year, week).
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -840,6 +842,20 @@ function getLastModified() {
 }
 
 // ─── DEMAND FETCH: COMPILED FORECAST ─────────────────────────────────────────
+// v0.4.105: the year in the label used to be new Date().getFullYear(), so every
+// week was stamped with the CURRENT year whichever year it actually belonged to.
+// Week 1 of next year came back as 'Wk 1 · 2026' and sat at the top of the
+// dropdown above Wk 33 — and the label is the storage key everywhere in Sequins,
+// so that was wrong data and not merely wrong order. Row 3 carries the real
+// dates; the year now comes from those.
+//
+// Taken from the LAST day of the week, not the first and not the ISO week-year.
+// This sheet numbers weeks by planning year: its Week 1 is the one containing
+// Jan 1, which for 2027 runs Dec 28 - Jan 3. First-day would call that 2026. So
+// would ISO, which counts it week 53 of 2026 because its Thursday is Dec 31 —
+// right by the standard, wrong for this source. The last day lands in January in
+// every straddling case, and any week that does not straddle New Year has all
+// seven days in one year anyway.
 function fetchForecastWeeks() {
   const ss    = SpreadsheetApp.openById(FORECAST_SHEET_ID);
   const sheet = ss.getSheetByName(FORECAST_TAB);
@@ -860,15 +876,24 @@ function fetchForecastWeeks() {
     const dayName = String(row2[ci]).trim();
     if (!DAYS.includes(dayName)) return;
     const dateVal = row3[ci];
-    const dateStr = dateVal instanceof Date
-      ? Utilities.formatDate(dateVal, Session.getScriptTimeZone(), 'yyyy-MM-dd') : '';
-    const yr    = new Date().getFullYear();
-    const label = 'Wk ' + wkNum + ' · ' + yr;
-    if (!weeks[label]) weeks[label] = { label, wkNum, days: [] };
-    weeks[label].days.push(dayName);
+    if (!weeks[wkNum]) weeks[wkNum] = { wkNum, days: [], last: null };
+    weeks[wkNum].days.push(dayName);
+    if (dateVal instanceof Date && (!weeks[wkNum].last || dateVal > weeks[wkNum].last)) {
+      weeks[wkNum].last = dateVal;
+    }
   });
 
-  return Object.values(weeks).sort((a, b) => a.wkNum - b.wkNum);
+  const thisYear = new Date().getFullYear();
+  const out = Object.keys(weeks).map(k => {
+    const w = weeks[k];
+    const year = w.last ? w.last.getFullYear() : thisYear;
+    if (w.days.length > 7) {
+      Logger.log('fetchForecastWeeks: week ' + w.wkNum + ' has ' + w.days.length +
+        ' day columns - the same week number may appear twice and they have been merged under ' + year);
+    }
+    return { label: 'Wk ' + w.wkNum + ' · ' + year, wkNum: w.wkNum, year, days: w.days };
+  });
+  return out.sort((a, b) => a.year - b.year || a.wkNum - b.wkNum);
 }
 
 

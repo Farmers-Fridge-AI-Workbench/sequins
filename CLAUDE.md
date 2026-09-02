@@ -120,14 +120,14 @@ Sequins web app UI — those are fine for error surfacing.
 - Night shift runs the restricted SKU list only
 - No night shift Fridays or Saturdays
 
-**In transition — do not touch without explicit confirmation from Cori:**
+**Home lines are config, not code — settled 2026-08-31:**
 
-- Wraps → LINE-3 only / Sandwiches → LINE-2 only. These predate the
-  FC-W / FC-S model. **The code has already moved on** — they live in
-  `DEFAULT_RULES.homeLines` as a soft preference, and the legend now reads
-  "category only prefers a home line" / "soft home line." What remains
-  open is whether the *stated* rule is retired. Cori has **not** confirmed.
-  Do not encode either reading without asking her.
+- Wraps and sandwiches have **soft home-line preferences**, stored in
+  `sequencingRules.homeLines` and edited in Line Config. They are preferences,
+  not line locks, and the legend says so. Cori set wraps to `LINE-3, LINE-4`
+  on 2026-08-31, which retires the older "wraps → LINE-3 only" phrasing.
+  Nothing here to encode or ask about — a preference that needs changing is
+  hers to change in the app.
 
 **Settled 2026-08-10 by Samad — do not reopen:**
 
