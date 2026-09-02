@@ -22,22 +22,19 @@ _Nothing queued._
 
 ## Blocked on Cori
 
-### Go-live date for sandbox-only lines
+_Nothing queued._
 
-`sandboxOnly` is a boolean: a line is hidden from live planning or it isn't, and
-flipping it is a manual edit. What Cori wants is a **date** in Line Config for
-when a staged line joins real planning, so LINE-7 turns itself on for the
-holiday weeks without anyone remembering.
-
-Deferred 2026-08-19 to ship the sandbox modelling first. When built, the flag
-becomes a date comparison at the same chokepoint in `runSequencer`, plus a date
-input. Nothing else should move — every live surface already routes through
-`liveLines_`. The per-sandbox `lineDays` map stays regardless; it answers "how
-many days do we need it", not "when does it become real".
+Dropped 2026-08-31: the **go-live date for sandbox-only lines**. Cori: "for now
+we will just turn it on when it's time." The manual `sandboxOnly` checkbox is
+enough. Restate it here if flipping it by hand ever gets missed.
 
 ---
 
-## Blocked on someone else
+## Parked — low priority, Cori's call 2026-08-31
+
+Both need an org owner and neither is urgent: "you can stop worrying about that
+for now too...very low prio." Kept on record because the exposure is real and
+still open, not because it needs chasing.
 
 ### Repo visibility — public since 2026-06-30
 
