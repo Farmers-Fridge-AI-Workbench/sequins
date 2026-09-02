@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.171 — 2026-08-31    (pairs with Code.js v0.4.103)
+  Sequins ✨ — Index.html    v0.5.172 — 2026-08-31    (pairs with Code.js v0.4.104)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.171 Loaded Demand shows last week and forward, on the Monday boundary
-           rather than a rolling 14 days. Still hidden, never deleted.
+  v0.5.172 Sandbox week table names a line that is off in the scenario instead
+           of showing a bare dash. Display only — no numbers change.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -3573,7 +3573,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.171';
+var APP_VERSION='v0.5.172';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -5288,11 +5288,17 @@ function runSandbox(){
       td(b?fmtUnits(b.units):'\u2014','right');
       td(x?fmtUnits(x.units):'\u2014','right');
       td(b?sbDur_(b.min):'\u2014','right');
-      td(x?sbDur_(x.min):'\u2014 (down)','right');
+      td(x?sbDur_(x.min):'\u2014','right');
       var dm=(x?x.min:0)-(b?b.min:0);
       td(sbMin_(dm),'right',dm>=1?'sb-delta-up':(dm<=-1?'sb-delta-dn':''));
+      // v0.5.172: a line dark in the scenario rendered a bare dash here, and
+      // a cryptic "(down)" for run time. Samad read these finish columns and
+      // asked why they differed by hours; the answer was a line he had himself
+      // switched off, but nothing on the row said so. Say it plainly. ids is
+      // the union of both passes and sbSummarise drops lines that ran nothing
+      // in BOTH, so a missing x always means it ran in base and is off here.
       td(b?fmtClock(b.end):'\u2014');
-      td(x?fmtClock(x.end):'\u2014');
+      td(x?fmtClock(x.end):'off in scenario');
       ltb.appendChild(tr);
     });
     // Day totals (v0.5.138). Units are the day's volume. Minutes are SUMMED

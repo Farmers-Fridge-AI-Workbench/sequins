@@ -1,9 +1,8 @@
 /**
- * Sequins ✨ — Code.js    v0.4.103 — 2026-08-31    (pairs with Index.html v0.5.171)
+ * Sequins ✨ — Code.js    v0.4.104 — 2026-08-31    (pairs with Index.html v0.5.172)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.103 No server change — pairing bump. Display window only; the Demand
- *          Store sheet is untouched and is still the only copy of that data.
+ * v0.4.104 No server change — pairing bump. Sandbox label wording only.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
