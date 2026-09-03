@@ -10,7 +10,23 @@ Opened 2026-08-19. Last refreshed 2026-08-31.
 
 ## Ready to build
 
-_Nothing queued._
+### Quarterly throughput report: most improved, most declined
+
+Cori, 2026-09-03: "Might be cool to report on a quarterly basis what what’s
+improved and declined the most too..."
+
+Now possible, and cheap, because v0.4.113 started writing every adopted UPM
+change to a **UPM Updates** tab with the old value, the new value, the sample
+behind it and a timestamp. A quarter of those rows IS the report — no new data
+collection, just a read of history that did not exist before this week.
+
+Rank by percentage change over the quarter, not absolute UPM: a bowl going 9 to
+11 matters more than a snack going 40 to 42. Worth splitting improved from
+declined rather than one signed list, since they prompt different conversations.
+
+Open question before building: does a declining UPM mean the line got slower, or
+that the SKU changed? A recipe change mid-quarter makes before and after two
+different products. The Menu Library label version may be the tell.
 
 ---
 
