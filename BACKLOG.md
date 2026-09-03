@@ -4,31 +4,36 @@ Open items only. Delete an entry when it's done — git history is the record,
 this file is the "what's still hanging" list. Each entry should stand alone:
 enough context to act on without the conversation that created it.
 
-Opened 2026-08-19. Last refreshed 2026-08-31.
+Opened 2026-08-19. Last refreshed 2026-09-03.
 
 ---
 
 ## Ready to build
 
-### Quarterly throughput report: most improved, most declined
+### Finish the tablet pass on My Line
 
-Cori, 2026-09-03: "Might be cool to report on a quarterly basis what what’s
-improved and declined the most too..."
+Cori, 2026-09-03, on priority: "I think the focus on the tablet piece is
+priority". v0.5.174 added the 900px breakpoint and v0.5.175 the Start/Stop
+buttons, both verified against her Galaxy Fold at 766px. What is left needs a
+real device or a decision:
 
-Now possible, and cheap, because v0.4.113 started writing every adopted UPM
-change to a **UPM Updates** tab with the old value, the new value, the sample
-behind it and a timestamp. A quarter of those rows IS the report — no new data
-collection, just a read of history that did not exist before this week.
-
-Rank by percentage change over the quarter, not absolute UPM: a bowl going 9 to
-11 matters more than a snack going 40 to 42. Worth splitting improved from
-declined rather than one signed list, since they prompt different conversations.
-
-Open question before building: does a declining UPM mean the line got slower, or
-that the SKU changed? A recipe change mid-quarter makes before and after two
-different products. The Menu Library label version may be the tell.
+- **Hide the nav strip entirely for a floor-viewer-only login.** She sees seven
+  nav items as an admin; a line lead sees two, and on a handheld even two is a
+  row of screen given to navigation nobody uses. Flagged 2026-08-31, never
+  answered — needs her call, not a guess.
+- **ACTUAL UNITS still raises the alphabet keyboard.** `inputmode="numeric"`,
+  one attribute. Left alone because she said the entry panel was not the focus,
+  but it is a five-second fix whenever the panel matters.
+- **Test on the tablet they actually buy.** The Fold unfolds to roughly 766 CSS
+  px; a 10-inch tablet is nearer 1024 landscape. The layout will be close but
+  the breakpoint should be confirmed on the real thing.
+- **Decide the login.** If all seven tablets share one Google account, every
+  actual is attributed to that account in the audit log and in `UpdatedBy`.
+  Fine for testing, worth settling before it is the evidentiary record.
 
 ---
+
+## Small, mine to do---
 
 ## Small, mine to do
 
@@ -104,22 +109,38 @@ private/internal. Prevents recurrence better than auditing repos one at a time.
 
 ## Known gaps, not bugs
 
-### Off-capper moves read optimistic
+### Off-capper moves read optimistic — NO LONGER BLOCKED
 
-Runtime is planned at the library UPM regardless of which line runs a SKU, so a
+Runtime is planned at one library UPM regardless of which line runs a SKU, so a
 capper SKU spilled onto a normal line is modelled as costing the same time it
-would on the capper. If the capper is genuinely faster, every off-capper move —
-including LINE-6 → LINE-7 in Sandbox — understates the cost. Needs real
-off-capper completion times from the floor tracker.
+would on the capper.
 
-### Overtime cannot be derived from headcount
+This said "needs real off-capper completion times from the floor tracker". That
+is no longer true. The **Data Drop** (2026-09-03) carries `Line` on every run, so
+per-line UPM is directly measurable and was measured: on the first pass
+USDA_CHEF_SALAD_TURKEY ran 20.4 UPM on LINE-6 against 9.8 elsewhere, and
+GRILLED_CHICKEN 22.1 against 12.8. The gap is real and large.
 
-`sbOvertime_` prices overtime from crew size, but the engine's runtime is
-`qty ÷ upm` with `upm` a per-SKU constant. Nothing makes throughput a function
-of people, so the model cannot answer "how many people do we need" — only "how
-long will it run". Same blocker as above.
+What it needs now is a decision, not data: whether the engine should hold a
+per-line UPM instead of one number per SKU. That changes every runtime
+calculation, so it is a deliberate change and not a quiet one.
+
+### Overtime cannot be derived from headcount — NO LONGER BLOCKED
+
+`sbOvertime_` prices overtime from crew size, but runtime is `qty / upm` with
+`upm` a per-SKU constant, so nothing makes throughput a function of people.
+
+Also written as blocked on the floor tracker, and also no longer true: the Data
+Drop carries **Line Population** per run. UPM as a function of crew size is
+measurable from data that already exists and arrives nightly.
+
+Same shape of decision as above — the data is there, the modelling change is the
+work, and it is the thing that would let Sandbox answer "how many people do we
+need" rather than only "how long will it run".
 
 ---
+
+## Optional — quality of life---
 
 ## Optional — quality of life
 
