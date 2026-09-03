@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.118 — 2026-09-03    (pairs with Index.html v0.5.186)
+ * Sequins ✨ — Code.js    v0.4.119 — 2026-09-03    (pairs with Index.html v0.5.187)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.118 fetchUpmHalves reads TWO quarters — the last 90 days and the 90
- *          before them — instead of halving a single 90-day window.
+ * v0.4.119 No server change — pairing bump. Average crew per SKU was already
+ *          returned by fetchObservedUpm; the client just never showed it.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
