@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.181 — 2026-09-03    (pairs with Code.js v0.4.113)
+  Sequins ✨ — Index.html    v0.5.182 — 2026-09-03    (pairs with Code.js v0.4.114)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.181 Apply 90-day UPMs, plus a weekly Sunday update that refuses to run on
-           stale data — and a red banner to any admin when the Data Drop stops
-           arriving or its columns move. Observed UPM card can be closed.
+  v0.5.182 Quarterly throughput report: UPM per SKU per quarter since January,
+           what got faster and slower, and capper vs non-capper for every SKU
+           that ran on both.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -795,6 +795,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           <button class="btn btn-ghost btn-sm" onclick="prefillUsdaPairs()" title="Fills usdaPairedSku for the 5 pairs established from ingredient BOMs. Blanks only — never overwrites an existing pairing.">⇄ Prefill known USDA pairs</button>
           <button class="btn btn-ghost btn-sm" onclick="loadObservedUpm()" title="Measured units-per-minute per SKU from the analytics team&#39;s Data Drop, last 90 days. Read-only — nothing is written to the library.">⏱ Observed UPM (90d)</button>
           <button class="btn btn-ghost btn-sm" onclick="applyObservedUpm()" title="Overwrite the SKU Library UPMs with the 90-day measured average. Writes a UPM Updates history row for every change.">↻ Apply 90-day UPMs</button>
+          <button class="btn btn-ghost btn-sm" onclick="exportQuarterlyThroughput()" title="Throughput by quarter per SKU since January, plus capper vs non-capper. Writes a Throughput by Quarter tab.">📈 Quarterly throughput</button>
           <button class="btn btn-ghost btn-sm" onclick="exportUpmComparison()" title="Writes the library-vs-observed comparison to a UPM Comparison tab in the archive workbook, to share.">⬇ Export UPM comparison</button>
           <button class="btn btn-teal btn-sm" onclick="saveSkuLibrary()">Save changes</button>
         </div>
@@ -3396,6 +3397,21 @@ function applyObservedUpm(){
     body.innerHTML='<div class="status status-err">\u26a0 '+escHtml(err&&err.message||"failed")+'</div>';
   }).applyObservedUpm(90);
 }
+function exportQuarterlyThroughput(){
+  var card=document.getElementById("observedUpmCard"),body=document.getElementById("observedUpmBody");
+  card.style.display="";
+  body.innerHTML='<div class="status status-info"><span class="spinner"></span>Reading every run since January\u2026</div>';
+  google.script.run.withSuccessHandler(function(r){
+    body.innerHTML='<div class="status status-ok">\u2713 <b>'+fmtUnits(r.rows)+'</b> SKUs written to the <b>Throughput by Quarter</b> tab '
+      +'\u2014 quarters '+escHtml(r.quarters.join(", "))+'.<br>'
+      +'<a href="'+escHtml(r.url)+'" target="_blank" style="color:var(--teal)">Open it</a>'
+      +'<div style="color:var(--muted);font-size:11px;margin-top:6px">'
+      +r.bothLines+' SKU(s) ran on both the capper and other lines \u2014 those are the rows where Capper Gap is meaningful. '
+      +'Sort on Change to see what improved and declined most.</div></div>';
+  }).withFailureHandler(function(err){
+    body.innerHTML='<div class="status status-err">\u26a0 '+escHtml(err&&err.message||"failed")+'</div>';
+  }).exportQuarterlyThroughput();
+}
 function toggleWeeklyUpm(on){
   google.script.run.withSuccessHandler(function(){renderUpmAuto();})
     .withFailureHandler(function(err){alert("Could not change the weekly update: "+err.message);})
@@ -3839,7 +3855,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.181';
+var APP_VERSION='v0.5.182';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;

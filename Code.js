@@ -1,10 +1,10 @@
 /**
- * Sequins ✨ — Code.js    v0.4.113 — 2026-09-03    (pairs with Index.html v0.5.181)
+ * Sequins ✨ — Code.js    v0.4.114 — 2026-09-03    (pairs with Index.html v0.5.182)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.113 dataDropHealth gates both the weekly UPM update and an admin banner;
- *          applyObservedUpm_ writes measured UPMs into the library and appends
- *          every change to a UPM Updates tab with the old value.
+ * v0.4.114 fetchUpmByQuarter buckets every run by quarter and by line;
+ *          exportQuarterlyThroughput writes the quarter-over-quarter change and
+ *          the capper-vs-other-lines gap to a Throughput by Quarter tab.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -1842,6 +1842,127 @@ function applyObservedUpm_(days, actor) {
   writeAuditLog_(actor, 'apply_observed_upm', '', '', stamp.message);
   Logger.log('applyObservedUpm_: ' + stamp.message);
   return { ok: true, changed: changes.length, checked: stamp.checked, message: stamp.message, health: health };
+}
+
+// ─── THROUGHPUT OVER TIME (v0.4.114) ────────────────────────────────────────
+// Cori: "let's do the quarterly report -- and I want you to look at the data and
+// see the changes in the capper recipes from the beginning of the year to now."
+//
+// Built from the Data Drop, NOT from the UPM Updates history. The history only
+// starts the day we began adopting measured rates, so a quarterly report off it
+// would have exactly one data point. The drop goes back to January, so the
+// quarters are real.
+//
+// Same pass answers both questions, because they are the same shape: bucket every
+// run by quarter and by line, then read the buckets two ways. Quarter over
+// quarter is the report; LINE-6 against everything else is the capper.
+const QUARTER_TAB = 'Throughput by Quarter';
+const CAPPER_LINE = 'LINE-6';
+
+function fetchUpmByQuarter() {
+  const sheet = SpreadsheetApp.openById(DATA_DROP_SHEET_ID).getSheetByName(DATA_DROP_TAB);
+  if (!sheet) throw new Error('Tab "' + DATA_DROP_TAB + '" not found.');
+  const lastRow = sheet.getLastRow(), lastCol = Math.min(sheet.getLastColumn(), 40);
+  if (lastRow < 2) return { skus: {}, quarters: [] };
+
+  const all = sheet.getRange(1, 1, lastRow, lastCol).getValues();
+  const head = all[0].map(function(h) { return String(h || '').trim(); });
+  const iDate = head.indexOf('Date'), iLine = head.indexOf('Line'), iSku = head.indexOf('Item Sku'),
+        iStart = head.indexOf('Second of Chicago Start Time'), iEnd = head.indexOf('Second of Chicago End Time'),
+        iUnits = head.indexOf('Units Produced'), iFlag = head.indexOf('Units per Minute Flag');
+  if (iSku < 0 || iStart < 0 || iEnd < 0 || iUnits < 0 || iDate < 0) throw new Error('Data Drop columns moved.');
+
+  const asTime = function(v) {
+    if (v instanceof Date) return v.getTime();
+    const t = Date.parse(String(v || '')); return isNaN(t) ? null : t;
+  };
+
+  const out = {}, qSeen = {};
+  for (let r = 1; r < all.length; r++) {
+    const row = all[r];
+    const sku = String(row[iSku] || '').trim().toUpperCase();
+    if (!sku) continue;
+    // Same exclusion as the UPM average: flagged rows are anomalies.
+    if (iFlag >= 0 && /^y$/i.test(String(row[iFlag] || '').trim())) continue;
+    const d = asTime(row[iDate]); if (d === null) continue;
+    const units = parseFloat(String(row[iUnits] || '').replace(/,/g, ''));
+    const a = asTime(row[iStart]), b = asTime(row[iEnd]);
+    if (a === null || b === null || !isFinite(units) || units <= 0) continue;
+    let mins = (b - a) / 60000;
+    if (mins < 0) mins += 1440;
+    if (!(mins > 0) || mins > 720) continue;
+
+    const dt = new Date(d);
+    const q = dt.getFullYear() + '-Q' + (Math.floor(dt.getMonth() / 3) + 1);
+    qSeen[q] = true;
+    const line = String(row[iLine] || '').trim().toUpperCase();
+
+    if (!out[sku]) out[sku] = { q: {}, capper: { u: 0, m: 0 }, other: { u: 0, m: 0 } };
+    const o = out[sku];
+    if (!o.q[q]) o.q[q] = { u: 0, m: 0, days: {} };
+    o.q[q].u += units; o.q[q].m += mins;
+    o.q[q].days[dt.getFullYear() + '-' + dt.getMonth() + '-' + dt.getDate()] = true;
+    const bucket = (line === CAPPER_LINE) ? o.capper : o.other;
+    bucket.u += units; bucket.m += mins;
+  }
+
+  const quarters = Object.keys(qSeen).sort();
+  const skus = {};
+  Object.keys(out).forEach(function(k) {
+    const o = out[k], q = {};
+    quarters.forEach(function(qq) {
+      if (o.q[qq] && o.q[qq].m > 0) {
+        q[qq] = { upm: Math.round(o.q[qq].u / o.q[qq].m * 10) / 10, days: Object.keys(o.q[qq].days).length };
+      }
+    });
+    skus[k] = {
+      q: q,
+      capperUpm: o.capper.m > 0 ? Math.round(o.capper.u / o.capper.m * 10) / 10 : null,
+      otherUpm:  o.other.m  > 0 ? Math.round(o.other.u  / o.other.m  * 10) / 10 : null
+    };
+  });
+  return { skus: skus, quarters: quarters };
+}
+
+function exportQuarterlyThroughput() {
+  const user = getCurrentUser();
+  if (!user.isAdmin && !user.canEditRules) throw new Error('Not authorized');
+  const res = fetchUpmByQuarter();
+  const qs = res.quarters;
+  if (!qs.length) throw new Error('No usable runs in the Data Drop.');
+
+  const header = ['SKU'].concat(qs)
+    .concat(['Change ' + qs[0] + ' to ' + qs[qs.length - 1], 'Direction',
+             'Capper UPM (' + CAPPER_LINE + ')', 'Other Lines UPM', 'Capper Gap']);
+
+  const rows = Object.keys(res.skus).sort().map(function(k) {
+    const o = res.skus[k];
+    const first = o.q[qs[0]], last = o.q[qs[qs.length - 1]];
+    // Percentage, not absolute: a bowl going 9 to 11 matters more than a snack
+    // going 40 to 42, and only the percentage says so.
+    const chg = (first && last && first.upm > 0) ? (last.upm - first.upm) / first.upm : '';
+    const dir = chg === '' ? 'no comparable quarters' : (chg > 0.02 ? 'faster' : (chg < -0.02 ? 'slower' : 'flat'));
+    const gap = (o.capperUpm && o.otherUpm) ? (o.capperUpm - o.otherUpm) / o.otherUpm : '';
+    return [k].concat(qs.map(function(q) { return o.q[q] ? o.q[q].upm : ''; }))
+              .concat([chg, dir, o.capperUpm === null ? '' : o.capperUpm,
+                       o.otherUpm === null ? '' : o.otherUpm, gap]);
+  });
+
+  writeConfigMirror_(QUARTER_TAB, header, rows);
+  const ss = SpreadsheetApp.openById(PLAN_ARCHIVE_SHEET_ID);
+  const sheet = ss.getSheetByName(QUARTER_TAB);
+  if (sheet && rows.length) {
+    sheet.getRange(2, qs.length + 2, rows.length, 1).setNumberFormat('0%');   // Change
+    sheet.getRange(2, header.length, rows.length, 1).setNumberFormat('0%');   // Capper Gap
+  }
+
+  const capper = Object.keys(res.skus).filter(function(k) {
+    return res.skus[k].capperUpm !== null && res.skus[k].otherUpm !== null;
+  });
+  Logger.log('exportQuarterlyThroughput: ' + rows.length + ' SKUs, quarters ' + qs.join(', ') +
+    ', ' + capper.length + ' ran on both the capper and other lines.');
+  return { ok: true, rows: rows.length, quarters: qs, bothLines: capper.length,
+           url: ss.getUrl() + '#gid=' + (sheet ? sheet.getSheetId() : '') };
 }
 
 function applyObservedUpm(days) {
