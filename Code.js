@@ -1,9 +1,10 @@
 /**
- * Sequins ✨ — Code.js    v0.4.107 — 2026-08-31    (pairs with Index.html v0.5.175)
+ * Sequins ✨ — Code.js    v0.4.108 — 2026-08-31    (pairs with Index.html v0.5.176)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.107 No server change — pairing bump. Start/Stop writes through the
- *          existing saveRunSheetActuals path; the columns already exist.
+ * v0.4.108 OptimalHC joins the SKU Library mirror; PlannedPeople is appended
+ *          to Run Sheet Actuals, and runSheetTab_ now widens an existing
+ *          tab’s header instead of throwing when a column is added.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -71,7 +72,7 @@ const LINE_CFG_MIRROR_TAB   = 'Line Config';   // same spreadsheet
 // rather than one column per rule, so a new rule needs no schema change.
 const RULES_MIRROR_TAB      = 'Sequencing Rules';
 const RULES_MIRROR_HEADER   = ['Key','Value','UpdatedAt','UpdatedLocal','UpdatedBy'];
-const SKU_LIB_MIRROR_HEADER = ['SKU','Active','Pending','Category','FcClass','PackageType','UnitsPerTote','UPM','Allergens','LabelNumberVersion','LinesSunTh','LinesFriSat','FriSatOverride','UsdaPairedSku','Capper','NightShift','PreProcessed','UpdatedAt','UpdatedLocal','UpdatedBy'];
+const SKU_LIB_MIRROR_HEADER = ['SKU','Active','Pending','Category','FcClass','PackageType','UnitsPerTote','UPM','OptimalHC','Allergens','LabelNumberVersion','LinesSunTh','LinesFriSat','FriSatOverride','UsdaPairedSku','Capper','NightShift','PreProcessed','UpdatedAt','UpdatedLocal','UpdatedBy'];
 const LINE_CFG_MIRROR_HEADER = ['LineId','Label','Type','Room','HC','LineLead','Pool','StartTime','SandboxOnly','CapCapper','CapSmallCup','CapUsdaApproved','CapNight','Mon','Tue','Wed','Thu','Fri','Sat','Sun','UpdatedAt','UpdatedLocal','UpdatedBy'];
 const DEMAND_ARCHIVE_TAB    = 'Demand Archive';  // same spreadsheet — see ARCHIVE OLD DEMAND
 const DEMAND_STORE_TAB     = 'Demand Store';    // same spreadsheet — see DEMAND STORE below
@@ -1632,7 +1633,12 @@ function normalizeSku_(s) {
 const RUN_ACTUALS_HEADER = ['UpdatedAt','UpdatedBy','Week','Day','Date','Room','Line','LineLabel','SeqPos','SKU',
                             'PlannedUnits','PlannedFullTotes','PlannedPartialUnits','LabelVersion',
                             'ActualStart','ActualEnd','ActualPeople','ActualUnits',
-                            'ActualFullTotes','ActualPartialUnits'];
+                            'ActualFullTotes','ActualPartialUnits',
+                            // v0.4.108. Appended rather than filed with the other Planned
+                            // columns on purpose: inserting mid-header would shift every
+                            // column of any row already written. Order is cosmetic, an
+                            // off-by-one in a floor record is not.
+                            'PlannedPeople'];
 const RUN_SHIFT_HEADER   = ['UpdatedAt','UpdatedBy','Week','Day','Date','Room','Line','LineLabel','LineLeadName','HeldOverTotes'];
 
 function runSheetTab_(name, header) {
@@ -1643,6 +1649,21 @@ function runSheetTab_(name, header) {
     sheet.getRange(1, 1, 1, header.length).setValues([header]);
     sheet.setFrozenRows(1);
     Logger.log('runSheetTab_: created "' + name + '".');
+    return sheet;
+  }
+  // v0.4.108: a tab created before a column was added still carries the old,
+  // narrower header, and runSheetUpsert_ reads and writes header.length columns
+  // — so it would throw the moment the header grew. Widen and restamp row 1.
+  // EXTEND ONLY: columns are appended, never reordered, so existing data keeps
+  // its positions and no cell is rewritten.
+  if (sheet.getMaxColumns() < header.length) {
+    sheet.insertColumnsAfter(sheet.getMaxColumns(), header.length - sheet.getMaxColumns());
+  }
+  const cur = sheet.getRange(1, 1, 1, header.length).getValues()[0];
+  const same = header.every(function(h, i) { return String(cur[i] || '') === h; });
+  if (!same) {
+    sheet.getRange(1, 1, 1, header.length).setValues([header]);
+    Logger.log('runSheetTab_: header on "' + name + '" widened to ' + header.length + ' columns.');
   }
   return sheet;
 }
@@ -1710,7 +1731,8 @@ function saveRunSheetActuals(payload) {
             r.plannedPartialUnits === null || r.plannedPartialUnits === undefined ? '' : r.plannedPartialUnits,
             r.labelVersion || '',
             r.start || '', r.end || '', r.people || '', r.units || '',
-            '', ''];  // ActualFullTotes / ActualPartialUnits — reserved, see header
+            '', '',   // ActualFullTotes / ActualPartialUnits — reserved, see header
+            r.plannedPeople === undefined || r.plannedPeople === null ? '' : r.plannedPeople];
   });
   const res = rows.length
     ? runSheetUpsert_(runSheetTab_(RUN_ACTUALS_TAB, RUN_ACTUALS_HEADER), RUN_ACTUALS_HEADER, rows, [4, 6, 9])
@@ -2207,7 +2229,9 @@ function mirrorSkuLibrary_(library, email) {
     const s = library[k] || {};
     return [
       k, s.active !== false, !!s.pending, s.category || '', s.fcClass || '',
-      s.packageType || '', s.unitsPerTote || '', s.upm || '', s.allergens || '',
+      s.packageType || '', s.unitsPerTote || '', s.upm || '',
+      s.optimalHC === undefined || s.optimalHC === '' ? '' : s.optimalHC,
+      s.allergens || '',
       s.labelNumberVersion || '',
       (s.admissibleLines || []).join(', '),
       (s.admissibleLinesFriSat || []).join(', '),

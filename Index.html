@@ -1,9 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.175 — 2026-08-31    (pairs with Code.js v0.4.107)
+  Sequins ✨ — Index.html    v0.5.176 — 2026-08-31    (pairs with Code.js v0.4.108)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.175 My Line: Start/Stop buttons clock each SKU. Start is refused until
-           # people is entered, which moves onto the card face to gate it.
+  v0.5.176 Menu team’s per-SKU Optimal HC was fetched and thrown away. Kept
+           now: shown read-only in SKU Library, as the target beside # PEOPLE
+           on My Line, and as the gap vs line staffing on Workbench rows.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -812,7 +813,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         <div id="skuLibStatus" style="margin-bottom:10px"></div>
         <div style="overflow-x:auto">
           <table class="data-table"><thead><tr>
-            <th>SKU</th><th title="Food-contact class — drives allergen compounding + line-type">FC</th><th>Package</th><th title="Units in a full tote. A SKU fact, not a package fact — the same package type carries different tote counts. Drives the tote split on My Line.">Units/Tote</th><th>UPM</th><th>Allergens</th><th>Label</th><th title="Lines this SKU may run on Sunday through Thursday">Lines Sun–Th</th><th title="Lines this SKU may run on Friday and Saturday. “same” means it inherits the Sun–Th list.">Lines F–Sat</th><th title="Non-USDA counterpart. Grouping the pair saves a changeover — the base build, jar and lid are shared.">USDA Pair</th>
+            <th>SKU</th><th title="Food-contact class — drives allergen compounding + line-type">FC</th><th>Package</th><th title="Units in a full tote. A SKU fact, not a package fact — the same package type carries different tote counts. Drives the tote split on My Line.">Units/Tote</th><th>UPM</th><th title="Menu team's optimal headcount for this SKU, from the Master Document. Read-only here — Menu owns it.">Opt HC</th><th>Allergens</th><th>Label</th><th title="Lines this SKU may run on Sunday through Thursday">Lines Sun–Th</th><th title="Lines this SKU may run on Friday and Saturday. “same” means it inherits the Sun–Th list.">Lines F–Sat</th><th title="Non-USDA counterpart. Grouping the pair saves a changeover — the base build, jar and lid are shared.">USDA Pair</th>
             <th style="text-align:center"><div style="color:var(--teal);font-size:14px;font-weight:600" id="sc-capper">—</div>Capper</th>
             <th style="text-align:center"><div style="color:var(--teal);font-size:14px;font-weight:600" id="sc-night">—</div>Night</th>
             <th style="text-align:center"><div style="color:var(--teal);font-size:14px;font-weight:600" id="sc-preproc">—</div>Pre-Proc</th>
@@ -2729,8 +2730,24 @@ function buildJobRow_(line,job,i,draggable,rules){
     if(!lv)return'';
     return '<div style="'+st+';color:var(--muted)" title="Label number / version">\ud83c\udff7 '+lv+'</div>';
   })();
-  if(draggable){var ss=job.sku.replace(/'/g,"\\'");return'<div class="'+rc+'" draggable="true" ondragstart="wbDragStart(event,\''+ss+'\',\''+line.id+'\')" ondragend="wbDragEnd(event)" ondragover="wbRowDragOver(event,\''+line.id+'\','+i+')" ondragleave="wbRowDragLeave(event)"><div class="sku-row-top"><span class="sku-seq">'+(i+1)+'</span><span class="sku-name" title="'+job.sku+'">'+job.sku+'</span>'+preTag+tag+ovTag+ftag+cfTag+cbTag+bsTag+'<span class="sku-units">'+fmtUnits(job.qty)+'</span></div>'+tl+alTag+lblTag+'</div>';}
-  return'<div class="'+rc+'"><div class="sku-row-top"><span class="sku-seq">'+(i+1)+'</span><span class="sku-name" title="'+job.sku+'">'+job.sku+'</span>'+preTag+tag+cfTag+cbTag+bsTag+'<span class="sku-units">'+fmtUnits(job.qty)+'</span></div>'+tl+alTag+lblTag+'</div>';
+  // v0.5.176 (Cori): "how far off are we on labor if we look at it based on
+  // what Menu envisioned". Menu sets an optimal headcount per SKU in the
+  // Master Document; a line runs ONE configured headcount all day, so every
+  // SKU whose optimum differs is over- or under-staffed for as long as it
+  // runs. That gap was invisible — the number was fetched and thrown away.
+  // Reported, never acted on: nothing here feeds the sequencer.
+  var hcTag=(function(){
+    var st='font-family:var(--mono);font-size:9px;padding:1px 0 0 22px';
+    var opt=parseFloat(((STATE.skuLibrary||{})[(job.sku||'').toUpperCase()]||{}).optimalHC);
+    if(!isFinite(opt)||opt<=0)return'';
+    var staffed=Number(line.hc)||0,d=staffed-opt;
+    var txt='\ud83d\udc65 Menu '+opt;
+    if(staffed)txt+=' · staffed '+staffed+(d?' ('+(d>0?'+':'')+d+')':'');
+    var col=d>0?'var(--amber)':(d<0?'var(--red)':'var(--muted)');
+    return'<div style="'+st+';color:'+col+'" title="Menu team&#39;s optimal headcount for this SKU vs the headcount this line is configured to run. Over is labour cost; under is a line that may not hit its rate.">'+txt+'</div>';
+  })();
+  if(draggable){var ss=job.sku.replace(/'/g,"\\'");return'<div class="'+rc+'" draggable="true" ondragstart="wbDragStart(event,\''+ss+'\',\''+line.id+'\')" ondragend="wbDragEnd(event)" ondragover="wbRowDragOver(event,\''+line.id+'\','+i+')" ondragleave="wbRowDragLeave(event)"><div class="sku-row-top"><span class="sku-seq">'+(i+1)+'</span><span class="sku-name" title="'+job.sku+'">'+job.sku+'</span>'+preTag+tag+ovTag+ftag+cfTag+cbTag+bsTag+'<span class="sku-units">'+fmtUnits(job.qty)+'</span></div>'+tl+alTag+lblTag+hcTag+'</div>';}
+  return'<div class="'+rc+'"><div class="sku-row-top"><span class="sku-seq">'+(i+1)+'</span><span class="sku-name" title="'+job.sku+'">'+job.sku+'</span>'+preTag+tag+cfTag+cbTag+bsTag+'<span class="sku-units">'+fmtUnits(job.qty)+'</span></div>'+tl+alTag+lblTag+hcTag+'</div>';
 }
 // Enabled breaks are draggable, same as SKU rows — dropping one at a new
 // position saves that position as the day override; time is never typed,
@@ -3343,7 +3360,7 @@ function filterSkuTable(){var search=(document.getElementById('skuSearch').value
       if(warn)sel+='<div style="font-family:var(--mono);font-size:10px;color:var(--amber);margin-top:3px;max-width:210px;line-height:1.3">\u26A0 '+warn+'</div>';
       return sel;
     })();
-    var fc=s.fcClass||'';var fcCell='<select class="inline-input" onchange="updateSkuField(\''+key+'\',\'fcClass\',this.value)" style="width:78px"><option value=""'+(fc===''?' selected':'')+'>—</option><option value="FC-W"'+(fc==='FC-W'?' selected':'')+'>FC-W</option><option value="FC-S"'+(fc==='FC-S'?' selected':'')+'>FC-S</option></select>';return'<tr><td><span class="sku-active-dot '+(s.active!==false?'dot-active':'dot-inactive')+'"></span>'+key+'</td><td>'+fcCell+'</td><td><input class="inline-input" value="'+(s.packageType||'')+'" onchange="updateSkuField(\''+key+'\',\'packageType\',this.value)" style="width:100px"></td><td><input class="inline-input" type="number" min="1" value="'+(s.unitsPerTote||'')+'" onchange="updateSkuField(\''+key+'\',\'unitsPerTote\',parseFloat(this.value))" style="width:82px"></td><td><input class="inline-input" type="number" value="'+(s.upm||'')+'" onchange="updateSkuField(\''+key+'\',\'upm\',parseFloat(this.value))" style="width:120px"></td><td>'+(isAllergenUnknown_(s.allergens)?'<span style="background:var(--red-dim);color:var(--red);border:1px solid rgba(239,68,68,.25);border-radius:4px;padding:2px 6px;font-size:10px;white-space:nowrap" title="No allergen data — sequenced as worst case (all six allergens) so it can never seed a food-contact chain">\u26A0 NO ALLERGEN DATA</span>':'')+'<input class="inline-input" value="'+((s.allergens&&!isAllergenUnknown_(s.allergens))?s.allergens:'')+'" onchange="updateSkuField(\''+key+'\',\'allergens\',this.value)" style="width:140px'+(isAllergenUnknown_(s.allergens)?';margin-top:3px':'')+'"></td><td>'+labelCell+'</td><td>'+linesCell+'</td><td>'+linesLateCell+'</td><td>'+pairCell+'</td><td style="text-align:center">'+chk('capper')+'</td><td style="text-align:center">'+chk('nightShift')+'</td><td style="text-align:center">'+chk('preProcessed')+'</td><td style="text-align:center">'+chk('active')+'</td><td>'+stagingCell_(key,s)+'</td></tr>';}).join('');}
+    var fc=s.fcClass||'';var fcCell='<select class="inline-input" onchange="updateSkuField(\''+key+'\',\'fcClass\',this.value)" style="width:78px"><option value=""'+(fc===''?' selected':'')+'>—</option><option value="FC-W"'+(fc==='FC-W'?' selected':'')+'>FC-W</option><option value="FC-S"'+(fc==='FC-S'?' selected':'')+'>FC-S</option></select>';return'<tr><td><span class="sku-active-dot '+(s.active!==false?'dot-active':'dot-inactive')+'"></span>'+key+'</td><td>'+fcCell+'</td><td><input class="inline-input" value="'+(s.packageType||'')+'" onchange="updateSkuField(\''+key+'\',\'packageType\',this.value)" style="width:100px"></td><td><input class="inline-input" type="number" min="1" value="'+(s.unitsPerTote||'')+'" onchange="updateSkuField(\''+key+'\',\'unitsPerTote\',parseFloat(this.value))" style="width:82px"></td><td><input class="inline-input" type="number" value="'+(s.upm||'')+'" onchange="updateSkuField(\''+key+'\',\'upm\',parseFloat(this.value))" style="width:120px"></td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--muted)">'+(s.optimalHC||'\u2014')+'</td><td>'+(isAllergenUnknown_(s.allergens)?'<span style="background:var(--red-dim);color:var(--red);border:1px solid rgba(239,68,68,.25);border-radius:4px;padding:2px 6px;font-size:10px;white-space:nowrap" title="No allergen data — sequenced as worst case (all six allergens) so it can never seed a food-contact chain">\u26A0 NO ALLERGEN DATA</span>':'')+'<input class="inline-input" value="'+((s.allergens&&!isAllergenUnknown_(s.allergens))?s.allergens:'')+'" onchange="updateSkuField(\''+key+'\',\'allergens\',this.value)" style="width:140px'+(isAllergenUnknown_(s.allergens)?';margin-top:3px':'')+'"></td><td>'+labelCell+'</td><td>'+linesCell+'</td><td>'+linesLateCell+'</td><td>'+pairCell+'</td><td style="text-align:center">'+chk('capper')+'</td><td style="text-align:center">'+chk('nightShift')+'</td><td style="text-align:center">'+chk('preProcessed')+'</td><td style="text-align:center">'+chk('active')+'</td><td>'+stagingCell_(key,s)+'</td></tr>';}).join('');}
 var _skuTimer=null;
 // ─── STAGING / PENDING SKUS (v0.5.72) ────────────────────────────────────────
 // A pending SKU is one entered in Sequins before Menu Library knows it exists —
@@ -3475,7 +3492,7 @@ function applyAdmissibleLinesModal(){
 }
 function updateSkuCounts(){var lib=STATE.skuLibrary,k=Object.keys(lib).filter(function(x){return !lib[x].pending;});var pend=Object.keys(lib).filter(function(x){return !!lib[x].pending;});var pEl=document.getElementById('sc-pending');if(pEl)pEl.textContent=pend.length?String(pend.length):'0';document.getElementById('sc-capper').textContent=k.filter(function(x){return lib[x].capper;}).length;document.getElementById('sc-night').textContent=k.filter(function(x){return lib[x].nightShift;}).length;document.getElementById('sc-preproc').textContent=k.filter(function(x){return lib[x].preProcessed;}).length;document.getElementById('sc-active').textContent=k.filter(function(x){return lib[x].active!==false;}).length;document.getElementById('sc-total').textContent=k.length;}
 function saveSkuLibrary(isAutoSave){var el=document.getElementById('skuLibStatus');if(el)el.innerHTML='<div class="status status-info"><span class="spinner"></span>Saving…</div>';google.script.run.withSuccessHandler(function(r){_cfgDirty.sku=false;if(r&&r.mirror){if(el)el.innerHTML='<div class="status status-warn">✓ Saved — but '+r.mirror+'</div>';return;}if(el){el.innerHTML='<div class="status status-ok">✓ Saved'+(isAutoSave?' (auto)':'')+'</div>';setTimeout(function(){if(el.innerHTML.indexOf('Saved')!==-1)el.innerHTML='';},3000);}}).withFailureHandler(function(err){if(el)el.innerHTML='<div class="status status-err">⚠ SAVE FAILED: '+err.message+'</div>';}).saveSkuLibrary(STATE.skuLibrary);}
-function importSkusFromForecast(){var allSkuNamesSet={};Object.keys(STATE.demand).forEach(function(wk){Object.keys(STATE.demand[wk]).forEach(function(day){Object.keys(STATE.demand[wk][day].skus||{}).forEach(function(sku){allSkuNamesSet[sku]=true;});});});Object.keys(STATE.skuLibrary).forEach(function(key){allSkuNamesSet[key]=true;});var allSkuNames=Object.keys(allSkuNamesSet),el=document.getElementById('skuLibStatus');if(!allSkuNames.length){el.innerHTML='<div class="status status-warn">No demand loaded yet — load demand first.</div>';return;}el.innerHTML='<div class="status status-info"><span class="spinner"></span>Pulling attributes…</div>';google.script.run.withSuccessHandler(function(result){var attributes=result.attributes,notFound=result.notFound,added=0,updated=0;allSkuNames.forEach(function(sku){var key=sku.toUpperCase(),normKey=key.replace(/[^A-Z0-9]/g,''),attrs=attributes[normKey];if(!STATE.skuLibrary[key]){STATE.skuLibrary[key]={active:true,category:'',packageType:'',unitsPerTote:'',upm:'',allergens:'',capper:false,nightShift:false,preProcessed:false};added++;}if(attrs){if(attrs.category)STATE.skuLibrary[key].category=attrs.category;if(attrs.packageType)STATE.skuLibrary[key].packageType=attrs.packageType;if(attrs.allergens)STATE.skuLibrary[key].allergens=attrs.allergens;if(attrs.upm)STATE.skuLibrary[key].upm=attrs.upm;updated++;}});renderSkuLibrary();var nfMsg=notFound.length?('<br><span style="color:var(--amber)">⚠ '+notFound.length+' not found: '+notFound.slice(0,10).join(', ')+(notFound.length>10?'…':'')+'</span>'):'';el.innerHTML='<div class="status status-info"><span class="spinner"></span>'+added+' new, '+updated+' matched — saving…</div>';google.script.run.withSuccessHandler(function(){el.innerHTML='<div class="status status-ok">✓ Saved — '+added+' new, '+updated+' matched'+nfMsg+'</div>';}).withFailureHandler(function(err){el.innerHTML='<div class="status status-err">⚠ Pull ok, SAVE FAILED: '+err.message+'</div>';}).saveSkuLibrary(STATE.skuLibrary);}).withFailureHandler(function(err){el.innerHTML='<div class="status status-err">'+err.message+'</div>';}).fetchSkuAttributesFor(allSkuNames);}
+function importSkusFromForecast(){var allSkuNamesSet={};Object.keys(STATE.demand).forEach(function(wk){Object.keys(STATE.demand[wk]).forEach(function(day){Object.keys(STATE.demand[wk][day].skus||{}).forEach(function(sku){allSkuNamesSet[sku]=true;});});});Object.keys(STATE.skuLibrary).forEach(function(key){allSkuNamesSet[key]=true;});var allSkuNames=Object.keys(allSkuNamesSet),el=document.getElementById('skuLibStatus');if(!allSkuNames.length){el.innerHTML='<div class="status status-warn">No demand loaded yet — load demand first.</div>';return;}el.innerHTML='<div class="status status-info"><span class="spinner"></span>Pulling attributes…</div>';google.script.run.withSuccessHandler(function(result){var attributes=result.attributes,notFound=result.notFound,added=0,updated=0;allSkuNames.forEach(function(sku){var key=sku.toUpperCase(),normKey=key.replace(/[^A-Z0-9]/g,''),attrs=attributes[normKey];if(!STATE.skuLibrary[key]){STATE.skuLibrary[key]={active:true,category:'',packageType:'',unitsPerTote:'',upm:'',allergens:'',capper:false,nightShift:false,preProcessed:false};added++;}if(attrs){if(attrs.category)STATE.skuLibrary[key].category=attrs.category;if(attrs.packageType)STATE.skuLibrary[key].packageType=attrs.packageType;if(attrs.allergens)STATE.skuLibrary[key].allergens=attrs.allergens;if(attrs.upm)STATE.skuLibrary[key].upm=attrs.upm;if(attrs.optimalHC!==undefined&&attrs.optimalHC!=='')STATE.skuLibrary[key].optimalHC=attrs.optimalHC;updated++;}});renderSkuLibrary();var nfMsg=notFound.length?('<br><span style="color:var(--amber)">⚠ '+notFound.length+' not found: '+notFound.slice(0,10).join(', ')+(notFound.length>10?'…':'')+'</span>'):'';el.innerHTML='<div class="status status-info"><span class="spinner"></span>'+added+' new, '+updated+' matched — saving…</div>';google.script.run.withSuccessHandler(function(){el.innerHTML='<div class="status status-ok">✓ Saved — '+added+' new, '+updated+' matched'+nfMsg+'</div>';}).withFailureHandler(function(err){el.innerHTML='<div class="status status-err">⚠ Pull ok, SAVE FAILED: '+err.message+'</div>';}).saveSkuLibrary(STATE.skuLibrary);}).withFailureHandler(function(err){el.innerHTML='<div class="status status-err">'+err.message+'</div>';}).fetchSkuAttributesFor(allSkuNames);}
 
 // v0.5.58: rules consolidation — line seeds moved into the Active Lines table
 // (per-line attribute, natural home) and category home lines moved to their
@@ -3657,7 +3674,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.175';
+var APP_VERSION='v0.5.176';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -6543,7 +6560,9 @@ function mlRunBlock_(lineId,job){
   var end=String(mlEntryVal_(lineId,sku,'end')||'').trim();
   var d=' data-li="'+escHtml(lineId)+'" data-sku="'+escHtml(sku)+'"';
   var h='<div class="ml-run">';
-  h+='<div class="ml-f"><label># PEOPLE</label><input type="text" inputmode="numeric"'+d+' value="'+escHtml(people)+'" placeholder="--" oninput="mlPeopleChanged(this)"></div>';
+  var planHc=String(((STATE.skuLibrary||{})[(sku||'').toUpperCase()]||{}).optimalHC||'').trim();
+  var planTag=planHc?' <span style="color:var(--teal)">· plan '+escHtml(planHc)+'</span>':'';
+  h+='<div class="ml-f"><label># PEOPLE'+planTag+'</label><input type="text" inputmode="numeric"'+d+' value="'+escHtml(people)+'" placeholder="--" oninput="mlPeopleChanged(this)"></div>';
   if(!start){
     h+='<button class="btn btn-teal ml-run-btn" data-act="start"'+d+' onclick="mlStart(this)"'+(people?'':' disabled')+'>Start</button>';
     h+='<span class="ml-run-hint"'+(people?' style="display:none"':'')+'>Enter # people first</span>';
@@ -6634,7 +6653,11 @@ function mlFlushSave_(){
       plannedFullTotes:t?t.full:null,plannedPartialUnits:t?t.part:null,
       labelVersion:j.labelVersion||((lib[(j.sku||'').toUpperCase()]||{}).labelNumberVersion)||'',
       start:mlEntryVal_(ctx.line,j.sku,'start'),end:mlEntryVal_(ctx.line,j.sku,'end'),
-      people:mlEntryVal_(ctx.line,j.sku,'people'),units:mlEntryVal_(ctx.line,j.sku,'actual')
+      people:mlEntryVal_(ctx.line,j.sku,'people'),units:mlEntryVal_(ctx.line,j.sku,'actual'),
+      // Frozen alongside, for the same reason plannedUnits is: the library can
+      // change, and an actual headcount is meaningless without the number it
+      // was actually being measured against on the day.
+      plannedPeople:((lib[(j.sku||'').toUpperCase()]||{}).optimalHC)||''
     };
   });
   mlSaveStatus_('saving');
