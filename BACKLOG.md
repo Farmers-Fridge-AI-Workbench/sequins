@@ -33,7 +33,7 @@ real device or a decision:
 
 ---
 
-## Small, mine to do---
+---
 
 ## Small, mine to do
 
@@ -140,7 +140,7 @@ need" rather than only "how long will it run".
 
 ---
 
-## Optional — quality of life---
+---
 
 ## Optional — quality of life
 
