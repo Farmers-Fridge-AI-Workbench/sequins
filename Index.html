@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.176 — 2026-08-31    (pairs with Code.js v0.4.108)
+  Sequins ✨ — Index.html    v0.5.177 — 2026-09-03    (pairs with Code.js v0.4.109)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.176 Menu team’s per-SKU Optimal HC was fetched and thrown away. Kept
-           now: shown read-only in SKU Library, as the target beside # PEOPLE
-           on My Line, and as the gap vs line staffing on Workbench rows.
+  v0.5.177 SKU Library: Observed UPM (90d) reads the analytics team’s Data Drop
+           and ranks measured throughput against the library value, with the
+           crew that ran it and UPLH. Read-only — nothing is written back.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -792,6 +792,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           <button class="btn btn-ghost btn-sm" onclick="resyncAllergens()" title="Menu Library is the source of truth and overwrites Sequins' values. Blank or 'No import' becomes NO ALLERGEN DATA — never treated as allergen-free.">⚠ Resync allergens</button>
           <button class="btn btn-ghost btn-sm" onclick="resyncLabelVersions()" title="Re-reads the Label Version Log now instead of waiting for the daily 3am run. Read-only against the source sheet; overwrites labelNumberVersion on every SKU in the library.">🏷 Resync label versions</button>
           <button class="btn btn-ghost btn-sm" onclick="prefillUsdaPairs()" title="Fills usdaPairedSku for the 5 pairs established from ingredient BOMs. Blanks only — never overwrites an existing pairing.">⇄ Prefill known USDA pairs</button>
+          <button class="btn btn-ghost btn-sm" onclick="loadObservedUpm()" title="Measured units-per-minute per SKU from the analytics team&#39;s Data Drop, last 90 days. Read-only — nothing is written to the library.">⏱ Observed UPM (90d)</button>
           <button class="btn btn-teal btn-sm" onclick="saveSkuLibrary()">Save changes</button>
         </div>
       </div>
@@ -821,6 +822,10 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
             <th title="Staged SKUs only — what's still missing, and Promote once complete">Staging</th>
           </tr></thead><tbody id="skuTableBody"></tbody></table>
         </div>
+      </div>
+      <div class="card" id="observedUpmCard" style="display:none">
+        <div class="card-title">Observed UPM <span style="color:var(--muted);font-weight:400" id="observedUpmSub"></span></div>
+        <div id="observedUpmBody"></div>
       </div>
     </div>
 
@@ -3343,6 +3348,75 @@ function prefillUsdaPairs(){
     if(el)el.innerHTML='<div class="status status-err">\u26A0 SAVE FAILED: '+err.message+'</div>';
   }).saveSkuLibrary(lib);
 }
+// ─── OBSERVED THROUGHPUT (v0.5.177) ─────────────────────────────────────────
+// Cori: "I want to use this data to find the average thruput by sku (last 90
+// days -- if we have less data than that for a new SKU for example we just use
+// what we have)."
+//
+// Read-only on purpose. The library UPM drives every run time, finish estimate
+// and labour figure the app produces, so replacing it wholesale from a measured
+// average is a decision with consequences across every view - not a side effect
+// of clicking a button labelled "show me the data". This ranks the disagreements
+// and leaves the adopting to a human.
+var _observedUpm=null;
+function loadObservedUpm(){
+  var card=document.getElementById("observedUpmCard"),body=document.getElementById("observedUpmBody"),
+      sub=document.getElementById("observedUpmSub");
+  card.style.display="";
+  sub.textContent="";
+  body.innerHTML='<div class="status status-info"><span class="spinner"></span>Reading the Data Drop\u2026</div>';
+  google.script.run.withSuccessHandler(function(res){
+    _observedUpm=res;renderObservedUpm(res);
+  }).withFailureHandler(function(err){
+    body.innerHTML='<div class="status status-err">\u26a0 '+escHtml(err&&err.message||"failed")+'</div>';
+  }).fetchObservedUpm(90);
+}
+function renderObservedUpm(res){
+  var body=document.getElementById("observedUpmBody"),sub=document.getElementById("observedUpmSub");
+  var lib=STATE.skuLibrary||{},skus=(res&&res.skus)||{},keys=Object.keys(skus);
+  if(!keys.length){body.innerHTML='<div class="status status-warn">No usable runs in the window.</div>';return;}
+  sub.textContent=" \u00b7 "+keys.length+" SKUs from "+fmtUnits(res.used)+" runs in the last "+res.window+" days";
+  var rows=keys.map(function(k){
+    var o=skus[k],cur=parseFloat((lib[k]||{}).upm);
+    var d=(isFinite(cur)&&cur>0)?((o.upm-cur)/cur*100):null;
+    return{sku:k,obs:o.upm,cur:isFinite(cur)&&cur>0?cur:null,pct:d,runs:o.runs,days:o.dayCount,
+           lines:o.lineCount,flagged:o.flagged,last:o.last,hc:o.hc,uplh:o.uplh,menu:parseFloat((lib[k]||{}).optimalHC)};
+  });
+  // biggest disagreement first; SKUs with no library UPM to compare sink to the bottom
+  rows.sort(function(a,b){
+    var A=a.pct===null?-1:Math.abs(a.pct),B=b.pct===null?-1:Math.abs(b.pct);return B-A;
+  });
+  var h='<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:10px;line-height:1.6">'
+    +'Weighted by volume (total units / total minutes), not an average of averages. '
+    +'A SKU with less than '+res.window+' days of history contributes what it has \u2014 check <b>days</b> before trusting a row. '
+    +(res.skippedFlag?(res.skippedFlag+' runs flagged "Y" in the source were excluded. '):'')
+    +'Nothing here is written to the library.'
+    +'</div>';
+  h+='<div style="overflow-x:auto"><table class="data-table"><thead><tr>'
+    +'<th>SKU</th><th style="text-align:right">Library UPM</th><th style="text-align:right">Observed</th>'
+    +'<th style="text-align:right">\u0394</th>'
+    +'<th style="text-align:right" title="Volume-weighted average crew that actually ran it">Avg HC</th>'
+    +'<th style="text-align:right" title="Menu team optimal headcount, for comparison">Menu HC</th>'
+    +'<th style="text-align:right" title="Units per labour hour = units / (crew x hours)">UPLH</th>'
+    +'<th style="text-align:right">Runs</th><th style="text-align:right">Days</th>'
+    +'<th style="text-align:right">Lines</th><th>Last seen</th></tr></thead><tbody>';
+  rows.forEach(function(r){
+    var col=r.pct===null?"var(--muted)":(Math.abs(r.pct)>=25?"var(--red)":(Math.abs(r.pct)>=10?"var(--amber)":"var(--muted)"));
+    var thin=r.days<5;
+    h+='<tr><td>'+escHtml(r.sku)+'</td>'
+      +'<td style="text-align:right">'+(r.cur===null?'\u2014':r.cur)+'</td>'
+      +'<td style="text-align:right;font-weight:600">'+r.obs+'</td>'
+      +'<td style="text-align:right;color:'+col+'">'+(r.pct===null?'\u2014':((r.pct>0?"+":"")+r.pct.toFixed(0)+"%"))+'</td>'
+      +'<td style="text-align:right">'+(r.hc===null||r.hc===undefined?'\u2014':r.hc)+'</td>'
+      +'<td style="text-align:right;color:var(--muted)">'+(isFinite(r.menu)&&r.menu>0?r.menu:'\u2014')+'</td>'
+      +'<td style="text-align:right">'+(r.uplh===null||r.uplh===undefined?'\u2014':r.uplh)+'</td>'
+      +'<td style="text-align:right">'+r.runs+'</td>'
+      +'<td style="text-align:right'+(thin?';color:var(--amber)':'')+'">'+r.days+'</td>'
+      +'<td style="text-align:right">'+r.lines+'</td>'
+      +'<td style="color:var(--muted);font-size:11px">'+escHtml(r.last||'\u2014')+'</td></tr>';
+  });
+  body.innerHTML=h+'</tbody></table></div>';
+}
 function filterSkuTable(){var search=(document.getElementById('skuSearch').value||'').toLowerCase(),showInactive=document.getElementById('showInactiveChk').checked,lib=STATE.skuLibrary,allKeys=Object.keys(lib);updateSkuCounts();var pendingOnly=document.getElementById('showPendingChk')&&document.getElementById('showPendingChk').checked;var nonAsm=allKeys.filter(function(k){return isNonAssemblyPkg_(lib[k].packageType);});var skus=allKeys.filter(function(k){if(isNonAssemblyPkg_(lib[k].packageType))return false;var isPending=!!lib[k].pending;if(pendingOnly){if(!isPending)return false;}else if(isPending)return false;if(!showInactive&&lib[k].active===false)return false;if(!search)return true;var s=lib[k];var haystack=[k,s.category,s.packageType,s.allergens,s.labelNumberVersion,s.usdaPairedSku,(s.admissibleLines||[]).join(' '),(s.admissibleLinesFriSat||[]).join(' ')].join(' ').toLowerCase();return haystack.indexOf(search)!==-1;}).sort();document.getElementById('skuCount').textContent=skus.length+' SKUs'+(nonAsm.length?' \u00b7 '+nonAsm.length+' non-assembly hidden':'');document.getElementById('skuTableBody').innerHTML=skus.map(function(key){var s=lib[key];function chk(f){return'<input type="checkbox" '+(s[f]?'checked':'')+' style="accent-color:var(--teal)" onchange="updateSkuField(\''+key+'\',\''+f+'\',this.checked)">';}var labelVal=s.labelNumberVersion||'',labelCell=labelVal==='NO ACTIVE LABEL'?'<span style="background:var(--red-dim);color:var(--red);border:1px solid rgba(239,68,68,.2);border-radius:4px;padding:2px 6px;font-size:10px;white-space:nowrap">⚠ NO ACTIVE LABEL</span>':(labelVal?'<span style="color:var(--muted);font-size:11px">'+labelVal+'</span>':'<span style="color:var(--muted);font-size:11px">—</span>');var admEarly=(s.admissibleLines&&s.admissibleLines.length)?s.admissibleLines:null;
       // null = inherits Sun-Th. An empty array with the override ON is a real,
       // deliberate "Any on Fri-Sat" and must not read as inheritance.
@@ -3674,7 +3748,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.176';
+var APP_VERSION='v0.5.177';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;

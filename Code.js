@@ -1,10 +1,10 @@
 /**
- * Sequins ✨ — Code.js    v0.4.108 — 2026-08-31    (pairs with Index.html v0.5.176)
+ * Sequins ✨ — Code.js    v0.4.109 — 2026-09-03    (pairs with Index.html v0.5.177)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.108 OptimalHC joins the SKU Library mirror; PlannedPeople is appended
- *          to Run Sheet Actuals, and runSheetTab_ now widens an existing
- *          tab’s header instead of throwing when a column is added.
+ * v0.4.109 fetchObservedUpm reads the analytics team’s Data Drop and returns
+ *          volume-weighted UPM, average crew and UPLH per SKU over a trailing
+ *          window. Read-only; nothing is written to any sheet.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -19,6 +19,14 @@ const MENU_LIBRARY_SHEET_ID = '1Exdh-emJxD7TohJ3IzjIQZDP3siPgjuVXhp3J7Gw2Ik'; //
 const MENU_LIBRARY_TAB      = 'Full Menu Summary';  // B=Category, C=SKU Name, L=Package, M=Allergens
 const PROCESSING_SHEET_ID   = '1v_C2ZUR9_PjTqCO4XU16x2oRTvmvpdT43cs0d3tyh54'; // FPLModel Engine
 const PROCESSING_TAB        = 'Processing Complexity'; // B=SKU Name, E=90 Day Duration/Unit
+// Observed throughput. The analytics team drops one row per production run into
+// this tab overnight - date, line, start, end, SKU, units - so units divided by
+// elapsed time is a MEASURED units-per-minute, per SKU, on real days. Sequins
+// otherwise plans every run from a single hand-entered UPM per SKU that is the
+// same on every line and never changes.
+const DATA_DROP_SHEET_ID    = '1GUVv-2suadVxGaVoQKU815l1_Oqu8hYAgwiStWEwrjI'; // Standard (Labor Planning) v/s Actual UPLH DoD
+const DATA_DROP_TAB         = 'Data Drop';
+const OBSERVED_UPM_DAYS     = 90;
 const LABEL_LOG_SHEET_ID    = '17rfAQdNYSki1ndD5QzA8MACUmClGotmje4GccXfBMws'; // Label Versions & Updates
 const LABEL_LOG_TAB         = 'Label Version Log'; // A=SKU, B=SKU Name, C=Version Number, D=Label Number, E=Label File, F=Label Status
 // Published-plan archive (v0.5.33 storage rework): published plans no longer
@@ -1510,6 +1518,123 @@ function removePushedDemandTrigger() {
     if (t.getHandlerFunction() === 'pushedDemandTrigger') { ScriptApp.deleteTrigger(t); n++; }
   });
   Logger.log('Removed ' + n + ' pushedDemandTrigger(s).');
+}
+
+// ─── OBSERVED THROUGHPUT (v0.4.109) ───────────────────────────────
+/**
+ * Average units-per-minute per SKU, measured from the analytics team's Data Drop.
+ *
+ * Weighted, not a mean of means: total units / total minutes. A 3,000-unit run
+ * and a 90-unit run are not equally informative about the rate a line holds, and
+ * averaging their two UPMs would treat them as if they were.
+ *
+ * Window is the last `days` (default 90) counted back from today. A SKU with
+ * less history than that simply contributes what it has - `days` is a ceiling,
+ * not a requirement - so a SKU three weeks old still gets a number, with runs
+ * and dayCount returned so the caller can see how thin it is.
+ *
+ * Rows carrying 'Units per Minute Flag' = Y are EXCLUDED. On the sample I could
+ * read, flagged rows are a tenth of the data with a median rate near three times
+ * the unflagged population, which reads as the analytics team marking anomalies.
+ * That is inference, not documentation: `flagged` is returned per SKU so the
+ * exclusion is visible, and if the team says Y means something else this is the
+ * one line to change.
+ */
+function fetchObservedUpm(days) {
+  const user = getCurrentUser();
+  if (!user.isAdmin && !user.canEditRules) throw new Error('Not authorized');
+  const window = Number(days) > 0 ? Number(days) : OBSERVED_UPM_DAYS;
+
+  const sheet = SpreadsheetApp.openById(DATA_DROP_SHEET_ID).getSheetByName(DATA_DROP_TAB);
+  if (!sheet) throw new Error('Tab "' + DATA_DROP_TAB + '" not found in the Data Drop workbook.');
+  const lastRow = sheet.getLastRow(), lastCol = sheet.getLastColumn();
+  if (lastRow < 2) return { skus: {}, rows: 0, used: 0, window: window };
+
+  const all = sheet.getRange(1, 1, lastRow, lastCol).getValues();
+  const head = all[0].map(function(h) { return String(h || '').trim(); });
+  const col = function(name) { return head.indexOf(name); };
+  const iDate = col('Date'), iLine = col('Line'), iSku = col('Item Sku'),
+        iStart = col('Second of Chicago Start Time'), iEnd = col('Second of Chicago End Time'),
+        iUnits = col('Units Produced'), iFlag = col('Units per Minute Flag'),
+        // Crew size per run. Present in the drop, which makes observed UPLH
+        // possible alongside UPM - and UPLH is the number that actually compares
+        // to Menu's optimal headcount.
+        iPop = col('Line Population');
+  if (iSku < 0 || iStart < 0 || iEnd < 0 || iUnits < 0) {
+    throw new Error('Data Drop columns moved - expected Item Sku / start / end / Units Produced, got: ' + head.join(', '));
+  }
+
+  const cutoff = new Date(); cutoff.setHours(0, 0, 0, 0);
+  cutoff.setDate(cutoff.getDate() - window);
+
+  // Cells may arrive as Dates or as text depending on how the drop wrote them.
+  const asTime = function(v) {
+    if (v instanceof Date) return v.getTime();
+    const t = Date.parse(String(v || ''));
+    return isNaN(t) ? null : t;
+  };
+
+  const out = {};
+  let used = 0, skippedFlag = 0, skippedTime = 0, skippedOld = 0;
+  for (let r = 1; r < all.length; r++) {
+    const row = all[r];
+    const sku = normalizeSku_(String(row[iSku] || ''));
+    if (!sku) continue;
+
+    const d = asTime(row[iDate]);
+    if (d !== null && d < cutoff.getTime()) { skippedOld++; continue; }
+
+    const units = parseFloat(String(row[iUnits] || '').replace(/,/g, ''));
+    const a = asTime(row[iStart]), b = asTime(row[iEnd]);
+    if (a === null || b === null || !isFinite(units) || units <= 0) { skippedTime++; continue; }
+    let mins = (b - a) / 60000;
+    if (mins < 0) mins += 1440;                 // run crossed midnight
+    if (!(mins > 0) || mins > 720) { skippedTime++; continue; }   // 12h+ is not one run
+
+    if (!out[sku]) out[sku] = { units: 0, minutes: 0, runs: 0, flagged: 0, days: {}, lines: {},
+                                personMin: 0, popMin: 0, first: null, last: null };
+    const o = out[sku];
+
+    if (iFlag >= 0 && /^y$/i.test(String(row[iFlag] || '').trim())) { o.flagged++; skippedFlag++; continue; }
+
+    o.units += units; o.minutes += mins; o.runs++;
+    // Weighted by minutes, not a flat mean: a crew of 11 for two hours should
+    // count for more than a crew of 8 for twenty minutes.
+    if (iPop >= 0) {
+      const pop = parseFloat(String(row[iPop] || '').replace(/,/g, ''));
+      if (isFinite(pop) && pop > 0) { o.personMin += pop * mins; o.popMin += mins; }
+    }
+    if (iLine >= 0) o.lines[String(row[iLine] || '').trim()] = true;
+    if (d !== null) {
+      const key = Utilities.formatDate(new Date(d), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+      o.days[key] = true;
+      if (o.first === null || d < o.first) o.first = d;
+      if (o.last === null || d > o.last) o.last = d;
+    }
+    used++;
+  }
+
+  const skus = {};
+  Object.keys(out).forEach(function(k) {
+    const o = out[k];
+    if (!(o.minutes > 0) || !o.runs) return;
+    skus[k] = {
+      upm: Math.round((o.units / o.minutes) * 10) / 10,
+      hc:  o.popMin > 0 ? Math.round((o.personMin / o.popMin) * 10) / 10 : null,
+      uplh: o.personMin > 0 ? Math.round(o.units / (o.personMin / 60)) : null,
+      runs: o.runs, flagged: o.flagged,
+      dayCount: Object.keys(o.days).length,
+      lineCount: Object.keys(o.lines).length,
+      units: Math.round(o.units),
+      first: o.first ? Utilities.formatDate(new Date(o.first), Session.getScriptTimeZone(), 'yyyy-MM-dd') : '',
+      last:  o.last  ? Utilities.formatDate(new Date(o.last),  Session.getScriptTimeZone(), 'yyyy-MM-dd') : ''
+    };
+  });
+
+  Logger.log('fetchObservedUpm: ' + Object.keys(skus).length + ' SKUs from ' + used + ' runs in the last ' +
+    window + ' days (skipped ' + skippedOld + ' older, ' + skippedFlag + ' flagged, ' + skippedTime + ' unusable times).');
+  return { skus: skus, rows: all.length - 1, used: used, window: window,
+           skippedFlag: skippedFlag, skippedTime: skippedTime, skippedOld: skippedOld };
 }
 
 // ─── SKU ATTRIBUTES (real sources — no guessing) ──────────────────────────────
