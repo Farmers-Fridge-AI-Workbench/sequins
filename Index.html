@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.183 — 2026-09-03    (pairs with Code.js v0.4.115)
+  Sequins ✨ — Index.html    v0.5.184 — 2026-09-03    (pairs with Code.js v0.4.116)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.183 Quarterly report renders on screen as top 5 faster / top 5 slower
-           plus the capper gap. Results moved above the SKU table and scroll
-           into view. Toolbar thinned; the weekly update has no switch.
+  v0.5.184 Quarterly report carries weekly volume per SKU, then and now — a rate
+           that fell because runs got shorter is not a slower line. Rows made
+           compact; capper section and the manual Apply button removed.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -3423,38 +3423,35 @@ function renderQuarterly(r){
   if(r.note){body.innerHTML='<div class="status status-warn">'+escHtml(r.note)+'</div>';return;}
   var peak=1;
   r.up.concat(r.down).forEach(function(m){peak=Math.max(peak,Math.abs(m.pct));});
+  // Deliberately small. Cori: "the chart is HUGE compared to the usefulness of the
+  // data being that big." The bar is a scanning aid, not the content — it gets a
+  // fixed narrow track and the numbers get the room.
   function rows(list,color){
-    if(!list.length)return '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);padding:4px 0">none</div>';
+    if(!list.length)return '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);padding:2px 0">none</div>';
     return list.map(function(m){
-      var w=Math.max(3,Math.round(Math.abs(m.pct)/peak*100));
-      return '<div style="display:flex;align-items:center;gap:10px;margin:5px 0">'
-        +'<div style="font-family:var(--mono);font-size:11px;width:230px;flex:0 0 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escHtml(m.sku)+'">'+escHtml(m.sku)+'</div>'
-        +'<div style="flex:1 1 auto;min-width:60px;background:var(--surface2);border-radius:3px;height:14px;overflow:hidden">'
-          +'<div style="width:'+w+'%;height:100%;background:'+color+';opacity:.55"></div></div>'
-        +'<div style="font-family:var(--mono);font-size:12px;font-weight:600;color:'+color+';width:52px;text-align:right;flex:0 0 auto">'
-          +(m.pct>0?'+':'')+m.pct+'%</div>'
-        +'<div style="font-family:var(--mono);font-size:11px;color:var(--muted);width:118px;text-align:right;flex:0 0 auto">'
-          +m.from+' \u2192 '+m.to+' UPM</div></div>';
+      var w=Math.max(4,Math.round(Math.abs(m.pct)/peak*100));
+      var vol=(m.fromWk||m.toWk)
+        ? (fmtUnits(m.fromWk)+' \u2192 '+fmtUnits(m.toWk)+'/wk')
+        : '';
+      // Flagged when volume moved far more than the rate did: that is the case
+      // where the SKU did not get slower, there is just less of it per run.
+      var volDrop=(m.fromWk>0&&m.toWk<m.fromWk*0.6);
+      return '<div style="display:flex;align-items:center;gap:8px;margin:2px 0;font-family:var(--mono);font-size:11px">'
+        +'<div style="width:210px;flex:0 0 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escHtml(m.sku)+'">'+escHtml(m.sku)+'</div>'
+        +'<div style="width:90px;flex:0 0 auto;background:var(--surface2);border-radius:2px;height:8px;overflow:hidden">'
+          +'<div style="width:'+w+'%;height:100%;background:'+color+';opacity:.6"></div></div>'
+        +'<div style="width:46px;text-align:right;font-weight:600;color:'+color+';flex:0 0 auto">'+(m.pct>0?'+':'')+m.pct+'%</div>'
+        +'<div style="width:132px;text-align:right;color:var(--muted);flex:0 0 auto">'+m.from+' \u2192 '+m.to+' UPM</div>'
+        +'<div style="width:150px;text-align:right;color:'+(volDrop?'var(--amber)':'var(--muted)')+';flex:0 0 auto" '
+          +'title="Average units per week in each quarter. A big drop here usually explains a falling rate \u2014 shorter runs, same changeover.">'+vol+'</div></div>';
     }).join('');
   }
-  function head(t){return '<div style="font-family:var(--mono);font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--teal);margin:14px 0 4px">'+t+'</div>';}
-  var h='<div style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.6">'
-    +'Comparing <b>'+escHtml(r.first)+'</b> with <b>'+escHtml(r.last)+'</b>, '+r.compared+' SKUs with production in both. '
-    +'Quarters available: '+escHtml(r.quarters.join(', '))+'.</div>';
+  function head(t){return '<div style="font-family:var(--mono);font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--teal);margin:10px 0 3px">'+t+'</div>';}
+  var h='<div style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.5">'
+    +'<b>'+escHtml(r.first)+'</b> vs <b>'+escHtml(r.last)+'</b> \u00b7 '+r.compared+' SKUs with production in both \u00b7 '
+    +'amber weekly volume = down by more than 40%, which usually explains the rate.</div>';
   h+=head('Got faster')+rows(r.up,'var(--teal)');
   h+=head('Got slower')+rows(r.down,'var(--red)');
-  if(r.capper&&r.capper.length){
-    h+=head('Capper vs other lines \u2014 biggest differences');
-    h+='<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:4px">'
-      +r.capperCount+' SKU(s) ran on both LINE-6 and elsewhere. Positive means faster on the capper.</div>';
-    h+=r.capper.map(function(m){
-      var col=m.pct>0?'var(--teal)':'var(--red)';
-      return '<div style="display:flex;align-items:center;gap:10px;margin:5px 0">'
-        +'<div style="font-family:var(--mono);font-size:11px;width:230px;flex:0 0 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escHtml(m.sku)+'">'+escHtml(m.sku)+'</div>'
-        +'<div style="font-family:var(--mono);font-size:12px;font-weight:600;color:'+col+';width:52px;text-align:right">'+(m.pct>0?'+':'')+m.pct+'%</div>'
-        +'<div style="font-family:var(--mono);font-size:11px;color:var(--muted)">capper '+m.capper+' vs '+m.other+' elsewhere</div></div>';
-    }).join('');
-  }
   body.innerHTML=h;
 }
 function renderUpmAuto(){
@@ -3464,7 +3461,6 @@ function renderUpmAuto(){
     // No switch: it runs. If the trigger could not be installed, say so loudly —
     // that is the difference between 'running weekly' and 'silently never again'.
     var h='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
-      +'<button class="btn btn-ghost btn-sm" onclick="applyObservedUpm()">\u21bb Apply 90-day UPMs now</button>'
       +'<span style="font-family:var(--mono);font-size:12px;color:'+(st.weeklyOn?'var(--teal)':'var(--red)')+'">'
       +(st.weeklyOn ? '\u2713 Runs automatically every Sunday at 4am'
                     : '\u26a0 The weekly update is NOT scheduled \u2014 '+escHtml(st.triggerError||'trigger could not be installed'))
@@ -3896,7 +3892,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.183';
+var APP_VERSION='v0.5.184';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;

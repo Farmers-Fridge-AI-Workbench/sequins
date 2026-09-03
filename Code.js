@@ -1,10 +1,10 @@
 /**
- * Sequins ✨ — Code.js    v0.4.115 — 2026-09-03    (pairs with Index.html v0.5.183)
+ * Sequins ✨ — Code.js    v0.4.116 — 2026-09-03    (pairs with Index.html v0.5.184)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.115 getQuarterlyMovers returns the top movers instead of writing a tab;
- *          the weekly trigger installs itself, and script.scriptapp joins the
- *          manifest scopes — without it trigger creation silently failed.
+ * v0.4.116 Quarter buckets now carry units per week, so the movers report can
+ *          show volume beside the rate. Capper comparison removed from the
+ *          app — Cori wants that separately, not here.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -1910,7 +1910,13 @@ function fetchUpmByQuarter() {
     const o = out[k], q = {};
     quarters.forEach(function(qq) {
       if (o.q[qq] && o.q[qq].m > 0) {
-        q[qq] = { upm: Math.round(o.q[qq].u / o.q[qq].m * 10) / 10, days: Object.keys(o.q[qq].days).length };
+        const dcount = Object.keys(o.q[qq].days).length;
+        q[qq] = { upm: Math.round(o.q[qq].u / o.q[qq].m * 10) / 10,
+                  days: dcount,
+                  // Units per week, from production days rather than calendar weeks:
+                  // a SKU that ran 3 days a week and one that ran 7 are not comparable
+                  // on calendar time, and the weekly figure is what Cori reads volume in.
+                  perWeek: dcount > 0 ? Math.round(o.q[qq].u * 7 / dcount) : 0 };
       }
     });
     skus[k] = {
@@ -1930,7 +1936,7 @@ function getQuarterlyMovers() {
   const user = getCurrentUser();
   if (!user.isAdmin && !user.canEditRules) throw new Error('Not authorized');
   const res = fetchUpmByQuarter(), qs = res.quarters;
-  if (qs.length < 2) return { quarters: qs, up: [], down: [], capper: [], compared: 0,
+  if (qs.length < 2) return { quarters: qs, up: [], down: [], compared: 0,
                               note: 'Only one quarter of data so far — nothing to compare against yet.' };
 
   const first = qs[0], last = qs[qs.length - 1];
@@ -1938,26 +1944,21 @@ function getQuarterlyMovers() {
   Object.keys(res.skus).forEach(function(k) {
     const o = res.skus[k], a = o.q[first], b = o.q[last];
     if (!a || !b || !(a.upm > 0)) return;
+    // Volume rides along because it is usually the explanation. Cori on the
+    // first run: "Sonoma Salad I know has decreased drastically because we're not
+    // putting it in the fridges anymore so the volume is low and that kills our
+    // efficiency". A rate that fell because the runs got short is a different
+    // fact from a line that got slower, and the report could not tell them apart.
     moved.push({ sku: k, from: a.upm, to: b.upm, pct: Math.round((b.upm - a.upm) / a.upm * 100),
-                 fromDays: a.days, toDays: b.days });
+                 fromDays: a.days, toDays: b.days,
+                 fromWk: a.perWeek, toWk: b.perWeek });
   });
   moved.sort(function(x, y) { return y.pct - x.pct; });
-
-  // Capper gap, for SKUs that genuinely ran on both sides. A gap computed from a
-  // SKU that only ever ran on LINE-6 would be a number with nothing behind it.
-  const capper = [];
-  Object.keys(res.skus).forEach(function(k) {
-    const o = res.skus[k];
-    if (o.capperUpm === null || o.otherUpm === null || !(o.otherUpm > 0)) return;
-    capper.push({ sku: k, capper: o.capperUpm, other: o.otherUpm,
-                  pct: Math.round((o.capperUpm - o.otherUpm) / o.otherUpm * 100) });
-  });
-  capper.sort(function(x, y) { return Math.abs(y.pct) - Math.abs(x.pct); });
 
   return { quarters: qs, first: first, last: last, compared: moved.length,
            up: moved.filter(function(m) { return m.pct > 0; }).slice(0, 5),
            down: moved.filter(function(m) { return m.pct < 0; }).reverse().slice(0, 5),
-           capper: capper.slice(0, 5), capperCount: capper.length, note: '' };
+           note: '' };
 }
 
 function applyObservedUpm(days) {
