@@ -1,10 +1,10 @@
 /**
- * Sequins ✨ — Code.js    v0.4.114 — 2026-09-03    (pairs with Index.html v0.5.182)
+ * Sequins ✨ — Code.js    v0.4.115 — 2026-09-03    (pairs with Index.html v0.5.183)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.114 fetchUpmByQuarter buckets every run by quarter and by line;
- *          exportQuarterlyThroughput writes the quarter-over-quarter change and
- *          the capper-vs-other-lines gap to a Throughput by Quarter tab.
+ * v0.4.115 getQuarterlyMovers returns the top movers instead of writing a tab;
+ *          the weekly trigger installs itself, and script.scriptapp joins the
+ *          manifest scopes — without it trigger creation silently failed.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -1787,11 +1787,10 @@ function getUpmAutoStatus() {
   if (!user.isAdmin) return { admin: false };
   let last = null;
   try { last = JSON.parse(PropertiesService.getScriptProperties().getProperty(UPM_AUTO_KEY) || 'null'); } catch (e) {}
-  let weeklyOn = false;
-  try {
-    weeklyOn = ScriptApp.getProjectTriggers().some(function(t) { return t.getHandlerFunction() === 'weeklyUpmUpdate'; });
-  } catch (e) {}
-  return { admin: true, health: dataDropHealth(), last: last, weeklyOn: weeklyOn };
+  // Ensuring it here means an admin opening Sequins is enough to heal it.
+  const trig = ensureWeeklyUpmTrigger_();
+  return { admin: true, health: dataDropHealth(), last: last,
+           weeklyOn: trig.ok, triggerError: trig.ok ? '' : trig.error };
 }
 
 // Internal so the trigger can run without a user session. actor is recorded
@@ -1856,7 +1855,6 @@ function applyObservedUpm_(days, actor) {
 // Same pass answers both questions, because they are the same shape: bucket every
 // run by quarter and by line, then read the buckets two ways. Quarter over
 // quarter is the report; LINE-6 against everything else is the capper.
-const QUARTER_TAB = 'Throughput by Quarter';
 const CAPPER_LINE = 'LINE-6';
 
 function fetchUpmByQuarter() {
@@ -1924,45 +1922,42 @@ function fetchUpmByQuarter() {
   return { skus: skus, quarters: quarters };
 }
 
-function exportQuarterlyThroughput() {
+// v0.4.115: returns the movers instead of writing a tab. Cori: "I don't want the
+// report in a spreadsheet -- can it populate in a simple chart/report of top 5
+// increase and top 5 decrease instead?" A ranked five is a thing you read; two
+// hundred rows in a sheet is a thing you promise to look at later.
+function getQuarterlyMovers() {
   const user = getCurrentUser();
   if (!user.isAdmin && !user.canEditRules) throw new Error('Not authorized');
-  const res = fetchUpmByQuarter();
-  const qs = res.quarters;
-  if (!qs.length) throw new Error('No usable runs in the Data Drop.');
+  const res = fetchUpmByQuarter(), qs = res.quarters;
+  if (qs.length < 2) return { quarters: qs, up: [], down: [], capper: [], compared: 0,
+                              note: 'Only one quarter of data so far — nothing to compare against yet.' };
 
-  const header = ['SKU'].concat(qs)
-    .concat(['Change ' + qs[0] + ' to ' + qs[qs.length - 1], 'Direction',
-             'Capper UPM (' + CAPPER_LINE + ')', 'Other Lines UPM', 'Capper Gap']);
+  const first = qs[0], last = qs[qs.length - 1];
+  const moved = [];
+  Object.keys(res.skus).forEach(function(k) {
+    const o = res.skus[k], a = o.q[first], b = o.q[last];
+    if (!a || !b || !(a.upm > 0)) return;
+    moved.push({ sku: k, from: a.upm, to: b.upm, pct: Math.round((b.upm - a.upm) / a.upm * 100),
+                 fromDays: a.days, toDays: b.days });
+  });
+  moved.sort(function(x, y) { return y.pct - x.pct; });
 
-  const rows = Object.keys(res.skus).sort().map(function(k) {
+  // Capper gap, for SKUs that genuinely ran on both sides. A gap computed from a
+  // SKU that only ever ran on LINE-6 would be a number with nothing behind it.
+  const capper = [];
+  Object.keys(res.skus).forEach(function(k) {
     const o = res.skus[k];
-    const first = o.q[qs[0]], last = o.q[qs[qs.length - 1]];
-    // Percentage, not absolute: a bowl going 9 to 11 matters more than a snack
-    // going 40 to 42, and only the percentage says so.
-    const chg = (first && last && first.upm > 0) ? (last.upm - first.upm) / first.upm : '';
-    const dir = chg === '' ? 'no comparable quarters' : (chg > 0.02 ? 'faster' : (chg < -0.02 ? 'slower' : 'flat'));
-    const gap = (o.capperUpm && o.otherUpm) ? (o.capperUpm - o.otherUpm) / o.otherUpm : '';
-    return [k].concat(qs.map(function(q) { return o.q[q] ? o.q[q].upm : ''; }))
-              .concat([chg, dir, o.capperUpm === null ? '' : o.capperUpm,
-                       o.otherUpm === null ? '' : o.otherUpm, gap]);
+    if (o.capperUpm === null || o.otherUpm === null || !(o.otherUpm > 0)) return;
+    capper.push({ sku: k, capper: o.capperUpm, other: o.otherUpm,
+                  pct: Math.round((o.capperUpm - o.otherUpm) / o.otherUpm * 100) });
   });
+  capper.sort(function(x, y) { return Math.abs(y.pct) - Math.abs(x.pct); });
 
-  writeConfigMirror_(QUARTER_TAB, header, rows);
-  const ss = SpreadsheetApp.openById(PLAN_ARCHIVE_SHEET_ID);
-  const sheet = ss.getSheetByName(QUARTER_TAB);
-  if (sheet && rows.length) {
-    sheet.getRange(2, qs.length + 2, rows.length, 1).setNumberFormat('0%');   // Change
-    sheet.getRange(2, header.length, rows.length, 1).setNumberFormat('0%');   // Capper Gap
-  }
-
-  const capper = Object.keys(res.skus).filter(function(k) {
-    return res.skus[k].capperUpm !== null && res.skus[k].otherUpm !== null;
-  });
-  Logger.log('exportQuarterlyThroughput: ' + rows.length + ' SKUs, quarters ' + qs.join(', ') +
-    ', ' + capper.length + ' ran on both the capper and other lines.');
-  return { ok: true, rows: rows.length, quarters: qs, bothLines: capper.length,
-           url: ss.getUrl() + '#gid=' + (sheet ? sheet.getSheetId() : '') };
+  return { quarters: qs, first: first, last: last, compared: moved.length,
+           up: moved.filter(function(m) { return m.pct > 0; }).slice(0, 5),
+           down: moved.filter(function(m) { return m.pct < 0; }).reverse().slice(0, 5),
+           capper: capper.slice(0, 5), capperCount: capper.length, note: '' };
 }
 
 function applyObservedUpm(days) {
@@ -1975,17 +1970,35 @@ function applyObservedUpm(days) {
 // refuse lives inside applyObservedUpm_.
 function weeklyUpmUpdate() { applyObservedUpm_(OBSERVED_UPM_DAYS, 'weekly trigger'); }
 
-function setWeeklyUpmUpdate(on) {
-  const user = getCurrentUser();
-  if (!user.isAdmin) throw new Error('Not authorized');
-  ScriptApp.getProjectTriggers().forEach(function(t) {
-    if (t.getHandlerFunction() === 'weeklyUpmUpdate') ScriptApp.deleteTrigger(t);
-  });
-  // Sunday early morning: the week's production has landed, and nobody has yet
-  // opened the app on Monday to plan against it.
-  if (on) ScriptApp.newTrigger('weeklyUpmUpdate').timeBased().onWeekDay(ScriptApp.WeekDay.SUNDAY).atHour(4).create();
-  writeAuditLog_(user.email, 'set_weekly_upm', '', '', on ? 'enabled' : 'disabled');
-  return { ok: true, weeklyOn: !!on };
+// v0.4.115: no switch. Cori: "I don't really want to turn it on and off tho -
+// can we just make it run by itself without a check box?" So the trigger installs
+// itself and re-installs itself if it ever goes missing.
+//
+// The checkbox never worked anyway, and the reason is worth recording: creating a
+// trigger needs the script.scriptapp OAuth scope, which was NOT in appsscript.json
+// — this project's other triggers were all installed by hand from the Apps Script
+// editor, where that permission is granted interactively. From the web app the
+// call simply failed, and getUpmAutoStatus swallowed it and reported 'off', so
+// the box unticked itself every time. The scope is in the manifest now.
+//
+// Idempotent and quiet: called on every admin load, creates nothing if a trigger
+// is already there, and never throws into the caller — a missing permission must
+// not take the health banner down with it.
+function ensureWeeklyUpmTrigger_() {
+  try {
+    const has = ScriptApp.getProjectTriggers().some(function(t) {
+      return t.getHandlerFunction() === 'weeklyUpmUpdate';
+    });
+    if (has) return { ok: true, installed: false };
+    // Sunday early morning: the week's production has landed, and nobody has yet
+    // opened the app on Monday to plan against it.
+    ScriptApp.newTrigger('weeklyUpmUpdate').timeBased()
+      .onWeekDay(ScriptApp.WeekDay.SUNDAY).atHour(4).create();
+    Logger.log('ensureWeeklyUpmTrigger_: installed the weekly UPM trigger.');
+    return { ok: true, installed: true };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
 }
 
 /**

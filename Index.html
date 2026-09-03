@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.182 — 2026-09-03    (pairs with Code.js v0.4.114)
+  Sequins ✨ — Index.html    v0.5.183 — 2026-09-03    (pairs with Code.js v0.4.115)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.182 Quarterly throughput report: UPM per SKU per quarter since January,
-           what got faster and slower, and capper vs non-capper for every SKU
-           that ran on both.
+  v0.5.183 Quarterly report renders on screen as top 5 faster / top 5 slower
+           plus the capper gap. Results moved above the SKU table and scroll
+           into view. Toolbar thinned; the weekly update has no switch.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -793,12 +793,17 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           <button class="btn btn-ghost btn-sm" onclick="resyncAllergens()" title="Menu Library is the source of truth and overwrites Sequins' values. Blank or 'No import' becomes NO ALLERGEN DATA — never treated as allergen-free.">⚠ Resync allergens</button>
           <button class="btn btn-ghost btn-sm" onclick="resyncLabelVersions()" title="Re-reads the Label Version Log now instead of waiting for the daily 3am run. Read-only against the source sheet; overwrites labelNumberVersion on every SKU in the library.">🏷 Resync label versions</button>
           <button class="btn btn-ghost btn-sm" onclick="prefillUsdaPairs()" title="Fills usdaPairedSku for the 5 pairs established from ingredient BOMs. Blanks only — never overwrites an existing pairing.">⇄ Prefill known USDA pairs</button>
-          <button class="btn btn-ghost btn-sm" onclick="loadObservedUpm()" title="Measured units-per-minute per SKU from the analytics team&#39;s Data Drop, last 90 days. Read-only — nothing is written to the library.">⏱ Observed UPM (90d)</button>
-          <button class="btn btn-ghost btn-sm" onclick="applyObservedUpm()" title="Overwrite the SKU Library UPMs with the 90-day measured average. Writes a UPM Updates history row for every change.">↻ Apply 90-day UPMs</button>
-          <button class="btn btn-ghost btn-sm" onclick="exportQuarterlyThroughput()" title="Throughput by quarter per SKU since January, plus capper vs non-capper. Writes a Throughput by Quarter tab.">📈 Quarterly throughput</button>
-          <button class="btn btn-ghost btn-sm" onclick="exportUpmComparison()" title="Writes the library-vs-observed comparison to a UPM Comparison tab in the archive workbook, to share.">⬇ Export UPM comparison</button>
+          <button class="btn btn-ghost btn-sm" onclick="quarterlyReport()" title="Top 5 SKUs that got faster and slower since the first quarter of data, plus capper vs other lines.">📈 Quarterly throughput</button>
           <button class="btn btn-teal btn-sm" onclick="saveSkuLibrary()">Save changes</button>
         </div>
+      </div>
+      <div class="card" id="upmAutoCard">
+        <div class="card-title">Automatic UPM updates</div>
+        <div id="upmAutoBody"></div>
+      </div>
+      <div class="card" id="observedUpmCard" style="display:none">
+        <div class="card-title" style="display:flex;align-items:center;gap:8px">Observed UPM <span style="color:var(--muted);font-weight:400" id="observedUpmSub"></span><button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="document.getElementById('observedUpmCard').style.display='none'" title="Close">✕ Close</button></div>
+        <div id="observedUpmBody"></div>
       </div>
       <div class="card">
         <div class="sku-lib-controls">
@@ -826,14 +831,6 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
             <th title="Staged SKUs only — what's still missing, and Promote once complete">Staging</th>
           </tr></thead><tbody id="skuTableBody"></tbody></table>
         </div>
-      </div>
-      <div class="card" id="upmAutoCard">
-        <div class="card-title">Automatic UPM updates</div>
-        <div id="upmAutoBody"></div>
-      </div>
-      <div class="card" id="observedUpmCard" style="display:none">
-        <div class="card-title" style="display:flex;align-items:center;gap:8px">Observed UPM <span style="color:var(--muted);font-weight:400" id="observedUpmSub"></span><button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="document.getElementById('observedUpmCard').style.display='none'" title="Close">✕ Close</button></div>
-        <div id="observedUpmBody"></div>
       </div>
     </div>
 
@@ -3367,6 +3364,19 @@ function prefillUsdaPairs(){
 // of clicking a button labelled "show me the data". This ranks the disagreements
 // and leaves the adopting to a human.
 var _observedUpm=null;
+// Cori: "when you push a button and its action is at the bottom of the SKU list
+// -- nobody is going to see it. I keep thinking the button doesn't do anything".
+// The cards moved above the table, but a long table still leaves the top out of
+// view once scrolled, so bring the result to the eye as well as moving it. Focus
+// is deliberately not taken — the scroll is enough, and stealing focus mid-typing
+// would be its own bug.
+function showUpmResult_(){
+  var card=document.getElementById("observedUpmCard");
+  if(!card)return null;
+  card.style.display="";
+  if(card.scrollIntoView)card.scrollIntoView({behavior:"smooth",block:"start"});
+  return document.getElementById("observedUpmBody");
+}
 // The flag Cori asked for. Checked once at load for admins, and again after any
 // manual apply. Two different failures share one banner because they are
 // indistinguishable from the outside: the feed stopped, or the weekly job that
@@ -3384,8 +3394,7 @@ function checkUpmHealth(){
 }
 function applyObservedUpm(){
   if(!confirm("Overwrite SKU Library UPMs with the 90-day measured average?\n\nEvery change is recorded on the UPM Updates tab with the old value, so it can be reviewed or reversed."))return;
-  var card=document.getElementById("observedUpmCard"),body=document.getElementById("observedUpmBody");
-  card.style.display="";
+  var body=showUpmResult_();
   body.innerHTML='<div class="status status-info"><span class="spinner"></span>Applying\u2026</div>';
   google.script.run.withSuccessHandler(function(r){
     if(!r.ok){body.innerHTML='<div class="status status-err">\u26a0 '+escHtml(r.message)+'</div>';checkUpmHealth();return;}
@@ -3397,34 +3406,69 @@ function applyObservedUpm(){
     body.innerHTML='<div class="status status-err">\u26a0 '+escHtml(err&&err.message||"failed")+'</div>';
   }).applyObservedUpm(90);
 }
-function exportQuarterlyThroughput(){
-  var card=document.getElementById("observedUpmCard"),body=document.getElementById("observedUpmBody");
-  card.style.display="";
+function quarterlyReport(){
+  var body=showUpmResult_();
+  document.getElementById('observedUpmSub').textContent='';
   body.innerHTML='<div class="status status-info"><span class="spinner"></span>Reading every run since January\u2026</div>';
-  google.script.run.withSuccessHandler(function(r){
-    body.innerHTML='<div class="status status-ok">\u2713 <b>'+fmtUnits(r.rows)+'</b> SKUs written to the <b>Throughput by Quarter</b> tab '
-      +'\u2014 quarters '+escHtml(r.quarters.join(", "))+'.<br>'
-      +'<a href="'+escHtml(r.url)+'" target="_blank" style="color:var(--teal)">Open it</a>'
-      +'<div style="color:var(--muted);font-size:11px;margin-top:6px">'
-      +r.bothLines+' SKU(s) ran on both the capper and other lines \u2014 those are the rows where Capper Gap is meaningful. '
-      +'Sort on Change to see what improved and declined most.</div></div>';
-  }).withFailureHandler(function(err){
-    body.innerHTML='<div class="status status-err">\u26a0 '+escHtml(err&&err.message||"failed")+'</div>';
-  }).exportQuarterlyThroughput();
+  google.script.run.withSuccessHandler(function(r){renderQuarterly(r);})
+    .withFailureHandler(function(err){
+      body.innerHTML='<div class="status status-err">\u26a0 '+escHtml(err&&err.message||'failed')+'</div>';
+    }).getQuarterlyMovers();
 }
-function toggleWeeklyUpm(on){
-  google.script.run.withSuccessHandler(function(){renderUpmAuto();})
-    .withFailureHandler(function(err){alert("Could not change the weekly update: "+err.message);})
-    .setWeeklyUpmUpdate(!!on);
+// Bars are scaled to the largest move ON SCREEN, not to a fixed percentage, so
+// the shape of the list is readable whether the biggest swing is 8% or 80%.
+function renderQuarterly(r){
+  var body=document.getElementById('observedUpmBody');
+  document.getElementById('observedUpmSub').textContent=' \u00b7 '+r.first+' vs '+r.last;
+  if(r.note){body.innerHTML='<div class="status status-warn">'+escHtml(r.note)+'</div>';return;}
+  var peak=1;
+  r.up.concat(r.down).forEach(function(m){peak=Math.max(peak,Math.abs(m.pct));});
+  function rows(list,color){
+    if(!list.length)return '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);padding:4px 0">none</div>';
+    return list.map(function(m){
+      var w=Math.max(3,Math.round(Math.abs(m.pct)/peak*100));
+      return '<div style="display:flex;align-items:center;gap:10px;margin:5px 0">'
+        +'<div style="font-family:var(--mono);font-size:11px;width:230px;flex:0 0 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escHtml(m.sku)+'">'+escHtml(m.sku)+'</div>'
+        +'<div style="flex:1 1 auto;min-width:60px;background:var(--surface2);border-radius:3px;height:14px;overflow:hidden">'
+          +'<div style="width:'+w+'%;height:100%;background:'+color+';opacity:.55"></div></div>'
+        +'<div style="font-family:var(--mono);font-size:12px;font-weight:600;color:'+color+';width:52px;text-align:right;flex:0 0 auto">'
+          +(m.pct>0?'+':'')+m.pct+'%</div>'
+        +'<div style="font-family:var(--mono);font-size:11px;color:var(--muted);width:118px;text-align:right;flex:0 0 auto">'
+          +m.from+' \u2192 '+m.to+' UPM</div></div>';
+    }).join('');
+  }
+  function head(t){return '<div style="font-family:var(--mono);font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--teal);margin:14px 0 4px">'+t+'</div>';}
+  var h='<div style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.6">'
+    +'Comparing <b>'+escHtml(r.first)+'</b> with <b>'+escHtml(r.last)+'</b>, '+r.compared+' SKUs with production in both. '
+    +'Quarters available: '+escHtml(r.quarters.join(', '))+'.</div>';
+  h+=head('Got faster')+rows(r.up,'var(--teal)');
+  h+=head('Got slower')+rows(r.down,'var(--red)');
+  if(r.capper&&r.capper.length){
+    h+=head('Capper vs other lines \u2014 biggest differences');
+    h+='<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:4px">'
+      +r.capperCount+' SKU(s) ran on both LINE-6 and elsewhere. Positive means faster on the capper.</div>';
+    h+=r.capper.map(function(m){
+      var col=m.pct>0?'var(--teal)':'var(--red)';
+      return '<div style="display:flex;align-items:center;gap:10px;margin:5px 0">'
+        +'<div style="font-family:var(--mono);font-size:11px;width:230px;flex:0 0 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escHtml(m.sku)+'">'+escHtml(m.sku)+'</div>'
+        +'<div style="font-family:var(--mono);font-size:12px;font-weight:600;color:'+col+';width:52px;text-align:right">'+(m.pct>0?'+':'')+m.pct+'%</div>'
+        +'<div style="font-family:var(--mono);font-size:11px;color:var(--muted)">capper '+m.capper+' vs '+m.other+' elsewhere</div></div>';
+    }).join('');
+  }
+  body.innerHTML=h;
 }
-// Sits under the SKU table so the switch lives beside the thing it drives.
 function renderUpmAuto(){
   var el=document.getElementById("upmAutoBody");if(!el)return;
   google.script.run.withSuccessHandler(function(st){
     if(!st||!st.admin){el.innerHTML='<div style="color:var(--muted);font-size:11px">Admins only.</div>';return;}
-    var h='<label style="display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;cursor:pointer">'
-      +'<input type="checkbox" '+(st.weeklyOn?"checked":"")+' style="accent-color:var(--teal);width:15px;height:15px" onchange="toggleWeeklyUpm(this.checked)"> '
-      +'Update UPMs weekly from the last 90 days (Sundays, 4am)</label>';
+    // No switch: it runs. If the trigger could not be installed, say so loudly —
+    // that is the difference between 'running weekly' and 'silently never again'.
+    var h='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
+      +'<button class="btn btn-ghost btn-sm" onclick="applyObservedUpm()">\u21bb Apply 90-day UPMs now</button>'
+      +'<span style="font-family:var(--mono);font-size:12px;color:'+(st.weeklyOn?'var(--teal)':'var(--red)')+'">'
+      +(st.weeklyOn ? '\u2713 Runs automatically every Sunday at 4am'
+                    : '\u26a0 The weekly update is NOT scheduled \u2014 '+escHtml(st.triggerError||'trigger could not be installed'))
+      +'</span></div>';
     if(st.last){
       h+='<div style="font-family:var(--mono);font-size:11px;color:'+(st.last.ok?"var(--muted)":"var(--red)")+';margin-top:8px">'
         +'Last run '+escHtml(String(st.last.at||"").slice(0,16).replace("T"," "))+' by '+escHtml(st.last.actor||"")
@@ -3442,8 +3486,7 @@ function renderUpmAuto(){
 // because this one WRITES (to the archive workbook only, never a source sheet)
 // and the on-screen view deliberately does not.
 function exportUpmComparison(){
-  var card=document.getElementById("observedUpmCard"),body=document.getElementById("observedUpmBody");
-  card.style.display="";
+  var body=showUpmResult_();
   body.innerHTML='<div class="status status-info"><span class="spinner"></span>Building the comparison\u2026</div>';
   google.script.run.withSuccessHandler(function(r){
     body.innerHTML='<div class="status status-ok">\u2713 <b>'+fmtUnits(r.rows)+'</b> SKUs written to the <b>UPM Comparison</b> tab '
@@ -3460,9 +3503,7 @@ function exportUpmComparison(){
   }).exportUpmComparison(90);
 }
 function loadObservedUpm(){
-  var card=document.getElementById("observedUpmCard"),body=document.getElementById("observedUpmBody"),
-      sub=document.getElementById("observedUpmSub");
-  card.style.display="";
+  var body=showUpmResult_(),sub=document.getElementById("observedUpmSub");
   sub.textContent="";
   body.innerHTML='<div class="status status-info"><span class="spinner"></span>Reading the Data Drop\u2026</div>';
   google.script.run.withSuccessHandler(function(res){
@@ -3855,7 +3896,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.182';
+var APP_VERSION='v0.5.183';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
