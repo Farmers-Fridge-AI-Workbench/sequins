@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.179 — 2026-09-03    (pairs with Code.js v0.4.111)
+  Sequins ✨ — Index.html    v0.5.180 — 2026-09-03    (pairs with Code.js v0.4.112)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.179 Observed UPM was keyed with underscores stripped, so it matched no
-           SKU Library entry and every library UPM read blank. Keyed raw now,
-           with a normalised fallback that reports naming drift as such.
+  v0.5.180 UPM Comparison is three columns, not sixteen, and only rows that are
+           actually comparable. Coverage is stated: which sequenced SKUs had no
+           production, ignoring CPG and beverages that never run a line.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -3368,10 +3368,15 @@ function exportUpmComparison(){
   card.style.display="";
   body.innerHTML='<div class="status status-info"><span class="spinner"></span>Building the comparison\u2026</div>';
   google.script.run.withSuccessHandler(function(r){
-    body.innerHTML='<div class="status status-ok">\u2713 Wrote '+fmtUnits(r.rows)+' SKUs to the <b>UPM Comparison</b> tab '
-      +'\u2014 '+fmtUnits(r.used)+' runs over '+r.window+' days'
-      +(r.skippedFlag?(', '+r.skippedFlag+' flagged runs excluded'):'')+'.<br>'
-      +'<a href="'+escHtml(r.url)+'" target="_blank" style="color:var(--teal)">Open it</a></div>';
+    body.innerHTML='<div class="status status-ok">\u2713 <b>'+fmtUnits(r.rows)+'</b> SKUs written to the <b>UPM Comparison</b> tab '
+      +'\u2014 three columns, from '+fmtUnits(r.used)+' runs over '+r.window+' days.<br>'
+      +'<a href="'+escHtml(r.url)+'" target="_blank" style="color:var(--teal)">Open it</a>'
+      +'<div style="color:'+((r.missing&&r.missing.length)?'var(--amber)':'var(--muted)')+';font-size:11px;margin-top:6px">'
+      +((r.missing&&r.missing.length)
+         ? ('\u26a0 '+r.missing.length+' SKU(s) Sequins sequences had NO production in the window: '+escHtml(r.missing.join(', ')))
+         : '\u2713 Every active assembly SKU in the library has production in the window.')
+      +(r.noLibUpm?('<br>'+r.noLibUpm+' ran but have no UPM set in Sequins, so there is nothing to compare them to.'):'')
+      +'</div></div>';
   }).withFailureHandler(function(err){
     body.innerHTML='<div class="status status-err">\u26a0 '+escHtml(err&&err.message||"failed")+'</div>';
   }).exportUpmComparison(90);
@@ -3772,7 +3777,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.179';
+var APP_VERSION='v0.5.180';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;

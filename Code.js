@@ -1,10 +1,10 @@
 /**
- * Sequins ✨ — Code.js    v0.4.111 — 2026-09-03    (pairs with Index.html v0.5.179)
+ * Sequins ✨ — Code.js    v0.4.112 — 2026-09-03    (pairs with Index.html v0.5.180)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.111 fetchObservedUpm: no Apps Script service calls left in the row loop
- *          (it was making ~21,000 of them), and SKUs are keyed to match the
- *          library instead of having their underscores stripped.
+ * v0.4.112 exportUpmComparison writes three columns and reports coverage — the
+ *          sequenced SKUs with no production in the window, CPG and beverages
+ *          excluded from that count since they never run a line.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -1662,9 +1662,14 @@ function fetchObservedUpm(days) {
 // and touches nothing in the SKU Library itself. Adopting a value stays a
 // separate, human decision - this only lays the two numbers side by side.
 const UPM_COMPARE_TAB = 'UPM Comparison';
-const UPM_COMPARE_HEADER = ['SKU','Library UPM','Observed UPM','Delta','Delta %','Avg HC Ran',
-                            'Menu Optimal HC','Observed UPLH','Runs','Days','Lines','Units',
-                            'First Seen','Last Seen','Flagged Runs Excluded','Note'];
+// v0.4.112: three columns. The first cut wrote sixteen - delta, crew, UPLH,
+// runs, days, lines, units, first seen, last seen, notes - and Cori's reaction
+// to opening it was the correct one: "who is going to read all of this???"
+// She asked for what Sequins has and what 90 days of production says, per SKU.
+// This sheet exists to be put in front of two people who do not use the app, so
+// anything they would have to skip past is working against it. The detail all
+// still exists on screen in SKU Library for whoever wants it.
+const UPM_COMPARE_HEADER = ['SKU', 'Sequins UPM', '90-Day Actual UPM'];
 
 function exportUpmComparison(days) {
   const user = getCurrentUser();
@@ -1672,63 +1677,53 @@ function exportUpmComparison(days) {
 
   const obs = fetchObservedUpm(days);
   const lib = getSection_(STATE_KEYS.skuLibrary) || {};
-
-  // Union of both sides. A SKU in the library with no runs is as interesting as
-  // one with runs and no library entry - the first may be dormant or misnamed,
-  // the second is something the floor ran that Sequins does not sequence.
-  // Names should match exactly - both sides are the uppercased SKU - but if one
-  // side writes a hyphen or a stray space, the row would read as 'not in the
-  // library' when it is really the same SKU spelled differently. Keep a
-  // normalised index so that case is reported as naming drift instead.
   const libByNorm = {};
   Object.keys(lib).forEach(function(k) { libByNorm[normalizeSku_(k)] = k; });
 
-  const keys = {};
-  Object.keys(obs.skus).forEach(function(k) { keys[k] = true; });
-  Object.keys(lib).forEach(function(k) { if (lib[k] && lib[k].active !== false) keys[k] = true; });
-
-  const rows = Object.keys(keys).sort().map(function(k) {
-    const o = obs.skus[k] || null;
-    let m = lib[k] || null, matchedAs = '';
-    if (!m) {
-      const alt = libByNorm[normalizeSku_(k)];
-      if (alt) { m = lib[alt]; matchedAs = alt; }
-    }
+  // Only SKUs with BOTH numbers. A row with one side blank is not a comparison,
+  // and thirty of them buried the rows that are.
+  //
+  // What is left out is reported, but only for SKUs Sequins ACTUALLY SEQUENCES.
+  // Cori, on the first cut: "You have a bunch of stuff you know we don't use in
+  // Sequins and you're telling me there's no runs in the window -- I mean no
+  // sh*t sherlock". Beverages and CPG never touch a line, so saying they had no
+  // production is noise that hides the only version of that sentence worth
+  // reading: an assembly SKU that should have run and did not. Same package
+  // test the sequencer itself uses, and pending/inactive are excluded too.
+  const sequenced = function(m) {
+    return !!m && m.active !== false && !m.pending && !NON_ASSEMBLY_PACKAGE_RE.test(String(m.packageType || '').trim());
+  };
+  let noLibUpm = 0;
+  const missing = [];
+  const rows = [];
+  Object.keys(obs.skus).sort().forEach(function(k) {
+    let m = lib[k];
+    if (!m) { const alt = libByNorm[normalizeSku_(k)]; if (alt) m = lib[alt]; }
     const cur = m ? parseFloat(m.upm) : NaN;
-    const hasCur = isFinite(cur) && cur > 0;
-    const delta = (o && hasCur) ? Math.round((o.upm - cur) * 10) / 10 : '';
-    const pct   = (o && hasCur) ? Math.round((o.upm - cur) / cur * 100) : '';
-    let note = '';
-    if (matchedAs)        note = 'name differs - matched SKU Library entry "' + matchedAs + '"';
-    else if (!o)          note = 'no runs in window';
-    else if (!m)          note = 'ran on the floor but not in the SKU Library';
-    else if (!hasCur)     note = 'no UPM set in Sequins';
-    else if (o.dayCount < 5) note = 'thin - only ' + o.dayCount + ' day(s) of history';
-    return [k,
-            hasCur ? cur : '',
-            o ? o.upm : '',
-            delta, pct === '' ? '' : pct / 100,
-            o && o.hc !== null ? o.hc : '',
-            m && m.optimalHC !== undefined && m.optimalHC !== '' ? m.optimalHC : '',
-            o && o.uplh !== null ? o.uplh : '',
-            o ? o.runs : '', o ? o.dayCount : '', o ? o.lineCount : '', o ? o.units : '',
-            o ? o.first : '', o ? o.last : '', o ? o.flagged : '', note];
+    if (!isFinite(cur) || cur <= 0) { noLibUpm++; return; }
+    rows.push([k, Math.round(cur * 10) / 10, obs.skus[k].upm]);
+  });
+  const obsByNorm = {};
+  Object.keys(obs.skus).forEach(function(k) { obsByNorm[normalizeSku_(k)] = true; });
+  Object.keys(lib).sort().forEach(function(k) {
+    if (!sequenced(lib[k])) return;
+    if (obs.skus[k] || obsByNorm[normalizeSku_(k)]) return;
+    missing.push(k);
   });
 
   writeConfigMirror_(UPM_COMPARE_TAB, UPM_COMPARE_HEADER, rows);
   const ss = SpreadsheetApp.openById(PLAN_ARCHIVE_SHEET_ID);
   const sheet = ss.getSheetByName(UPM_COMPARE_TAB);
-  // Delta % as a real percentage so sorting and conditional formatting behave
-  // for whoever opens this next.
-  if (sheet && rows.length) sheet.getRange(2, 5, rows.length, 1).setNumberFormat('0%');
 
-  Logger.log('exportUpmComparison: ' + rows.length + ' rows from ' + obs.used + ' runs over ' + obs.window + ' days.');
+  Logger.log('exportUpmComparison: ' + rows.length + ' comparable SKUs; ' + missing.length +
+    ' sequenced SKUs with no production in window' + (missing.length ? ' (' + missing.join(', ') + ')' : '') +
+    '; ' + noLibUpm + ' with no UPM in Sequins.');
   return { ok: true, rows: rows.length, window: obs.window, used: obs.used,
-           skippedFlag: obs.skippedFlag,
+           missing: missing, noLibUpm: noLibUpm,
            url: ss.getUrl() + '#gid=' + (sheet ? sheet.getSheetId() : '') };
 }
 
-// ─── SKU ATTRIBUTES (real sources — no guessing) ──────────────────────────────
+// ─── SKU ATTRIBUTES (real sources — no guessing) ───// ─── SKU ATTRIBUTES (real sources — no guessing) ──────────────────────────────
 /**
  * Pulls SKU attributes for a given list of SKU names directly from the
  * three source sheets that the old Seq Input formulas referenced:
