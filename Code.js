@@ -1,10 +1,8 @@
 /**
- * Sequins ✨ — Code.js    v0.4.105 — 2026-08-31    (pairs with Index.html v0.5.173)
+ * Sequins ✨ — Code.js    v0.4.106 — 2026-08-31    (pairs with Index.html v0.5.174)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.105 fetchForecastWeeks derives each week label’s year from the real
- *          dates in row 3 instead of stamping the current year on all of them,
- *          and returns them ordered by (year, week).
+ * v0.4.106 No server change — pairing bump. The handheld layout is CSS only.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────

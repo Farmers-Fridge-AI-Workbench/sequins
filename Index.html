@@ -1,9 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.173 — 2026-08-31    (pairs with Code.js v0.4.105)
+  Sequins ✨ — Index.html    v0.5.174 — 2026-08-31    (pairs with Code.js v0.4.106)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.173 Weeks sort by (year, week), not as text. Sandbox names a line that
-           is new in a scenario. Clear says the Demand Store is the only copy.
+  v0.5.174 Handheld breakpoint at 900px: sidebar becomes a scrolling strip,
+           page headers stack instead of overlapping, My Line SKU cards go
+           single-column, 44px targets. Desktop untouched.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -150,6 +151,61 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .kpi-val.teal{color:var(--teal);}.kpi-val.green{color:var(--green);}.kpi-val.amber{color:var(--amber);}.kpi-val.red{color:var(--red);}
 .seq-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
 @media(max-width:1400px){.seq-grid{grid-template-columns:repeat(2,1fr);}}
+/* ── Handheld / tablet (v0.5.174) ─────────────────────────────────────────
+   Cori on a Galaxy Fold, viewport about 766 CSS px: "the left hand side menu
+   takes up way too much space. And the way the SKU’s are laid out you really
+   can’t see what’s going on and the buttons overlap text...messy."
+   Three separate causes, and her screenshot showed a fourth she did not name:
+   the SKU name and times were clipped off the left edge with the page scrolled
+   sideways, because .ml-card is a rigid three-column row.
+   Everything here is inside the query — the desktop layout is untouched. */
+@media(max-width:900px){
+  /* 1. The 200px nav column, a quarter of her screen. Horizontal strip that
+     scrolls, so every view is still reachable; the legend and the flex
+     spacers are reference furniture and go entirely. */
+  .shell{grid-template-columns:1fr;grid-template-rows:52px auto 1fr;}
+  .sidebar{flex-direction:row;align-items:center;gap:6px;padding:8px 10px;
+    overflow-x:auto;overflow-y:hidden;border-right:none;
+    border-bottom:1px solid var(--border);-webkit-overflow-scrolling:touch;}
+  .sidebar-section{display:flex;align-items:center;gap:6px;padding:0;margin:0;flex:0 0 auto;}
+  .sidebar-label,.nav-spacer,.sb-wide-only,#previewNav{display:none;}
+  .nav-item{width:auto;flex:0 0 auto;white-space:nowrap;min-height:44px;padding:10px 14px;font-size:13px;}
+  .main{padding:14px;gap:14px;overflow-x:hidden;}
+
+  /* 2. Buttons overlapping the run header: .page-header was one row that
+     never wrapped, so the button group sat on top of the header content. */
+  .page-header{flex-direction:column;align-items:stretch;gap:10px;}
+  .page-header > div{min-width:0;flex-wrap:wrap;}
+  .ml-runhdr{padding-left:0;border-left:none;gap:16px 22px;}
+
+  /* 3. The SKU card. Name+times, plan stats and the entry block were three
+     side-by-side columns; only the first could shrink, so it was crushed and
+     the rest overflowed off-screen. Stack them and let the stats wrap. */
+  .ml-card{flex-direction:column;gap:10px;}
+  .ml-plan{padding:10px 0 0;border-left:none;border-top:1px solid var(--border);
+    gap:18px;flex-wrap:wrap;justify-content:space-between;}
+  .ml-stat{text-align:left;}
+  .ml-stat-v{font-size:18px;}
+  .ml-entry{max-width:none;padding:10px 0 0;border-left:none;
+    border-top:1px solid var(--border);flex-wrap:wrap;gap:10px;}
+  /* collapsed still has to collapse — it was doing that with max-width:0,
+     which no longer applies now the block is full width. */
+  .ml-entry.collapsed{max-width:none;height:0;padding:0;border-top:none;}
+  /* Scope the full-width treatment to the ENTRY block. The run header uses
+     .ml-f too, and letting it stretch turned NAME and HELD-OVER TOTES into
+     two full-width bars taller than the SKU cards. */
+  .ml-entry .ml-f{flex:1 1 44%;}
+  .ml-entry .ml-f input{width:100%;}
+  .ml-runhdr .ml-f{flex:0 0 auto;}
+  .ml-runhdr .ml-f input{width:150px;}
+  .ml-f input{min-height:44px;font-size:16px;}
+
+  /* 44px targets, and 16px on anything focusable: iOS Safari zooms the page
+     when a focused input is smaller, which yanks the layout mid-tap. */
+  .btn{min-height:44px;padding:10px 16px;font-size:13px;}
+  .form-select,.form-input,.inline-input{min-height:44px;font-size:16px;}
+  .card{padding:12px;}
+}
 .line-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;overflow:hidden;}
 .line-card-header{padding:12px 16px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
 .line-name{font-family:var(--mono);font-size:15px;font-weight:500;}
@@ -344,9 +400,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
       <button class="nav-item" onclick="switchView('lines',this)"><span class="icon">⚙️</span>Line Config</button>
       <button class="nav-item" onclick="switchView('users',this)"><span class="icon">👥</span>Users</button>
     </div>
-    <div style="flex:1"></div>
+    <div class="sb-wide-only" style="flex:1"></div>
     <div class="nav-spacer"></div>
-    <div class="sidebar-section">
+    <div class="sidebar-section sb-wide-only">
       <div class="sidebar-label" onclick="toggleLegend()" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between">Legend <span id="legendArrow" style="font-size:10px;color:var(--muted);display:inline-block;transition:transform .2s">▾</span></div>
       <div id="legendBody" style="display:flex;flex-direction:column;gap:5px;padding:4px 4px 8px;max-height:900px;overflow:hidden;transition:max-height .25s ease,opacity .2s;opacity:1">
         <div class="legend-row"><span class="sku-tag tag-usda">USDA</span><span class="legend-desc">Needs a USDA-approved line</span></div>
@@ -365,7 +421,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         <div class="legend-row" style="margin-top:6px;opacity:.55"><span class="legend-desc" id="legendVersion" style="font-family:var(--mono);font-size:10px" title="Which build the browser is actually running. If this does not match the file you pushed, the deployment is serving an older version."></span></div>
       </div>
     </div>
-    <div style="flex:1"></div>
+    <div class="sb-wide-only" style="flex:1"></div>
     <div class="nav-spacer"></div>
     <div class="sidebar-section" id="previewNav" style="display:none">
       <div class="sidebar-label">Preview</div>
@@ -3595,7 +3651,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.173';
+var APP_VERSION='v0.5.174';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
