@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.185 — 2026-09-03    (pairs with Code.js v0.4.117)
+  Sequins ✨ — Index.html    v0.5.186 — 2026-09-03    (pairs with Code.js v0.4.118)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.185 Throughput trend compares the last 45 days with the 45 before, inside
-           the 90-day window that sets the UPMs — no more Jan-to-now. The
-           automatic-updates status card is gone; the red banner is the flag.
+  v0.5.186 Throughput trend is a QUARTER against the previous quarter — last 90
+           days vs the 90 before. It was comparing 45-day halves, which is not a
+           quarter and is not what was asked for.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -3409,7 +3409,7 @@ function applyObservedUpm(){
 function quarterlyReport(){
   var body=showUpmResult_();
   document.getElementById('observedUpmSub').textContent='';
-  body.innerHTML='<div class="status status-info"><span class="spinner"></span>Reading the last 90 days\u2026</div>';
+  body.innerHTML='<div class="status status-info"><span class="spinner"></span>Reading the last two quarters\u2026</div>';
   google.script.run.withSuccessHandler(function(r){renderQuarterly(r);})
     .withFailureHandler(function(err){
       body.innerHTML='<div class="status status-err">\u26a0 '+escHtml(err&&err.message||'failed')+'</div>';
@@ -3419,7 +3419,7 @@ function quarterlyReport(){
 // the shape of the list is readable whether the biggest swing is 8% or 80%.
 function renderQuarterly(r){
   var body=document.getElementById('observedUpmBody');
-  document.getElementById('observedUpmSub').textContent=' \u00b7 last '+r.half+' days vs the '+r.half+' before';
+  document.getElementById('observedUpmSub').textContent=' \u00b7 last '+r.window+' days vs the '+r.window+' before';
   if(r.note){body.innerHTML='<div class="status status-warn">'+escHtml(r.note)+'</div>';return;}
   var peak=1;
   r.up.concat(r.down).forEach(function(m){peak=Math.max(peak,Math.abs(m.pct));});
@@ -3448,7 +3448,7 @@ function renderQuarterly(r){
   }
   function head(t){return '<div style="font-family:var(--mono);font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--teal);margin:10px 0 3px">'+t+'</div>';}
   var h='<div style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.5">'
-    +'Last <b>'+r.half+' days</b> against the <b>'+r.half+'</b> before, inside the same 90-day window that sets the UPMs \u00b7 '
+    +'Last <b>'+r.window+' days</b> against the <b>'+r.window+' before</b> \u00b7 '
     +r.compared+' SKUs ran in both \u00b7 amber weekly volume = down more than 40%, which usually explains the rate.</div>';
   h+=head('Got faster')+rows(r.up,'var(--teal)');
   h+=head('Got slower')+rows(r.down,'var(--red)');
@@ -3865,7 +3865,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.185';
+var APP_VERSION='v0.5.186';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;

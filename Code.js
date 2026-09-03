@@ -1,10 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.117 — 2026-09-03    (pairs with Index.html v0.5.185)
+ * Sequins ✨ — Code.js    v0.4.118 — 2026-09-03    (pairs with Index.html v0.5.186)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.117 fetchUpmHalves replaces fetchUpmByQuarter: two halves of the same
- *          90-day window the weekly update runs on, rather than calendar
- *          quarters reaching back to January.
+ * v0.4.118 fetchUpmHalves reads TWO quarters — the last 90 days and the 90
+ *          before them — instead of halving a single 90-day window.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -1857,15 +1856,13 @@ function applyObservedUpm_(days, actor) {
 // quarter is the report; LINE-6 against everything else is the capper.
 const CAPPER_LINE = 'LINE-6';
 
-// Two halves of the SAME 90-day window the weekly update runs on. Cori: "Take out
-// the 'looking up everything from Jan 1 to now' -- nobody cares, this report is
-// for the last 90 days." Quarters were also the wrong unit for a different
-// reason: on 3 September, 2026-Q3 was nine weeks old and 2026-Q1 was six months
-// stale, so the comparison was against a period nobody was planning from.
+// A quarter against the previous quarter: the last 90 days versus the 90 before
+// them. `days` is the length of ONE quarter, so the read spans twice that.
 //
-// Splitting the window in half means the later half IS the data currently setting
-// every UPM, and the earlier half is what it replaced. That is the comparison
-// worth reading.
+// Calendar quarters were wrong because on 3 September 2026-Q3 was nine weeks old
+// and 2026-Q1 six months stale — a comparison against a period nobody plans
+// from. Splitting one 90-day window into halves was wrong for the plainer
+// reason that 45 days is not a quarter, which is what was asked for.
 function fetchUpmHalves(days) {
   const window = Number(days) > 0 ? Number(days) : OBSERVED_UPM_DAYS;
   const sheet = SpreadsheetApp.openById(DATA_DROP_SHEET_ID).getSheetByName(DATA_DROP_TAB);
@@ -1885,8 +1882,8 @@ function fetchUpmHalves(days) {
     const t = Date.parse(String(v || '')); return isNaN(t) ? null : t;
   };
   const today = new Date(); today.setHours(0, 0, 0, 0);
-  const start = today.getTime() - window * 86400000;
-  const mid   = today.getTime() - Math.round(window / 2) * 86400000;
+  const start = today.getTime() - 2 * window * 86400000;   // start of the PRIOR quarter
+  const mid   = today.getTime() - window * 86400000;       // start of the CURRENT one
 
   const out = {};
   for (let r = 1; r < all.length; r++) {
@@ -1931,7 +1928,7 @@ function fetchUpmHalves(days) {
 function getUpmMovers(days) {
   const user = getCurrentUser();
   if (!user.isAdmin && !user.canEditRules) throw new Error('Not authorized');
-  const res = fetchUpmHalves(days), w = res.window, half = Math.round(w / 2);
+  const res = fetchUpmHalves(days), w = res.window;
 
   const moved = [];
   Object.keys(res.skus).forEach(function(k) {
@@ -1944,10 +1941,10 @@ function getUpmMovers(days) {
   });
   moved.sort(function(x, y) { return y.pct - x.pct; });
 
-  return { window: w, half: half, compared: moved.length,
+  return { window: w, compared: moved.length,
            up: moved.filter(function(m) { return m.pct > 0; }).slice(0, 5),
            down: moved.filter(function(m) { return m.pct < 0; }).reverse().slice(0, 5),
-           note: moved.length ? '' : 'Not enough production in both halves of the window to compare.' };
+           note: moved.length ? '' : 'Not enough production in both quarters to compare.' };
 }
 function applyObservedUpm(days) {
   const user = getCurrentUser();
