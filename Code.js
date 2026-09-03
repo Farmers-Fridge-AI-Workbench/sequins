@@ -1,10 +1,10 @@
 /**
- * Sequins ✨ — Code.js    v0.4.109 — 2026-09-03    (pairs with Index.html v0.5.177)
+ * Sequins ✨ — Code.js    v0.4.110 — 2026-09-03    (pairs with Index.html v0.5.178)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.109 fetchObservedUpm reads the analytics team’s Data Drop and returns
- *          volume-weighted UPM, average crew and UPLH per SKU over a trailing
- *          window. Read-only; nothing is written to any sheet.
+ * v0.4.110 exportUpmComparison writes library-vs-observed UPM per SKU to a
+ *          UPM Comparison tab in the archive workbook. Nothing is written to
+ *          the Data Drop, any source sheet, or the SKU Library itself.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -1635,6 +1635,69 @@ function fetchObservedUpm(days) {
     window + ' days (skipped ' + skippedOld + ' older, ' + skippedFlag + ' flagged, ' + skippedTime + ' unusable times).');
   return { skus: skus, rows: all.length - 1, used: used, window: window,
            skippedFlag: skippedFlag, skippedTime: skippedTime, skippedOld: skippedOld };
+}
+
+// Writes the observed-vs-library comparison to its own tab so it can be shared
+// with people who do not use Sequins. Cori: "can you grab me a comparison by SKU
+// (in a spreadsheet) what we have in Sequins now and what the 90 day is... I want
+// to show it to Samad & Matt before I just update the UPMs".
+//
+// Writes to the archive workbook, never to the Data Drop or any source sheet,
+// and touches nothing in the SKU Library itself. Adopting a value stays a
+// separate, human decision - this only lays the two numbers side by side.
+const UPM_COMPARE_TAB = 'UPM Comparison';
+const UPM_COMPARE_HEADER = ['SKU','Library UPM','Observed UPM','Delta','Delta %','Avg HC Ran',
+                            'Menu Optimal HC','Observed UPLH','Runs','Days','Lines','Units',
+                            'First Seen','Last Seen','Flagged Runs Excluded','Note'];
+
+function exportUpmComparison(days) {
+  const user = getCurrentUser();
+  if (!user.isAdmin && !user.canEditRules) throw new Error('Not authorized');
+
+  const obs = fetchObservedUpm(days);
+  const lib = getSection_(STATE_KEYS.skuLibrary) || {};
+
+  // Union of both sides. A SKU in the library with no runs is as interesting as
+  // one with runs and no library entry - the first may be dormant or misnamed,
+  // the second is something the floor ran that Sequins does not sequence.
+  const keys = {};
+  Object.keys(obs.skus).forEach(function(k) { keys[k] = true; });
+  Object.keys(lib).forEach(function(k) { if (lib[k] && lib[k].active !== false) keys[k] = true; });
+
+  const rows = Object.keys(keys).sort().map(function(k) {
+    const o = obs.skus[k] || null;
+    const m = lib[k] || null;
+    const cur = m ? parseFloat(m.upm) : NaN;
+    const hasCur = isFinite(cur) && cur > 0;
+    const delta = (o && hasCur) ? Math.round((o.upm - cur) * 10) / 10 : '';
+    const pct   = (o && hasCur) ? Math.round((o.upm - cur) / cur * 100) : '';
+    let note = '';
+    if (!o)               note = 'no runs in window';
+    else if (!m)          note = 'ran on the floor but not in the SKU Library';
+    else if (!hasCur)     note = 'no UPM set in Sequins';
+    else if (o.dayCount < 5) note = 'thin - only ' + o.dayCount + ' day(s) of history';
+    return [k,
+            hasCur ? cur : '',
+            o ? o.upm : '',
+            delta, pct === '' ? '' : pct / 100,
+            o && o.hc !== null ? o.hc : '',
+            m && m.optimalHC !== undefined && m.optimalHC !== '' ? m.optimalHC : '',
+            o && o.uplh !== null ? o.uplh : '',
+            o ? o.runs : '', o ? o.dayCount : '', o ? o.lineCount : '', o ? o.units : '',
+            o ? o.first : '', o ? o.last : '', o ? o.flagged : '', note];
+  });
+
+  writeConfigMirror_(UPM_COMPARE_TAB, UPM_COMPARE_HEADER, rows);
+  const ss = SpreadsheetApp.openById(PLAN_ARCHIVE_SHEET_ID);
+  const sheet = ss.getSheetByName(UPM_COMPARE_TAB);
+  // Delta % as a real percentage so sorting and conditional formatting behave
+  // for whoever opens this next.
+  if (sheet && rows.length) sheet.getRange(2, 5, rows.length, 1).setNumberFormat('0%');
+
+  Logger.log('exportUpmComparison: ' + rows.length + ' rows from ' + obs.used + ' runs over ' + obs.window + ' days.');
+  return { ok: true, rows: rows.length, window: obs.window, used: obs.used,
+           skippedFlag: obs.skippedFlag,
+           url: ss.getUrl() + '#gid=' + (sheet ? sheet.getSheetId() : '') };
 }
 
 // ─── SKU ATTRIBUTES (real sources — no guessing) ──────────────────────────────

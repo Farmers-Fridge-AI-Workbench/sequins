@@ -1,10 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.177 — 2026-09-03    (pairs with Code.js v0.4.109)
+  Sequins ✨ — Index.html    v0.5.178 — 2026-09-03    (pairs with Code.js v0.4.110)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.177 SKU Library: Observed UPM (90d) reads the analytics team’s Data Drop
-           and ranks measured throughput against the library value, with the
-           crew that ran it and UPLH. Read-only — nothing is written back.
+  v0.5.178 Export UPM comparison writes library-vs-observed per SKU to a UPM
+           Comparison tab in the archive, to share before anyone changes a UPM.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -793,6 +792,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           <button class="btn btn-ghost btn-sm" onclick="resyncLabelVersions()" title="Re-reads the Label Version Log now instead of waiting for the daily 3am run. Read-only against the source sheet; overwrites labelNumberVersion on every SKU in the library.">🏷 Resync label versions</button>
           <button class="btn btn-ghost btn-sm" onclick="prefillUsdaPairs()" title="Fills usdaPairedSku for the 5 pairs established from ingredient BOMs. Blanks only — never overwrites an existing pairing.">⇄ Prefill known USDA pairs</button>
           <button class="btn btn-ghost btn-sm" onclick="loadObservedUpm()" title="Measured units-per-minute per SKU from the analytics team&#39;s Data Drop, last 90 days. Read-only — nothing is written to the library.">⏱ Observed UPM (90d)</button>
+          <button class="btn btn-ghost btn-sm" onclick="exportUpmComparison()" title="Writes the library-vs-observed comparison to a UPM Comparison tab in the archive workbook, to share.">⬇ Export UPM comparison</button>
           <button class="btn btn-teal btn-sm" onclick="saveSkuLibrary()">Save changes</button>
         </div>
       </div>
@@ -3359,6 +3359,22 @@ function prefillUsdaPairs(){
 // of clicking a button labelled "show me the data". This ranks the disagreements
 // and leaves the adopting to a human.
 var _observedUpm=null;
+// Writes the same comparison to a shareable tab. Separate from loadObservedUpm
+// because this one WRITES (to the archive workbook only, never a source sheet)
+// and the on-screen view deliberately does not.
+function exportUpmComparison(){
+  var card=document.getElementById("observedUpmCard"),body=document.getElementById("observedUpmBody");
+  card.style.display="";
+  body.innerHTML='<div class="status status-info"><span class="spinner"></span>Building the comparison\u2026</div>';
+  google.script.run.withSuccessHandler(function(r){
+    body.innerHTML='<div class="status status-ok">\u2713 Wrote '+fmtUnits(r.rows)+' SKUs to the <b>UPM Comparison</b> tab '
+      +'\u2014 '+fmtUnits(r.used)+' runs over '+r.window+' days'
+      +(r.skippedFlag?(', '+r.skippedFlag+' flagged runs excluded'):'')+'.<br>'
+      +'<a href="'+escHtml(r.url)+'" target="_blank" style="color:var(--teal)">Open it</a></div>';
+  }).withFailureHandler(function(err){
+    body.innerHTML='<div class="status status-err">\u26a0 '+escHtml(err&&err.message||"failed")+'</div>';
+  }).exportUpmComparison(90);
+}
 function loadObservedUpm(){
   var card=document.getElementById("observedUpmCard"),body=document.getElementById("observedUpmBody"),
       sub=document.getElementById("observedUpmSub");
@@ -3748,7 +3764,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.177';
+var APP_VERSION='v0.5.178';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
