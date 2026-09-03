@@ -1,10 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.174 — 2026-08-31    (pairs with Code.js v0.4.106)
+  Sequins ✨ — Index.html    v0.5.175 — 2026-08-31    (pairs with Code.js v0.4.107)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.174 Handheld breakpoint at 900px: sidebar becomes a scrolling strip,
-           page headers stack instead of overlapping, My Line SKU cards go
-           single-column, 44px targets. Desktop untouched.
+  v0.5.175 My Line: Start/Stop buttons clock each SKU. Start is refused until
+           # people is entered, which moves onto the card face to gate it.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -133,6 +132,12 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .ml-f label{font-family:var(--mono);font-size:9px;letter-spacing:.09em;color:var(--muted);white-space:nowrap;}
 .ml-f input{width:86px;background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-family:var(--mono);font-size:13px;padding:7px 8px;text-align:center;}
 .ml-f input:focus{outline:none;border-color:var(--teal);}
+.ml-run{display:flex;align-items:flex-end;gap:12px;margin-top:12px;flex-wrap:wrap;}
+.ml-run .ml-f input{width:84px;}
+.ml-run-btn{min-width:104px;}
+.ml-run-times{font-family:var(--mono);font-size:12px;color:var(--muted);padding-bottom:9px;}
+.ml-run-times b{color:var(--teal);font-weight:600;}
+.ml-run-hint{font-family:var(--mono);font-size:11px;color:var(--amber);padding-bottom:10px;}
 .week-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 .week-chip{font-family:var(--mono);font-size:11px;padding:4px 12px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:var(--muted);cursor:pointer;}
 .week-chip:hover{border-color:var(--teal);color:var(--teal);}
@@ -194,6 +199,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
   /* Scope the full-width treatment to the ENTRY block. The run header uses
      .ml-f too, and letting it stretch turned NAME and HELD-OVER TOTES into
      two full-width bars taller than the SKU cards. */
+  .ml-run .ml-f input{width:110px;}
   .ml-entry .ml-f{flex:1 1 44%;}
   .ml-entry .ml-f input{width:100%;}
   .ml-runhdr .ml-f{flex:0 0 auto;}
@@ -3651,7 +3657,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.174';
+var APP_VERSION='v0.5.175';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -6453,6 +6459,7 @@ function renderMyLine(){
         +'<div style="font-size:16px;color:var(--teal);font-weight:700">'+fmtClock(job.startClockMin)+' – '+fmtClock(job.endClockMin)+'</div>'
         +'<div style="margin-top:8px">'+chips(job)+'</div>'
         +labelHtml
+        +mlRunBlock_(lineId,job)
       +'</div>'
       +mlPlanBlock_(job,lib)
       +mlEntryBlock_(lineId,job)
@@ -6489,12 +6496,16 @@ function mlPlanBlock_(job,lib){
     +stat('PARTIAL',t?String(t.part):'\u2014',!t)
     +'</div>';
 }
-// Entry panel. Deliberately inert — no save handler, no server call. Line leads
-// are not entering actuals yet; this is the layout so it can be opened on a
-// tablet and tried. Typed values are held in memory only so a poll-driven
-// re-render doesn't wipe what someone is mid-way through typing. They do not
-// survive a reload, and that is correct until there's somewhere real to put
-// them.
+// Entry panel. _mlEntry is the single source of truth for everything the floor
+// types or clocks, keyed line|sku|field, so a poll-driven re-render never wipes
+// what someone is part-way through. It DOES persist: mlSetEntry queues a
+// debounced saveRunSheetActuals, and mlLoadActuals_ reads it back on render.
+// (The comment that sat here said the panel was inert with no server call.
+// That stopped being true in v0.5.117 and was never corrected.)
+//
+// # PEOPLE is deliberately NOT in this panel. It gates Start, and making
+// someone open a collapsed panel to satisfy that gate would be absurd - it
+// sits on the card face beside the button, writing to this same field.
 var _mlEntry={};
 var _mlEntryOpen=false;
 function mlEntryVal_(lineId,sku,field){
@@ -6502,6 +6513,74 @@ function mlEntryVal_(lineId,sku,field){
   return v==null?'':String(v);
 }
 function mlSetEntry(lineId,sku,field,val){_mlEntry[lineId+'|'+sku+'|'+field]=val;mlQueueSave_();}
+// ─── START / STOP (v0.5.175) ─────────────────────────────────
+// Cori: “I want a start/stop button that records the start/stop time. And I
+// want it to stipulate the entry of the # of people before it will do the
+// start time.”
+//
+// The buttons write into the SAME start/end fields the Entry panel exposes, so
+// there is one source of truth and a lead who forgot to press Start can still
+// type the time in afterwards. State is read back OUT of those fields rather
+// than tracked separately: a start with no end means running, both means done.
+// A typed correction and a button press therefore cannot disagree.
+//
+// Times come off the tablet clock and are formatted exactly like the planned
+// times printed directly above them, so plan and actual read side by side.
+function mlNowClock_(){var d=new Date();return fmtClock(d.getHours()*60+d.getMinutes());}
+// Button presses save immediately instead of on the 1.5s debounce. A typed
+// character can wait; a clocked time is the thing we would be sorriest to lose
+// if the tablet is locked or closed straight after the tap.
+function mlSetEntryNow_(li,sku,field,val){
+  _mlEntry[li+'|'+sku+'|'+field]=val;
+  if(_mlSaveTimer)clearTimeout(_mlSaveTimer);
+  mlFlushSave_();
+}
+function mlRunBlock_(lineId,job){
+  if(!mlCanWriteActuals_())return '';
+  var sku=job.sku||'';
+  var people=String(mlEntryVal_(lineId,sku,'people')||'').trim();
+  var start=String(mlEntryVal_(lineId,sku,'start')||'').trim();
+  var end=String(mlEntryVal_(lineId,sku,'end')||'').trim();
+  var d=' data-li="'+escHtml(lineId)+'" data-sku="'+escHtml(sku)+'"';
+  var h='<div class="ml-run">';
+  h+='<div class="ml-f"><label># PEOPLE</label><input type="text" inputmode="numeric"'+d+' value="'+escHtml(people)+'" placeholder="--" oninput="mlPeopleChanged(this)"></div>';
+  if(!start){
+    h+='<button class="btn btn-teal ml-run-btn" data-act="start"'+d+' onclick="mlStart(this)"'+(people?'':' disabled')+'>Start</button>';
+    h+='<span class="ml-run-hint"'+(people?' style="display:none"':'')+'>Enter # people first</span>';
+  }else if(!end){
+    h+='<button class="btn btn-danger ml-run-btn" data-act="stop"'+d+' onclick="mlStop(this)">Stop</button>';
+    h+='<span class="ml-run-times">running since <b>'+escHtml(start)+'</b></span>';
+  }else{
+    h+='<span class="ml-run-times"><b>'+escHtml(start)+'</b> → <b>'+escHtml(end)+'</b></span>';
+  }
+  return h+'</div>';
+}
+// Toggled in place rather than by re-rendering: a renderMyLine() here would
+// rebuild the list and blow focus away mid-keystroke.
+function mlPeopleChanged(inp){
+  var li=inp.getAttribute('data-li'),sku=inp.getAttribute('data-sku');
+  mlSetEntry(li,sku,'people',inp.value);
+  var row=inp.parentNode&&inp.parentNode.parentNode;if(!row)return;
+  var ready=String(inp.value||'').trim()!=='';
+  var btn=row.querySelector('.ml-run-btn');
+  var hint=row.querySelector('.ml-run-hint');
+  if(btn&&btn.getAttribute('data-act')==='start')btn.disabled=!ready;
+  if(hint)hint.style.display=ready?'none':'';
+}
+function mlStart(btn){
+  var li=btn.getAttribute('data-li'),sku=btn.getAttribute('data-sku');
+  // Re-checked here and not only in the markup: disabled is a UI state, this is
+  // the actual rule.
+  if(String(mlEntryVal_(li,sku,'people')||'').trim()==='')return;
+  mlSetEntryNow_(li,sku,'start',mlNowClock_());
+  renderMyLine();
+}
+function mlStop(btn){
+  var li=btn.getAttribute('data-li'),sku=btn.getAttribute('data-sku');
+  if(!String(mlEntryVal_(li,sku,'start')||'').trim())return;
+  mlSetEntryNow_(li,sku,'end',mlNowClock_());
+  renderMyLine();
+}
 function mlEntryBlock_(lineId,job){
   if(!mlCanWriteActuals_())return'';
   var sku=(job.sku||''),li=lineId.replace(/'/g,"\\'"),sk=sku.replace(/'/g,"\\'");
@@ -6513,7 +6592,6 @@ function mlEntryBlock_(lineId,job){
   return'<div class="ml-entry'+(_mlEntryOpen?'':' collapsed')+'">'
     +f('START TIME','start','--:--')
     +f('END TIME','end','--:--')
-    +f('# PEOPLE','people','\u2014')
     +f('ACTUAL UNITS','actual','\u2014')
     +'</div>';
 }

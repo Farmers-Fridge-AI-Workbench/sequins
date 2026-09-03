@@ -1,8 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.106 — 2026-08-31    (pairs with Index.html v0.5.174)
+ * Sequins ✨ — Code.js    v0.4.107 — 2026-08-31    (pairs with Index.html v0.5.175)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.106 No server change — pairing bump. The handheld layout is CSS only.
+ * v0.4.107 No server change — pairing bump. Start/Stop writes through the
+ *          existing saveRunSheetActuals path; the columns already exist.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
