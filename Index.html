@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.184 — 2026-09-03    (pairs with Code.js v0.4.116)
+  Sequins ✨ — Index.html    v0.5.185 — 2026-09-03    (pairs with Code.js v0.4.117)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.184 Quarterly report carries weekly volume per SKU, then and now — a rate
-           that fell because runs got shorter is not a slower line. Rows made
-           compact; capper section and the manual Apply button removed.
+  v0.5.185 Throughput trend compares the last 45 days with the 45 before, inside
+           the 90-day window that sets the UPMs — no more Jan-to-now. The
+           automatic-updates status card is gone; the red banner is the flag.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -793,13 +793,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           <button class="btn btn-ghost btn-sm" onclick="resyncAllergens()" title="Menu Library is the source of truth and overwrites Sequins' values. Blank or 'No import' becomes NO ALLERGEN DATA — never treated as allergen-free.">⚠ Resync allergens</button>
           <button class="btn btn-ghost btn-sm" onclick="resyncLabelVersions()" title="Re-reads the Label Version Log now instead of waiting for the daily 3am run. Read-only against the source sheet; overwrites labelNumberVersion on every SKU in the library.">🏷 Resync label versions</button>
           <button class="btn btn-ghost btn-sm" onclick="prefillUsdaPairs()" title="Fills usdaPairedSku for the 5 pairs established from ingredient BOMs. Blanks only — never overwrites an existing pairing.">⇄ Prefill known USDA pairs</button>
-          <button class="btn btn-ghost btn-sm" onclick="quarterlyReport()" title="Top 5 SKUs that got faster and slower since the first quarter of data, plus capper vs other lines.">📈 Quarterly throughput</button>
+          <button class="btn btn-ghost btn-sm" onclick="quarterlyReport()" title="Top 5 SKUs that got faster and slower across the 90-day window that sets the UPMs.">📈 Throughput trend (90d)</button>
           <button class="btn btn-teal btn-sm" onclick="saveSkuLibrary()">Save changes</button>
         </div>
-      </div>
-      <div class="card" id="upmAutoCard">
-        <div class="card-title">Automatic UPM updates</div>
-        <div id="upmAutoBody"></div>
       </div>
       <div class="card" id="observedUpmCard" style="display:none">
         <div class="card-title" style="display:flex;align-items:center;gap:8px">Observed UPM <span style="color:var(--muted);font-weight:400" id="observedUpmSub"></span><button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="document.getElementById('observedUpmCard').style.display='none'" title="Close">✕ Close</button></div>
@@ -3386,6 +3382,10 @@ function checkUpmHealth(){
   google.script.run.withSuccessHandler(function(st){
     if(!st||!st.admin){el.className="preview-banner";return;}
     var bad=(st.health&&!st.health.ok)?st.health.message:"";
+    // A weekly job that never got scheduled is exactly as silent as a feed that
+    // stopped, and with the status card gone this banner is the only thing left
+    // that would ever say so.
+    if(!bad&&st.weeklyOn===false)bad="The weekly UPM update is not scheduled"+(st.triggerError?(" \u2014 "+st.triggerError):"")+". UPMs will not refresh on their own.";
     if(!bad&&st.last&&st.last.ok===false)bad=st.last.message;
     if(!bad){el.className="preview-banner";el.innerHTML="";return;}
     el.innerHTML='<span>\u26a0 <b>Throughput data problem</b> \u2014 '+escHtml(bad)+'</span>';
@@ -3409,17 +3409,17 @@ function applyObservedUpm(){
 function quarterlyReport(){
   var body=showUpmResult_();
   document.getElementById('observedUpmSub').textContent='';
-  body.innerHTML='<div class="status status-info"><span class="spinner"></span>Reading every run since January\u2026</div>';
+  body.innerHTML='<div class="status status-info"><span class="spinner"></span>Reading the last 90 days\u2026</div>';
   google.script.run.withSuccessHandler(function(r){renderQuarterly(r);})
     .withFailureHandler(function(err){
       body.innerHTML='<div class="status status-err">\u26a0 '+escHtml(err&&err.message||'failed')+'</div>';
-    }).getQuarterlyMovers();
+    }).getUpmMovers(90);
 }
 // Bars are scaled to the largest move ON SCREEN, not to a fixed percentage, so
 // the shape of the list is readable whether the biggest swing is 8% or 80%.
 function renderQuarterly(r){
   var body=document.getElementById('observedUpmBody');
-  document.getElementById('observedUpmSub').textContent=' \u00b7 '+r.first+' vs '+r.last;
+  document.getElementById('observedUpmSub').textContent=' \u00b7 last '+r.half+' days vs the '+r.half+' before';
   if(r.note){body.innerHTML='<div class="status status-warn">'+escHtml(r.note)+'</div>';return;}
   var peak=1;
   r.up.concat(r.down).forEach(function(m){peak=Math.max(peak,Math.abs(m.pct));});
@@ -3448,39 +3448,12 @@ function renderQuarterly(r){
   }
   function head(t){return '<div style="font-family:var(--mono);font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--teal);margin:10px 0 3px">'+t+'</div>';}
   var h='<div style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.5">'
-    +'<b>'+escHtml(r.first)+'</b> vs <b>'+escHtml(r.last)+'</b> \u00b7 '+r.compared+' SKUs with production in both \u00b7 '
-    +'amber weekly volume = down by more than 40%, which usually explains the rate.</div>';
+    +'Last <b>'+r.half+' days</b> against the <b>'+r.half+'</b> before, inside the same 90-day window that sets the UPMs \u00b7 '
+    +r.compared+' SKUs ran in both \u00b7 amber weekly volume = down more than 40%, which usually explains the rate.</div>';
   h+=head('Got faster')+rows(r.up,'var(--teal)');
   h+=head('Got slower')+rows(r.down,'var(--red)');
   body.innerHTML=h;
 }
-function renderUpmAuto(){
-  var el=document.getElementById("upmAutoBody");if(!el)return;
-  google.script.run.withSuccessHandler(function(st){
-    if(!st||!st.admin){el.innerHTML='<div style="color:var(--muted);font-size:11px">Admins only.</div>';return;}
-    // No switch: it runs. If the trigger could not be installed, say so loudly —
-    // that is the difference between 'running weekly' and 'silently never again'.
-    var h='<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">'
-      +'<span style="font-family:var(--mono);font-size:12px;color:'+(st.weeklyOn?'var(--teal)':'var(--red)')+'">'
-      +(st.weeklyOn ? '\u2713 Runs automatically every Sunday at 4am'
-                    : '\u26a0 The weekly update is NOT scheduled \u2014 '+escHtml(st.triggerError||'trigger could not be installed'))
-      +'</span></div>';
-    if(st.last){
-      h+='<div style="font-family:var(--mono);font-size:11px;color:'+(st.last.ok?"var(--muted)":"var(--red)")+';margin-top:8px">'
-        +'Last run '+escHtml(String(st.last.at||"").slice(0,16).replace("T"," "))+' by '+escHtml(st.last.actor||"")
-        +' \u2014 '+escHtml(st.last.message||"")+'</div>';
-    }
-    if(st.health){
-      h+='<div style="font-family:var(--mono);font-size:11px;color:'+(st.health.ok?"var(--muted)":"var(--red)")+';margin-top:4px">'
-        +(st.health.ok?('Data Drop healthy \u2014 '+fmtUnits(st.health.rows)+' rows, newest '+escHtml(st.health.lastDate)):('\u26a0 '+escHtml(st.health.message)))
-        +'</div>';
-    }
-    el.innerHTML=h;
-  }).withFailureHandler(function(){}).getUpmAutoStatus();
-}
-// Writes the same comparison to a shareable tab. Separate from loadObservedUpm
-// because this one WRITES (to the archive workbook only, never a source sheet)
-// and the on-screen view deliberately does not.
 function exportUpmComparison(){
   var body=showUpmResult_();
   body.innerHTML='<div class="status status-info"><span class="spinner"></span>Building the comparison\u2026</div>';
@@ -3892,7 +3865,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.184';
+var APP_VERSION='v0.5.185';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -5748,7 +5721,7 @@ function switchView(name,btn){
   if(btn)btn.classList.add('active');
   var mainEl=document.querySelector('.main');if(mainEl)mainEl.scrollTop=0;
   if(name==='demand'){loadForecastWeeks();renderLoadedDemand();}
-  if(name==='skus'){renderSkuLibrary();renderUpmAuto();}
+  if(name==='skus')renderSkuLibrary();
   if(name==='lines'){renderLineConfig();renderRules();renderRulesAccess();renderLegend();}
   if(name==='users')renderUsers();
   if(name==='sequence'){document.querySelector('.main').classList.remove('wb-active');renderSequence();}

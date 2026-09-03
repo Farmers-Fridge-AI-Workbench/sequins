@@ -1,10 +1,10 @@
 /**
- * Sequins ✨ — Code.js    v0.4.116 — 2026-09-03    (pairs with Index.html v0.5.184)
+ * Sequins ✨ — Code.js    v0.4.117 — 2026-09-03    (pairs with Index.html v0.5.185)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.116 Quarter buckets now carry units per week, so the movers report can
- *          show volume beside the rate. Capper comparison removed from the
- *          app — Cori wants that separately, not here.
+ * v0.4.117 fetchUpmHalves replaces fetchUpmByQuarter: two halves of the same
+ *          90-day window the weekly update runs on, rather than calendar
+ *          quarters reaching back to January.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -1857,15 +1857,25 @@ function applyObservedUpm_(days, actor) {
 // quarter is the report; LINE-6 against everything else is the capper.
 const CAPPER_LINE = 'LINE-6';
 
-function fetchUpmByQuarter() {
+// Two halves of the SAME 90-day window the weekly update runs on. Cori: "Take out
+// the 'looking up everything from Jan 1 to now' -- nobody cares, this report is
+// for the last 90 days." Quarters were also the wrong unit for a different
+// reason: on 3 September, 2026-Q3 was nine weeks old and 2026-Q1 was six months
+// stale, so the comparison was against a period nobody was planning from.
+//
+// Splitting the window in half means the later half IS the data currently setting
+// every UPM, and the earlier half is what it replaced. That is the comparison
+// worth reading.
+function fetchUpmHalves(days) {
+  const window = Number(days) > 0 ? Number(days) : OBSERVED_UPM_DAYS;
   const sheet = SpreadsheetApp.openById(DATA_DROP_SHEET_ID).getSheetByName(DATA_DROP_TAB);
   if (!sheet) throw new Error('Tab "' + DATA_DROP_TAB + '" not found.');
   const lastRow = sheet.getLastRow(), lastCol = Math.min(sheet.getLastColumn(), 40);
-  if (lastRow < 2) return { skus: {}, quarters: [] };
+  if (lastRow < 2) return { skus: {}, window: window };
 
   const all = sheet.getRange(1, 1, lastRow, lastCol).getValues();
   const head = all[0].map(function(h) { return String(h || '').trim(); });
-  const iDate = head.indexOf('Date'), iLine = head.indexOf('Line'), iSku = head.indexOf('Item Sku'),
+  const iDate = head.indexOf('Date'), iSku = head.indexOf('Item Sku'),
         iStart = head.indexOf('Second of Chicago Start Time'), iEnd = head.indexOf('Second of Chicago End Time'),
         iUnits = head.indexOf('Units Produced'), iFlag = head.indexOf('Units per Minute Flag');
   if (iSku < 0 || iStart < 0 || iEnd < 0 || iUnits < 0 || iDate < 0) throw new Error('Data Drop columns moved.');
@@ -1874,15 +1884,17 @@ function fetchUpmByQuarter() {
     if (v instanceof Date) return v.getTime();
     const t = Date.parse(String(v || '')); return isNaN(t) ? null : t;
   };
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const start = today.getTime() - window * 86400000;
+  const mid   = today.getTime() - Math.round(window / 2) * 86400000;
 
-  const out = {}, qSeen = {};
+  const out = {};
   for (let r = 1; r < all.length; r++) {
     const row = all[r];
     const sku = String(row[iSku] || '').trim().toUpperCase();
     if (!sku) continue;
-    // Same exclusion as the UPM average: flagged rows are anomalies.
     if (iFlag >= 0 && /^y$/i.test(String(row[iFlag] || '').trim())) continue;
-    const d = asTime(row[iDate]); if (d === null) continue;
+    const d = asTime(row[iDate]); if (d === null || d < start) continue;
     const units = parseFloat(String(row[iUnits] || '').replace(/,/g, ''));
     const a = asTime(row[iStart]), b = asTime(row[iEnd]);
     if (a === null || b === null || !isFinite(units) || units <= 0) continue;
@@ -1890,77 +1902,53 @@ function fetchUpmByQuarter() {
     if (mins < 0) mins += 1440;
     if (!(mins > 0) || mins > 720) continue;
 
+    const half = (d < mid) ? 'early' : 'late';
+    if (!out[sku]) out[sku] = { early: { u: 0, m: 0, d: {} }, late: { u: 0, m: 0, d: {} } };
+    const o = out[sku][half];
+    o.u += units; o.m += mins;
     const dt = new Date(d);
-    const q = dt.getFullYear() + '-Q' + (Math.floor(dt.getMonth() / 3) + 1);
-    qSeen[q] = true;
-    const line = String(row[iLine] || '').trim().toUpperCase();
-
-    if (!out[sku]) out[sku] = { q: {}, capper: { u: 0, m: 0 }, other: { u: 0, m: 0 } };
-    const o = out[sku];
-    if (!o.q[q]) o.q[q] = { u: 0, m: 0, days: {} };
-    o.q[q].u += units; o.q[q].m += mins;
-    o.q[q].days[dt.getFullYear() + '-' + dt.getMonth() + '-' + dt.getDate()] = true;
-    const bucket = (line === CAPPER_LINE) ? o.capper : o.other;
-    bucket.u += units; bucket.m += mins;
+    o.d[dt.getFullYear() + '-' + dt.getMonth() + '-' + dt.getDate()] = true;
   }
 
-  const quarters = Object.keys(qSeen).sort();
   const skus = {};
   Object.keys(out).forEach(function(k) {
-    const o = out[k], q = {};
-    quarters.forEach(function(qq) {
-      if (o.q[qq] && o.q[qq].m > 0) {
-        const dcount = Object.keys(o.q[qq].days).length;
-        q[qq] = { upm: Math.round(o.q[qq].u / o.q[qq].m * 10) / 10,
-                  days: dcount,
-                  // Units per week, from production days rather than calendar weeks:
-                  // a SKU that ran 3 days a week and one that ran 7 are not comparable
-                  // on calendar time, and the weekly figure is what Cori reads volume in.
-                  perWeek: dcount > 0 ? Math.round(o.q[qq].u * 7 / dcount) : 0 };
+    const o = out[k], f = {};
+    ['early', 'late'].forEach(function(h) {
+      const b = o[h], dc = Object.keys(b.d).length;
+      if (b.m > 0 && dc > 0) {
+        f[h] = { upm: Math.round(b.u / b.m * 10) / 10, days: dc,
+                 // Units per week from production DAYS, not calendar weeks: a SKU
+                 // running three days a week and one running seven are not
+                 // comparable on calendar time.
+                 perWeek: Math.round(b.u * 7 / dc) };
       }
     });
-    skus[k] = {
-      q: q,
-      capperUpm: o.capper.m > 0 ? Math.round(o.capper.u / o.capper.m * 10) / 10 : null,
-      otherUpm:  o.other.m  > 0 ? Math.round(o.other.u  / o.other.m  * 10) / 10 : null
-    };
+    skus[k] = f;
   });
-  return { skus: skus, quarters: quarters };
+  return { skus: skus, window: window };
 }
 
-// v0.4.115: returns the movers instead of writing a tab. Cori: "I don't want the
-// report in a spreadsheet -- can it populate in a simple chart/report of top 5
-// increase and top 5 decrease instead?" A ranked five is a thing you read; two
-// hundred rows in a sheet is a thing you promise to look at later.
-function getQuarterlyMovers() {
+function getUpmMovers(days) {
   const user = getCurrentUser();
   if (!user.isAdmin && !user.canEditRules) throw new Error('Not authorized');
-  const res = fetchUpmByQuarter(), qs = res.quarters;
-  if (qs.length < 2) return { quarters: qs, up: [], down: [], compared: 0,
-                              note: 'Only one quarter of data so far — nothing to compare against yet.' };
+  const res = fetchUpmHalves(days), w = res.window, half = Math.round(w / 2);
 
-  const first = qs[0], last = qs[qs.length - 1];
   const moved = [];
   Object.keys(res.skus).forEach(function(k) {
-    const o = res.skus[k], a = o.q[first], b = o.q[last];
+    const f = res.skus[k], a = f.early, b = f.late;
     if (!a || !b || !(a.upm > 0)) return;
-    // Volume rides along because it is usually the explanation. Cori on the
-    // first run: "Sonoma Salad I know has decreased drastically because we're not
-    // putting it in the fridges anymore so the volume is low and that kills our
-    // efficiency". A rate that fell because the runs got short is a different
-    // fact from a line that got slower, and the report could not tell them apart.
+    // Volume rides along because it is usually the explanation. A rate that fell
+    // because the runs got shorter is not a line that got slower.
     moved.push({ sku: k, from: a.upm, to: b.upm, pct: Math.round((b.upm - a.upm) / a.upm * 100),
-                 fromDays: a.days, toDays: b.days,
-                 fromWk: a.perWeek, toWk: b.perWeek });
+                 fromWk: a.perWeek, toWk: b.perWeek, fromDays: a.days, toDays: b.days });
   });
   moved.sort(function(x, y) { return y.pct - x.pct; });
 
-  return { quarters: qs, first: first, last: last, compared: moved.length,
+  return { window: w, half: half, compared: moved.length,
            up: moved.filter(function(m) { return m.pct > 0; }).slice(0, 5),
            down: moved.filter(function(m) { return m.pct < 0; }).reverse().slice(0, 5),
-           note: '' };
+           note: moved.length ? '' : 'Not enough production in both halves of the window to compare.' };
 }
-
 function applyObservedUpm(days) {
   const user = getCurrentUser();
   if (!user.isAdmin && !user.canEditRules) throw new Error('Not authorized');
