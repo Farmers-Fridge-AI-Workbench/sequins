@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.180 — 2026-09-03    (pairs with Code.js v0.4.112)
+  Sequins ✨ — Index.html    v0.5.181 — 2026-09-03    (pairs with Code.js v0.4.113)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.180 UPM Comparison is three columns, not sixteen, and only rows that are
-           actually comparable. Coverage is stated: which sequenced SKUs had no
-           production, ignoring CPG and beverages that never run a line.
+  v0.5.181 Apply 90-day UPMs, plus a weekly Sunday update that refuses to run on
+           stale data — and a red banner to any admin when the Data Drop stops
+           arriving or its columns move. Observed UPM card can be closed.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -373,6 +373,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 </style>
 </head>
 <body>
+<div class="preview-banner" id="upmFlag" style="background:rgba(239,68,68,.12);border-bottom-color:var(--red);color:var(--red);cursor:default"></div>
 <div class="preview-banner" id="previewBanner">
   <span id="previewBannerText">Previewing as —</span>
   <button onclick="exitPreviewRole()">Exit Preview</button>
@@ -793,6 +794,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           <button class="btn btn-ghost btn-sm" onclick="resyncLabelVersions()" title="Re-reads the Label Version Log now instead of waiting for the daily 3am run. Read-only against the source sheet; overwrites labelNumberVersion on every SKU in the library.">🏷 Resync label versions</button>
           <button class="btn btn-ghost btn-sm" onclick="prefillUsdaPairs()" title="Fills usdaPairedSku for the 5 pairs established from ingredient BOMs. Blanks only — never overwrites an existing pairing.">⇄ Prefill known USDA pairs</button>
           <button class="btn btn-ghost btn-sm" onclick="loadObservedUpm()" title="Measured units-per-minute per SKU from the analytics team&#39;s Data Drop, last 90 days. Read-only — nothing is written to the library.">⏱ Observed UPM (90d)</button>
+          <button class="btn btn-ghost btn-sm" onclick="applyObservedUpm()" title="Overwrite the SKU Library UPMs with the 90-day measured average. Writes a UPM Updates history row for every change.">↻ Apply 90-day UPMs</button>
           <button class="btn btn-ghost btn-sm" onclick="exportUpmComparison()" title="Writes the library-vs-observed comparison to a UPM Comparison tab in the archive workbook, to share.">⬇ Export UPM comparison</button>
           <button class="btn btn-teal btn-sm" onclick="saveSkuLibrary()">Save changes</button>
         </div>
@@ -824,8 +826,12 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           </tr></thead><tbody id="skuTableBody"></tbody></table>
         </div>
       </div>
+      <div class="card" id="upmAutoCard">
+        <div class="card-title">Automatic UPM updates</div>
+        <div id="upmAutoBody"></div>
+      </div>
       <div class="card" id="observedUpmCard" style="display:none">
-        <div class="card-title">Observed UPM <span style="color:var(--muted);font-weight:400" id="observedUpmSub"></span></div>
+        <div class="card-title" style="display:flex;align-items:center;gap:8px">Observed UPM <span style="color:var(--muted);font-weight:400" id="observedUpmSub"></span><button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="document.getElementById('observedUpmCard').style.display='none'" title="Close">✕ Close</button></div>
         <div id="observedUpmBody"></div>
       </div>
     </div>
@@ -3360,6 +3366,62 @@ function prefillUsdaPairs(){
 // of clicking a button labelled "show me the data". This ranks the disagreements
 // and leaves the adopting to a human.
 var _observedUpm=null;
+// The flag Cori asked for. Checked once at load for admins, and again after any
+// manual apply. Two different failures share one banner because they are
+// indistinguishable from the outside: the feed stopped, or the weekly job that
+// reads it failed. Either way the UPMs are quietly ageing.
+function checkUpmHealth(){
+  var el=document.getElementById("upmFlag");if(!el)return;
+  google.script.run.withSuccessHandler(function(st){
+    if(!st||!st.admin){el.className="preview-banner";return;}
+    var bad=(st.health&&!st.health.ok)?st.health.message:"";
+    if(!bad&&st.last&&st.last.ok===false)bad=st.last.message;
+    if(!bad){el.className="preview-banner";el.innerHTML="";return;}
+    el.innerHTML='<span>\u26a0 <b>Throughput data problem</b> \u2014 '+escHtml(bad)+'</span>';
+    el.className="preview-banner active";
+  }).withFailureHandler(function(){}).getUpmAutoStatus();
+}
+function applyObservedUpm(){
+  if(!confirm("Overwrite SKU Library UPMs with the 90-day measured average?\n\nEvery change is recorded on the UPM Updates tab with the old value, so it can be reviewed or reversed."))return;
+  var card=document.getElementById("observedUpmCard"),body=document.getElementById("observedUpmBody");
+  card.style.display="";
+  body.innerHTML='<div class="status status-info"><span class="spinner"></span>Applying\u2026</div>';
+  google.script.run.withSuccessHandler(function(r){
+    if(!r.ok){body.innerHTML='<div class="status status-err">\u26a0 '+escHtml(r.message)+'</div>';checkUpmHealth();return;}
+    body.innerHTML='<div class="status status-ok">\u2713 '+escHtml(r.message)
+      +'<div style="color:var(--muted);font-size:11px;margin-top:6px">Old values are on the <b>UPM Updates</b> tab in the archive. '
+      +'Reload to sequence against the new rates.</div></div>';
+    checkUpmHealth();
+  }).withFailureHandler(function(err){
+    body.innerHTML='<div class="status status-err">\u26a0 '+escHtml(err&&err.message||"failed")+'</div>';
+  }).applyObservedUpm(90);
+}
+function toggleWeeklyUpm(on){
+  google.script.run.withSuccessHandler(function(){renderUpmAuto();})
+    .withFailureHandler(function(err){alert("Could not change the weekly update: "+err.message);})
+    .setWeeklyUpmUpdate(!!on);
+}
+// Sits under the SKU table so the switch lives beside the thing it drives.
+function renderUpmAuto(){
+  var el=document.getElementById("upmAutoBody");if(!el)return;
+  google.script.run.withSuccessHandler(function(st){
+    if(!st||!st.admin){el.innerHTML='<div style="color:var(--muted);font-size:11px">Admins only.</div>';return;}
+    var h='<label style="display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;cursor:pointer">'
+      +'<input type="checkbox" '+(st.weeklyOn?"checked":"")+' style="accent-color:var(--teal);width:15px;height:15px" onchange="toggleWeeklyUpm(this.checked)"> '
+      +'Update UPMs weekly from the last 90 days (Sundays, 4am)</label>';
+    if(st.last){
+      h+='<div style="font-family:var(--mono);font-size:11px;color:'+(st.last.ok?"var(--muted)":"var(--red)")+';margin-top:8px">'
+        +'Last run '+escHtml(String(st.last.at||"").slice(0,16).replace("T"," "))+' by '+escHtml(st.last.actor||"")
+        +' \u2014 '+escHtml(st.last.message||"")+'</div>';
+    }
+    if(st.health){
+      h+='<div style="font-family:var(--mono);font-size:11px;color:'+(st.health.ok?"var(--muted)":"var(--red)")+';margin-top:4px">'
+        +(st.health.ok?('Data Drop healthy \u2014 '+fmtUnits(st.health.rows)+' rows, newest '+escHtml(st.health.lastDate)):('\u26a0 '+escHtml(st.health.message)))
+        +'</div>';
+    }
+    el.innerHTML=h;
+  }).withFailureHandler(function(){}).getUpmAutoStatus();
+}
 // Writes the same comparison to a shareable tab. Separate from loadObservedUpm
 // because this one WRITES (to the archive workbook only, never a source sheet)
 // and the on-screen view deliberately does not.
@@ -3777,7 +3839,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.180';
+var APP_VERSION='v0.5.181';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -5633,7 +5695,7 @@ function switchView(name,btn){
   if(btn)btn.classList.add('active');
   var mainEl=document.querySelector('.main');if(mainEl)mainEl.scrollTop=0;
   if(name==='demand'){loadForecastWeeks();renderLoadedDemand();}
-  if(name==='skus')renderSkuLibrary();
+  if(name==='skus'){renderSkuLibrary();renderUpmAuto();}
   if(name==='lines'){renderLineConfig();renderRules();renderRulesAccess();renderLegend();}
   if(name==='users')renderUsers();
   if(name==='sequence'){document.querySelector('.main').classList.remove('wb-active');renderSequence();}
@@ -7147,6 +7209,8 @@ window.onload=function(){
     if(user.isAdmin||user.isPlanner||user.canEditRules)document.getElementById('workbenchNav').style.display='';
     if(user.isAdmin||user.canEditRules)document.getElementById('sandboxNav').style.display='';
     if(user.isAdmin||user.canEditRules)document.getElementById('linePlannerNav').style.display='';
+    // v0.5.181: the throughput-data flag, once per load, admins only.
+    checkUpmHealth();
     if(user.isAdmin||user.isFloorViewer)document.getElementById('myLineNav').style.display='';
     if(user.isAdmin)document.getElementById('previewNav').style.display='';
     window._canEditRules=!!(user.isAdmin||user.canEditRules);

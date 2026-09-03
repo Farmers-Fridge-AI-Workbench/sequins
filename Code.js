@@ -1,10 +1,10 @@
 /**
- * Sequins ✨ — Code.js    v0.4.112 — 2026-09-03    (pairs with Index.html v0.5.180)
+ * Sequins ✨ — Code.js    v0.4.113 — 2026-09-03    (pairs with Index.html v0.5.181)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.112 exportUpmComparison writes three columns and reports coverage — the
- *          sequenced SKUs with no production in the window, CPG and beverages
- *          excluded from that count since they never run a line.
+ * v0.4.113 dataDropHealth gates both the weekly UPM update and an admin banner;
+ *          applyObservedUpm_ writes measured UPMs into the library and appends
+ *          every change to a UPM Updates tab with the old value.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -1723,7 +1723,150 @@ function exportUpmComparison(days) {
            url: ss.getUrl() + '#gid=' + (sheet ? sheet.getSheetId() : '') };
 }
 
-// ─── SKU ATTRIBUTES (real sources — no guessing) ───// ─── SKU ATTRIBUTES (real sources — no guessing) ──────────────────────────────
+// ─── SKU ATTRIBUTES (real sources — no guessing) ─────────────────────────────
+// ─── DATA DROP HEALTH + WEEKLY UPM UPDATE (v0.4.113) ────────────────────────
+// Samad signed off on adopting the 90-day average and refreshing it weekly.
+// Cori: "I want to install a flag here tho - if for some reason we are not
+// collecting data correctly from that spreadsheet I need Sequins to throw a flag
+// at anyone with admin access who opens Sequins."
+//
+// That flag is the whole safety story. An automatic weekly write into the SKU
+// Library is only safe while the thing it reads is healthy, and the failure that
+// matters is SILENT: the drop stops arriving, the tab gets renamed, a column
+// moves. Nothing breaks loudly — Sequins just keeps planning off an average that
+// is quietly ageing. So the same check gates the weekly job AND warns admins.
+const UPM_AUTO_KEY = 'sequins_upm_auto_status';        // one small bounded blob
+const UPM_UPDATE_HEADER = ['At','By','SKU','Old UPM','New UPM','Runs','Days','Window Days'];
+const DATA_DROP_MAX_AGE_DAYS = 3;   // it lands daily; 3 covers a weekend plus slack
+
+function dataDropHealth() {
+  const out = { ok: false, lastDate: '', ageDays: null, rows: 0, message: '' };
+  let sheet;
+  try { sheet = SpreadsheetApp.openById(DATA_DROP_SHEET_ID).getSheetByName(DATA_DROP_TAB); }
+  catch (e) { out.message = 'Cannot open the Data Drop workbook — ' + e.message; return out; }
+  if (!sheet) { out.message = 'Tab "' + DATA_DROP_TAB + '" is gone from the Data Drop workbook.'; return out; }
+
+  const lastRow = sheet.getLastRow();
+  out.rows = Math.max(0, lastRow - 1);
+  if (lastRow < 2) { out.message = 'The Data Drop tab is empty.'; return out; }
+
+  const head = sheet.getRange(1, 1, 1, Math.min(sheet.getLastColumn(), 40)).getValues()[0]
+                    .map(function(h) { return String(h || '').trim(); });
+  const need = ['Date','Item Sku','Second of Chicago Start Time','Second of Chicago End Time','Units Produced'];
+  const gone = need.filter(function(n) { return head.indexOf(n) < 0; });
+  if (gone.length) { out.message = 'Data Drop columns moved or were renamed — missing: ' + gone.join(', '); return out; }
+
+  // Newest date anywhere in the column, not just the last row: the drop appends,
+  // but assuming order would let one stray row read as an all-clear.
+  const dates = sheet.getRange(2, head.indexOf('Date') + 1, lastRow - 1, 1).getValues();
+  let newest = null;
+  for (let i = 0; i < dates.length; i++) {
+    const v = dates[i][0];
+    const t = (v instanceof Date) ? v.getTime() : Date.parse(String(v || ''));
+    if (!isNaN(t) && (newest === null || t > newest)) newest = t;
+  }
+  if (newest === null) { out.message = 'No readable dates in the Data Drop.'; return out; }
+
+  const d = new Date(newest);
+  out.lastDate = d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2);
+  const today = new Date(); today.setHours(0,0,0,0);
+  out.ageDays = Math.round((today.getTime() - new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()) / 86400000);
+  if (out.ageDays > DATA_DROP_MAX_AGE_DAYS) {
+    out.message = 'The Data Drop has not updated since ' + out.lastDate + ' (' + out.ageDays +
+                  ' days ago). UPMs are no longer being refreshed from current production.';
+    return out;
+  }
+  out.ok = true;
+  return out;
+}
+
+// What the admin banner reads. Live health AND how the last weekly run went — a
+// job that failed on Sunday is exactly as invisible as a feed that stopped.
+function getUpmAutoStatus() {
+  const user = getCurrentUser();
+  if (!user.isAdmin) return { admin: false };
+  let last = null;
+  try { last = JSON.parse(PropertiesService.getScriptProperties().getProperty(UPM_AUTO_KEY) || 'null'); } catch (e) {}
+  let weeklyOn = false;
+  try {
+    weeklyOn = ScriptApp.getProjectTriggers().some(function(t) { return t.getHandlerFunction() === 'weeklyUpmUpdate'; });
+  } catch (e) {}
+  return { admin: true, health: dataDropHealth(), last: last, weeklyOn: weeklyOn };
+}
+
+// Internal so the trigger can run without a user session. actor is recorded
+// either way, so the audit log tells a person apart from the weekly job.
+function applyObservedUpm_(days, actor) {
+  const health = dataDropHealth();
+  const stamp = { at: new Date().toISOString(), actor: actor, ok: false, changed: 0, checked: 0, message: '' };
+  if (!health.ok) {
+    // Refuse rather than write an average built on a feed already known to be bad.
+    stamp.message = 'Skipped — ' + health.message;
+    PropertiesService.getScriptProperties().setProperty(UPM_AUTO_KEY, JSON.stringify(stamp));
+    Logger.log('applyObservedUpm_: ' + stamp.message);
+    return { ok: false, changed: 0, checked: 0, message: stamp.message, health: health };
+  }
+
+  const obs = fetchObservedUpm(days);
+  const lib = getSection_(STATE_KEYS.skuLibrary) || {};
+  const libByNorm = {};
+  Object.keys(lib).forEach(function(k) { libByNorm[normalizeSku_(k)] = k; });
+
+  const changes = [];
+  Object.keys(obs.skus).forEach(function(k) {
+    const key = lib[k] ? k : libByNorm[normalizeSku_(k)];
+    if (!key) return;
+    const m = lib[key];
+    if (!m || m.active === false || m.pending) return;
+    if (NON_ASSEMBLY_PACKAGE_RE.test(String(m.packageType || '').trim())) return;
+    const before = parseFloat(m.upm), after = obs.skus[k].upm;
+    if (!isFinite(after) || after <= 0) return;
+    if (isFinite(before) && Math.round(before * 10) === Math.round(after * 10)) return;
+    m.upm = after;
+    changes.push([new Date().toISOString(), actor, key, isFinite(before) ? before : '', after,
+                  obs.skus[k].runs, obs.skus[k].dayCount, obs.window]);
+  });
+
+  if (changes.length) {
+    setSection_(STATE_KEYS.skuLibrary, lib);
+    mirrorConfigSafely_('sku', lib, actor);
+    // Append-only history, so a week that moved something the wrong way can be
+    // found and reversed rather than merely noticed.
+    const tab = runSheetTab_('UPM Updates', UPM_UPDATE_HEADER);
+    tab.getRange(tab.getLastRow() + 1, 1, changes.length, UPM_UPDATE_HEADER.length).setValues(changes);
+  }
+
+  stamp.ok = true; stamp.changed = changes.length; stamp.checked = Object.keys(obs.skus).length;
+  stamp.message = changes.length + ' UPM(s) updated from ' + obs.used + ' runs over ' + obs.window + ' days.';
+  PropertiesService.getScriptProperties().setProperty(UPM_AUTO_KEY, JSON.stringify(stamp));
+  writeAuditLog_(actor, 'apply_observed_upm', '', '', stamp.message);
+  Logger.log('applyObservedUpm_: ' + stamp.message);
+  return { ok: true, changed: changes.length, checked: stamp.checked, message: stamp.message, health: health };
+}
+
+function applyObservedUpm(days) {
+  const user = getCurrentUser();
+  if (!user.isAdmin && !user.canEditRules) throw new Error('Not authorized');
+  return applyObservedUpm_(days || OBSERVED_UPM_DAYS, user.email);
+}
+
+// Trigger entry point. Trivial on purpose — everything it needs in order to
+// refuse lives inside applyObservedUpm_.
+function weeklyUpmUpdate() { applyObservedUpm_(OBSERVED_UPM_DAYS, 'weekly trigger'); }
+
+function setWeeklyUpmUpdate(on) {
+  const user = getCurrentUser();
+  if (!user.isAdmin) throw new Error('Not authorized');
+  ScriptApp.getProjectTriggers().forEach(function(t) {
+    if (t.getHandlerFunction() === 'weeklyUpmUpdate') ScriptApp.deleteTrigger(t);
+  });
+  // Sunday early morning: the week's production has landed, and nobody has yet
+  // opened the app on Monday to plan against it.
+  if (on) ScriptApp.newTrigger('weeklyUpmUpdate').timeBased().onWeekDay(ScriptApp.WeekDay.SUNDAY).atHour(4).create();
+  writeAuditLog_(user.email, 'set_weekly_upm', '', '', on ? 'enabled' : 'disabled');
+  return { ok: true, weeklyOn: !!on };
+}
+
 /**
  * Pulls SKU attributes for a given list of SKU names directly from the
  * three source sheets that the old Seq Input formulas referenced:
