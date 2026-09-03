@@ -30,6 +30,33 @@ enough. Restate it here if flipping it by hand ever gets missed.
 
 ---
 
+## Blocked on someone else
+
+### Push run-sheet actuals into the internal system the floor already types into
+
+Cori, 2026-08-31: "they already type in actuals - it's an internally built
+system. I need to get with that team and figure out how to connect what we're
+going to put in here to that system so the team doesn't have to enter it twice."
+
+Hers to arrange with that team; ours to build once the interface is known. Do
+not go looking for the destination — it is not any sheet Sequins currently
+touches. Both obvious candidates were checked on 2026-08-31 and ruled out:
+Assembly Sequencing 2.0 is only a fallback and is being retired, and War Room's
+`Assembly $ / unit` is computed from a database ("Database DoD - Final"), not
+entered.
+
+What Sequins will have to offer, so the shape is known before the conversation:
+`Run Sheet Actuals` captures **per SKU** — ActualStart, ActualEnd, ActualPeople,
+ActualUnits, ActualFullTotes, ActualPartialUnits — with the planned figures
+stored alongside each row. `Run Sheet Shift` holds the per-line/day header. Both
+were empty as of 2026-08-31; nothing has been captured yet.
+
+The open question for that team is grain: per SKU, or per line per day. Per-day
+makes the push an aggregation and leaves the per-SKU detail as Sequins' own
+contribution to the Snowflake north star.
+
+---
+
 ## Parked — low priority, Cori's call 2026-08-31
 
 Both need an org owner and neither is urgent: "you can stop worrying about that
