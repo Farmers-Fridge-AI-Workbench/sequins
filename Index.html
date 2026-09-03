@@ -1,9 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.178 — 2026-09-03    (pairs with Code.js v0.4.110)
+  Sequins ✨ — Index.html    v0.5.179 — 2026-09-03    (pairs with Code.js v0.4.111)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.178 Export UPM comparison writes library-vs-observed per SKU to a UPM
-           Comparison tab in the archive, to share before anyone changes a UPM.
+  v0.5.179 Observed UPM was keyed with underscores stripped, so it matched no
+           SKU Library entry and every library UPM read blank. Keyed raw now,
+           with a normalised fallback that reports naming drift as such.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -3390,13 +3391,20 @@ function loadObservedUpm(){
 function renderObservedUpm(res){
   var body=document.getElementById("observedUpmBody"),sub=document.getElementById("observedUpmSub");
   var lib=STATE.skuLibrary||{},skus=(res&&res.skus)||{},keys=Object.keys(skus);
+  // Same normalised fallback the export uses, so the on-screen table and the
+  // shared tab never disagree about whether a SKU is in the library.
+  var libByNorm={};
+  Object.keys(lib).forEach(function(k){libByNorm[String(k).toUpperCase().replace(/[^A-Z0-9]/g,'')]=k;});
   if(!keys.length){body.innerHTML='<div class="status status-warn">No usable runs in the window.</div>';return;}
   sub.textContent=" \u00b7 "+keys.length+" SKUs from "+fmtUnits(res.used)+" runs in the last "+res.window+" days";
   var rows=keys.map(function(k){
-    var o=skus[k],cur=parseFloat((lib[k]||{}).upm);
+    var o=skus[k],m=lib[k];
+    if(!m){var alt=libByNorm[String(k).toUpperCase().replace(/[^A-Z0-9]/g,'')];if(alt)m=lib[alt];}
+    m=m||{};
+    var cur=parseFloat(m.upm);
     var d=(isFinite(cur)&&cur>0)?((o.upm-cur)/cur*100):null;
     return{sku:k,obs:o.upm,cur:isFinite(cur)&&cur>0?cur:null,pct:d,runs:o.runs,days:o.dayCount,
-           lines:o.lineCount,flagged:o.flagged,last:o.last,hc:o.hc,uplh:o.uplh,menu:parseFloat((lib[k]||{}).optimalHC)};
+           lines:o.lineCount,flagged:o.flagged,last:o.last,hc:o.hc,uplh:o.uplh,menu:parseFloat(m.optimalHC)};
   });
   // biggest disagreement first; SKUs with no library UPM to compare sink to the bottom
   rows.sort(function(a,b){
@@ -3764,7 +3772,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.178';
+var APP_VERSION='v0.5.179';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;

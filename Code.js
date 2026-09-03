@@ -1,10 +1,10 @@
 /**
- * Sequins ✨ — Code.js    v0.4.110 — 2026-09-03    (pairs with Index.html v0.5.178)
+ * Sequins ✨ — Code.js    v0.4.111 — 2026-09-03    (pairs with Index.html v0.5.179)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.110 exportUpmComparison writes library-vs-observed UPM per SKU to a
- *          UPM Comparison tab in the archive workbook. Nothing is written to
- *          the Data Drop, any source sheet, or the SKU Library itself.
+ * v0.4.111 fetchObservedUpm: no Apps Script service calls left in the row loop
+ *          (it was making ~21,000 of them), and SKUs are keyed to match the
+ *          library instead of having their underscores stripped.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -1547,7 +1547,7 @@ function fetchObservedUpm(days) {
 
   const sheet = SpreadsheetApp.openById(DATA_DROP_SHEET_ID).getSheetByName(DATA_DROP_TAB);
   if (!sheet) throw new Error('Tab "' + DATA_DROP_TAB + '" not found in the Data Drop workbook.');
-  const lastRow = sheet.getLastRow(), lastCol = sheet.getLastColumn();
+  const lastRow = sheet.getLastRow(), lastCol = Math.min(sheet.getLastColumn(), 40);
   if (lastRow < 2) return { skus: {}, rows: 0, used: 0, window: window };
 
   const all = sheet.getRange(1, 1, lastRow, lastCol).getValues();
@@ -1567,6 +1567,18 @@ function fetchObservedUpm(days) {
   const cutoff = new Date(); cutoff.setHours(0, 0, 0, 0);
   cutoff.setDate(cutoff.getDate() - window);
 
+  // v0.4.111: day keys are built by arithmetic, not Utilities.formatDate, and
+  // the timezone is read ONCE. The first cut called both — plus
+  // Session.getScriptTimeZone() — inside a loop over ~10,800 rows, which is
+  // roughly 21,000 Apps Script service calls and took minutes rather than
+  // seconds. The cells already come out of the sheet in script time, so
+  // reading their own components is both free and more correct than
+  // re-formatting them through a timezone.
+  const dayKey = function(ms) {
+    const x = new Date(ms);
+    return x.getFullYear() + '-' + ('0' + (x.getMonth() + 1)).slice(-2) + '-' + ('0' + x.getDate()).slice(-2);
+  };
+
   // Cells may arrive as Dates or as text depending on how the drop wrote them.
   const asTime = function(v) {
     if (v instanceof Date) return v.getTime();
@@ -1578,7 +1590,12 @@ function fetchObservedUpm(days) {
   let used = 0, skippedFlag = 0, skippedTime = 0, skippedOld = 0;
   for (let r = 1; r < all.length; r++) {
     const row = all[r];
-    const sku = normalizeSku_(String(row[iSku] || ''));
+    // v0.4.111: raw uppercased name, NOT normalizeSku_. That helper strips every
+    // non-alphanumeric character, so CHICKEN_CAESAR_SALAD becomes
+    // CHICKENCAESARSALAD - which matches nothing, because the SKU Library is
+    // keyed on name.toUpperCase() with the underscores intact. Keyed that way
+    // the comparison showed a blank library UPM for every single SKU.
+    const sku = String(row[iSku] || '').trim().toUpperCase();
     if (!sku) continue;
 
     const d = asTime(row[iDate]);
@@ -1606,8 +1623,7 @@ function fetchObservedUpm(days) {
     }
     if (iLine >= 0) o.lines[String(row[iLine] || '').trim()] = true;
     if (d !== null) {
-      const key = Utilities.formatDate(new Date(d), Session.getScriptTimeZone(), 'yyyy-MM-dd');
-      o.days[key] = true;
+      o.days[dayKey(d)] = true;
       if (o.first === null || d < o.first) o.first = d;
       if (o.last === null || d > o.last) o.last = d;
     }
@@ -1626,8 +1642,8 @@ function fetchObservedUpm(days) {
       dayCount: Object.keys(o.days).length,
       lineCount: Object.keys(o.lines).length,
       units: Math.round(o.units),
-      first: o.first ? Utilities.formatDate(new Date(o.first), Session.getScriptTimeZone(), 'yyyy-MM-dd') : '',
-      last:  o.last  ? Utilities.formatDate(new Date(o.last),  Session.getScriptTimeZone(), 'yyyy-MM-dd') : ''
+      first: o.first ? dayKey(o.first) : '',
+      last:  o.last  ? dayKey(o.last)  : ''
     };
   });
 
@@ -1660,19 +1676,31 @@ function exportUpmComparison(days) {
   // Union of both sides. A SKU in the library with no runs is as interesting as
   // one with runs and no library entry - the first may be dormant or misnamed,
   // the second is something the floor ran that Sequins does not sequence.
+  // Names should match exactly - both sides are the uppercased SKU - but if one
+  // side writes a hyphen or a stray space, the row would read as 'not in the
+  // library' when it is really the same SKU spelled differently. Keep a
+  // normalised index so that case is reported as naming drift instead.
+  const libByNorm = {};
+  Object.keys(lib).forEach(function(k) { libByNorm[normalizeSku_(k)] = k; });
+
   const keys = {};
   Object.keys(obs.skus).forEach(function(k) { keys[k] = true; });
   Object.keys(lib).forEach(function(k) { if (lib[k] && lib[k].active !== false) keys[k] = true; });
 
   const rows = Object.keys(keys).sort().map(function(k) {
     const o = obs.skus[k] || null;
-    const m = lib[k] || null;
+    let m = lib[k] || null, matchedAs = '';
+    if (!m) {
+      const alt = libByNorm[normalizeSku_(k)];
+      if (alt) { m = lib[alt]; matchedAs = alt; }
+    }
     const cur = m ? parseFloat(m.upm) : NaN;
     const hasCur = isFinite(cur) && cur > 0;
     const delta = (o && hasCur) ? Math.round((o.upm - cur) * 10) / 10 : '';
     const pct   = (o && hasCur) ? Math.round((o.upm - cur) / cur * 100) : '';
     let note = '';
-    if (!o)               note = 'no runs in window';
+    if (matchedAs)        note = 'name differs - matched SKU Library entry "' + matchedAs + '"';
+    else if (!o)          note = 'no runs in window';
     else if (!m)          note = 'ran on the floor but not in the SKU Library';
     else if (!hasCur)     note = 'no UPM set in Sequins';
     else if (o.dayCount < 5) note = 'thin - only ' + o.dayCount + ' day(s) of history';
