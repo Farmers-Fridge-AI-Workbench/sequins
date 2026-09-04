@@ -1,9 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.191 — 2026-09-04    (pairs with Code.js v0.4.123)
+  Sequins ✨ — Index.html    v0.5.192 — 2026-09-04    (pairs with Code.js v0.4.124)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.191 The capper section lists only SKUs the library FLAGS as capper — five
-           of them — not every SKU that ever spilled onto LINE-6 once.
+  v0.5.192 One traffic-light rule for every percentage, UPM included. Sample
+           sizes say which side is thin in words. The capper split states that
+           its move date is inferred, because the drop cannot confirm it.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -3438,6 +3439,14 @@ function quarterlyReport(){
 }
 // Bars are scaled to the largest move ON SCREEN, not to a fixed percentage, so
 // the shape of the list is readable whether the biggest swing is 8% or 80%.
+// One rule for every coloured percentage in this report. Cori: "UPM deserves
+// red/yellow/green treatment too - let's be consistent". Green better, red worse,
+// yellow the flat band inside 3% \u2014 yellow means 'this did not move', which is an
+// answer rather than a warning.
+function ryg_(pct){
+  if(pct===null||pct===undefined||isNaN(pct))return 'var(--muted)';
+  return pct>=3?'var(--green)':(pct<=-3?'var(--red)':'var(--amber)');
+}
 function renderQuarterly(r){
   var body=document.getElementById('observedUpmBody');
   document.getElementById('observedUpmSub').textContent=' \u00b7 last '+r.window+' days vs the '+r.window+' before';
@@ -3447,6 +3456,9 @@ function renderQuarterly(r){
   // Deliberately small. Cori: "the chart is HUGE compared to the usefulness of the
   // data being that big." The bar is a scanning aid, not the content — it gets a
   // fixed narrow track and the numbers get the room.
+  // The section colour is now only the bar. The number itself is a traffic
+  // light on its own value, so a +1% row in 'got faster' reads as flat rather
+  // than as an improvement.
   function rows(list,color){
     if(!list.length)return '<div style="font-family:var(--mono);font-size:11px;color:var(--muted);padding:2px 0">none</div>';
     return list.map(function(m){
@@ -3461,11 +3473,7 @@ function renderQuarterly(r){
       //
       // Red / yellow / green, Cori's call. Yellow is the flat band rather than a
       // warning \u2014 it says 'this did not move', which is a real answer.
-      var uplhCol='var(--muted)';
-      if(m.fromUplh&&m.toUplh){
-        var ud=(m.toUplh-m.fromUplh)/m.fromUplh;
-        uplhCol=ud>=0.03?'var(--green)':(ud<=-0.03?'var(--red)':'var(--amber)');
-      }
+      var uplhCol=(m.fromUplh&&m.toUplh)?ryg_((m.toUplh-m.fromUplh)/m.fromUplh*100):'var(--muted)';
       // Flagged when volume moved far more than the rate did: that is the case
       // where the SKU did not get slower, there is just less of it per run.
       var volDrop=(m.fromWk>0&&m.toWk<m.fromWk*0.6);
@@ -3473,7 +3481,7 @@ function renderQuarterly(r){
         +'<div style="width:210px;flex:0 0 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escHtml(m.sku)+'">'+escHtml(m.sku)+'</div>'
         +'<div style="width:90px;flex:0 0 auto;background:var(--surface2);border-radius:2px;height:8px;overflow:hidden">'
           +'<div style="width:'+w+'%;height:100%;background:'+color+';opacity:.6"></div></div>'
-        +'<div style="width:46px;text-align:right;font-weight:600;color:'+color+';flex:0 0 auto">'+(m.pct>0?'+':'')+m.pct+'%</div>'
+        +'<div style="width:46px;text-align:right;font-weight:600;color:'+ryg_(m.pct)+';flex:0 0 auto">'+(m.pct>0?'+':'')+m.pct+'%</div>'
         +'<div style="width:132px;text-align:right;color:var(--muted);flex:0 0 auto">'+m.from+' \u2192 '+m.to+' UPM</div>'
         +'<div style="width:150px;text-align:right;color:'+(volDrop?'var(--amber)':'var(--muted)')+';flex:0 0 auto" '
           +'title="Average units per week in each quarter. A big drop here usually explains a falling rate \u2014 shorter runs, same changeover.">'+vol+'</div>'
@@ -3491,11 +3499,11 @@ function renderQuarterly(r){
     +'<div style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.6;margin-top:4px">'
     +'<span style="color:var(--amber)">Amber volume</span> = down more than 40%, which usually explains a falling '
     +'rate \u2014 shorter runs carry the same changeover. '
-    +'<b>UPLH</b> is a traffic light on its own direction: '
+    +'Percentages are a traffic light on their own value: '
     +'<span style="color:var(--green)">green</span> better, '
     +'<span style="color:var(--amber)">yellow</span> flat, '
     +'<span style="color:var(--red)">red</span> worse. '
-    +'UPM up with UPLH red means the speed was bought with people.</div>';
+    +'UPM and UPLH are coloured separately \u2014 UPM green beside UPLH red means the speed was bought with people.</div>';
   // Rows are fixed-width and total more than the card, which stretched the
   // content box and clipped the legend above \u2014 so the one line explaining what
   // amber meant was the first thing to disappear. Scroll the rows, not the card.
@@ -3512,18 +3520,24 @@ function renderQuarterly(r){
     h+='<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:4px;line-height:1.6">'
       +r.capperCount+' recipe(s) have production both before and after their first capper run. '
       +'Each is split on its own move date, since they went over gradually. '
-      +'Recipes already on the capper when the data starts have no \u2018before\u2019 and are not listed.</div>';
+      +'Recipes already on the capper when the data starts have no \u2018before\u2019 and are not listed.</div>'
+      // Say the assumption out loud. The drop records WHICH LINE ran, not whether
+      // the capper was running on it, so the split date is inferred and can be wrong
+      // in one specific way: if the capper was fitted to a LINE-6 that already
+      // existed, the first LINE-6 run is the start of the data rather than the day
+      // the recipe moved. A chart that cannot admit that is worse than no chart.
+      +'<div style="font-family:var(--mono);font-size:11px;color:var(--amber);margin-bottom:6px;line-height:1.6">'
+      +'\u26a0 The move date is INFERRED from the first run on LINE-6. The Data Drop records which line ran, not '
+      +'whether the capper was running on it \u2014 so if the capper was fitted to a line that already existed, this '
+      +'date is the start of the data rather than the day the recipe moved. Read a very short \u2018before\u2019 as that, '
+      +'not as a real baseline.</div>';
     var cpeak=1;
     r.capper.forEach(function(m){cpeak=Math.max(cpeak,Math.abs(m.pct));});
     h+=r.capper.map(function(m){
-      var col=m.pct>0?'var(--green)':(m.pct<0?'var(--red)':'var(--amber)');
+      var col=ryg_(m.pct);
       var w=Math.max(4,Math.round(Math.abs(m.pct)/cpeak*100));
       var uplh=(m.fromUplh&&m.toUplh)?(m.fromUplh+' \u2192 '+m.toUplh+' UPLH'):'';
-      var ucol='var(--muted)';
-      if(m.fromUplh&&m.toUplh){
-        var ud=(m.toUplh-m.fromUplh)/m.fromUplh;
-        ucol=ud>=0.03?'var(--green)':(ud<=-0.03?'var(--red)':'var(--amber)');
-      }
+      var ucol=(m.fromUplh&&m.toUplh)?ryg_((m.toUplh-m.fromUplh)/m.fromUplh*100):'var(--muted)';
       // Sample size on the face of it: a recipe with four days before the move
       // and eighty after is a weaker claim than an even split, and the reader
       // should not have to ask.
@@ -3535,9 +3549,14 @@ function renderQuarterly(r){
         +'<div style="width:46px;text-align:right;font-weight:600;color:'+col+';flex:0 0 auto">'+(m.pct>0?'+':'')+m.pct+'%</div>'
         +'<div style="width:132px;text-align:right;color:var(--muted);flex:0 0 auto">'+m.from+' \u2192 '+m.to+' UPM</div>'
         +'<div style="width:128px;text-align:right;color:'+ucol+';flex:0 0 auto">'+uplh+'</div>'
-        +'<div style="width:190px;text-align:right;color:'+(thin?'var(--amber)':'var(--muted)')+';flex:0 0 auto" '
+        +'<div style="width:200px;text-align:right;line-height:1.35;color:'+(thin?'var(--amber)':'var(--muted)')+';flex:0 0 auto" '
           +'title="Date of this recipe\u2019s first run on the capper, and how many production days sit either side of it.">'
-          +'since '+escHtml(m.since)+' \u00b7 '+m.daysBefore+'d/'+m.daysAfter+'d</div></div>';
+          // Spelled out. '4d/224d' read as four days ON the capper, which is the
+          // opposite of what it says \u2014 and the thin side is the one that decides
+          // how much the row is worth.
+          +'since '+escHtml(m.since)+'<br>'
+          +m.daysBefore+'d before \u00b7 '+m.daysAfter+'d after'
+          +(thin?' \u2014 thin':'')+'</div></div>';
     }).join('');
   }
   h+='</div>';
@@ -3986,7 +4005,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.191';
+var APP_VERSION='v0.5.192';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;

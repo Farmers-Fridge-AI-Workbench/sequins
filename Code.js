@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.123 — 2026-09-04    (pairs with Index.html v0.5.191)
+ * Sequins ✨ — Code.js    v0.4.124 — 2026-09-04    (pairs with Index.html v0.5.192)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.123 capperBeforeAfterFrom_ filters on the SKU Library capper flag, so a
- *          one-off spill onto LINE-6 no longer reads as a recipe moving there.
+ * v0.4.124 No server change — pairing bump. Colouring, labelling and the capper
+ *          caveat are client-side.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
