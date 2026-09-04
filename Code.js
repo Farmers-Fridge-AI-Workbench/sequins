@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.119 — 2026-09-03    (pairs with Index.html v0.5.187)
+ * Sequins ✨ — Code.js    v0.4.120 — 2026-09-04    (pairs with Index.html v0.5.188)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.119 No server change — pairing bump. Average crew per SKU was already
- *          returned by fetchObservedUpm; the client just never showed it.
+ * v0.4.120 fetchUpmHalves reads Line Population and returns UPLH per period,
+ *          so the trend report can show units per labour hour alongside UPM.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -1874,7 +1874,10 @@ function fetchUpmHalves(days) {
   const head = all[0].map(function(h) { return String(h || '').trim(); });
   const iDate = head.indexOf('Date'), iSku = head.indexOf('Item Sku'),
         iStart = head.indexOf('Second of Chicago Start Time'), iEnd = head.indexOf('Second of Chicago End Time'),
-        iUnits = head.indexOf('Units Produced'), iFlag = head.indexOf('Units per Minute Flag');
+        iUnits = head.indexOf('Units Produced'), iFlag = head.indexOf('Units per Minute Flag'),
+        // Labour hours are crew x time. The drop gives the time as start/end and
+        // the crew as Line Population, so UPLH is units / (pop * hours).
+        iPop = head.indexOf('Line Population');
   if (iSku < 0 || iStart < 0 || iEnd < 0 || iUnits < 0 || iDate < 0) throw new Error('Data Drop columns moved.');
 
   const asTime = function(v) {
@@ -1900,9 +1903,13 @@ function fetchUpmHalves(days) {
     if (!(mins > 0) || mins > 720) continue;
 
     const half = (d < mid) ? 'early' : 'late';
-    if (!out[sku]) out[sku] = { early: { u: 0, m: 0, d: {} }, late: { u: 0, m: 0, d: {} } };
+    if (!out[sku]) out[sku] = { early: { u: 0, m: 0, pm: 0, d: {} }, late: { u: 0, m: 0, pm: 0, d: {} } };
     const o = out[sku][half];
     o.u += units; o.m += mins;
+    if (iPop >= 0) {
+      const pop = parseFloat(String(row[iPop] || '').replace(/,/g, ''));
+      if (isFinite(pop) && pop > 0) o.pm += pop * mins;   // person-minutes
+    }
     const dt = new Date(d);
     o.d[dt.getFullYear() + '-' + dt.getMonth() + '-' + dt.getDate()] = true;
   }
@@ -1914,6 +1921,7 @@ function fetchUpmHalves(days) {
       const b = o[h], dc = Object.keys(b.d).length;
       if (b.m > 0 && dc > 0) {
         f[h] = { upm: Math.round(b.u / b.m * 10) / 10, days: dc,
+                 uplh: b.pm > 0 ? Math.round(b.u / (b.pm / 60)) : null,
                  // Units per week from production DAYS, not calendar weeks: a SKU
                  // running three days a week and one running seven are not
                  // comparable on calendar time.
@@ -1937,7 +1945,8 @@ function getUpmMovers(days) {
     // Volume rides along because it is usually the explanation. A rate that fell
     // because the runs got shorter is not a line that got slower.
     moved.push({ sku: k, from: a.upm, to: b.upm, pct: Math.round((b.upm - a.upm) / a.upm * 100),
-                 fromWk: a.perWeek, toWk: b.perWeek, fromDays: a.days, toDays: b.days });
+                 fromWk: a.perWeek, toWk: b.perWeek, fromDays: a.days, toDays: b.days,
+                 fromUplh: a.uplh, toUplh: b.uplh });
   });
   moved.sort(function(x, y) { return y.pct - x.pct; });
 
