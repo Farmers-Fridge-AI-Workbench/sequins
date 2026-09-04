@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.194 — 2026-09-04    (pairs with Code.js v0.4.126)
+  Sequins ✨ — Index.html    v0.5.195 — 2026-09-04    (pairs with Code.js v0.4.127)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.194 Capper before/after is gone. It rested on a move date the data cannot
-           confirm. Replaced with the last 90 days as measured, split by line —
-           the line is recorded on every run, the move date is not.
+  v0.5.195 The capper section says LINE-6, because that is what the data records.
+           The share-of-runs-on-the-capper figure is gone — it claimed the capper
+           was running whenever LINE-6 was.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -3519,8 +3519,9 @@ function renderQuarterly(r){
   if(r.capper&&r.capper.length){
     h+=head('Capper recipes \u2014 last '+r.window+' days');
     h+='<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:4px;line-height:1.6">'
-      +r.capper.length+' recipe(s) flagged capper in the SKU Library. Split by line, not by date \u2014 '
-      +'the line is recorded on every run, the day a recipe moved is not.</div>';
+      +r.capper.length+' recipe(s) flagged capper in the SKU Library, split by the line they ran on. '
+      +'The Data Drop records the LINE, not whether the capper machine was running on it \u2014 '
+      +'so these are LINE-6 figures, and reading them as capper figures assumes the two are the same.</div>';
     h+=r.capper.map(function(m){
       function pair(upm,uplh,days){
         if(upm===null)return '<span style="color:var(--muted)">\u2014</span>';
@@ -3529,13 +3530,12 @@ function renderQuarterly(r){
       // Coloured only where both sides exist, and only on the capper's favour.
       // With one side missing there is nothing to be better or worse than.
       var col='var(--muted)';
-      if(m.capperUpm!==null&&m.otherUpm!==null&&m.otherUpm>0)
-        col=ryg_((m.capperUpm-m.otherUpm)/m.otherUpm*100);
+      if(m.l6Upm!==null&&m.otherUpm!==null&&m.otherUpm>0)
+        col=ryg_((m.l6Upm-m.otherUpm)/m.otherUpm*100);
       return '<div style="display:flex;align-items:center;gap:8px;margin:3px 0;font-family:var(--mono);font-size:11px">'
         +'<div style="width:210px;flex:0 0 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escHtml(m.sku)+'">'+escHtml(m.sku)+'</div>'
-        +'<div style="width:200px;flex:0 0 auto;color:'+col+'">on capper \u00b7 '+pair(m.capperUpm,m.capperUplh,m.capperDays)+'</div>'
-        +'<div style="width:200px;flex:0 0 auto;color:var(--muted)">elsewhere \u00b7 '+pair(m.otherUpm,m.otherUplh,m.otherDays)+'</div>'
-        +'<div style="width:110px;text-align:right;color:var(--muted);flex:0 0 auto">'+m.capperShare+'% on capper</div>'
+        +'<div style="width:210px;flex:0 0 auto;color:'+col+'">LINE-6 \u00b7 '+pair(m.l6Upm,m.l6Uplh,m.l6Days)+'</div>'
+        +'<div style="width:210px;flex:0 0 auto;color:var(--muted)">other lines \u00b7 '+pair(m.otherUpm,m.otherUplh,m.otherDays)+'</div>'
         +'<div style="width:110px;text-align:right;color:var(--muted);flex:0 0 auto">'+fmtUnits(m.perWeek)+'/wk</div></div>';
     }).join('');
   }
@@ -3985,7 +3985,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.194';
+var APP_VERSION='v0.5.195';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;

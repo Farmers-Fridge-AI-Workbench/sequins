@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.126 — 2026-09-04    (pairs with Index.html v0.5.194)
+ * Sequins ✨ — Code.js    v0.4.127 — 2026-09-04    (pairs with Index.html v0.5.195)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.126 capperBeforeAfterFrom_ replaced by capperLast90From_: capper recipes
- *          over the window, split by line rather than by an inferred move date.
+ * v0.4.127 capperLast90From_ reports LINE-6 vs other lines and no longer implies
+ *          the capper was running whenever LINE-6 was.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -1953,26 +1953,26 @@ function capperLast90From_(runs, window) {
   runs.forEach(function(r) {
     if (r.d < start) return;
     if (!isCapperSku(r.sku)) return;
-    if (!out[r.sku]) out[r.sku] = { onCapper: bucket_(), offCapper: bucket_(), runs: 0, capperRuns: 0 };
+    if (!out[r.sku]) out[r.sku] = { onLine6: bucket_(), offLine6: bucket_() };
     const o = out[r.sku];
-    o.runs++;
-    if (r.line === CAPPER_LINE) { o.capperRuns++; addRun_(o.onCapper, r); }
-    else addRun_(o.offCapper, r);
+    if (r.line === CAPPER_LINE) addRun_(o.onLine6, r);
+    else addRun_(o.offLine6, r);
   });
 
   const rows = [];
   Object.keys(out).sort().forEach(function(k) {
     const o = out[k];
-    const on = finish_(o.onCapper), off = finish_(o.offCapper);
+    const on = finish_(o.onLine6), off = finish_(o.offLine6);
     if (!on && !off) return;
     rows.push({ sku: k,
-                // Split by line rather than by date. This is the only capper
-                // comparison the data can actually support, because the line is
-                // recorded and the move date is not.
-                capperUpm:  on  ? on.upm  : null,  capperUplh:  on  ? on.uplh  : null,  capperDays:  on  ? on.days  : 0,
-                otherUpm:   off ? off.upm : null,  otherUplh:   off ? off.uplh : null,  otherDays:   off ? off.days : 0,
-                perWeek: (on ? on.perWeek : 0) + (off ? off.perWeek : 0),
-                runs: o.runs, capperShare: o.runs ? Math.round(o.capperRuns / o.runs * 100) : 0 });
+                // LINE-6, not 'the capper'. Cori, twice: "just because it runs on
+                // line 6 doesn't mean the capper ran". The drop records the line and
+                // nothing about whether the machine was in use, so the field names
+                // say line. A share-of-runs-on-the-capper figure was the same claim
+                // in percentage form and is gone.
+                l6Upm:    on  ? on.upm  : null,  l6Uplh:    on  ? on.uplh  : null,  l6Days:    on  ? on.days  : 0,
+                otherUpm: off ? off.upm : null,  otherUplh: off ? off.uplh : null,  otherDays: off ? off.days : 0,
+                perWeek: (on ? on.perWeek : 0) + (off ? off.perWeek : 0) });
   });
   return rows;
 }
