@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.125 — 2026-09-04    (pairs with Index.html v0.5.193)
+ * Sequins ✨ — Code.js    v0.4.126 — 2026-09-04    (pairs with Index.html v0.5.194)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.125 capperBeforeAfterFrom_ counts only capper runs in the after bucket,
- *          and reports how many post-move runs went elsewhere.
+ * v0.4.126 capperBeforeAfterFrom_ replaced by capperLast90From_: capper recipes
+ *          over the window, split by line rather than by an inferred move date.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -1925,23 +1925,18 @@ function upmHalvesFrom_(runs, window) {
   return skus;
 }
 
-// Before the capper vs after it, per SKU. Cori: the capper came in "earlier this
-// year" and "it wasn't like we started with all the SKU's on one day, we've kind
-// of gradually tested things and added them over time" — so there is no single
-// cutover to split on. Each SKU is split at ITS OWN first run on LINE-6, which is
-// the date that recipe moved, and gradual rollout stops being a problem.
+// Capper recipes, last 90 days, as they are. Cori: "this isn't making any sense.
+// Let's reboot this and just report last 90 days of capper recipes data instead."
 //
-// Restricted to SKUs the SKU Library FLAGS as capper. Cori: "Why did you pull 40
-// recipes? You know which recipes we run on the capper." The first cut took any
-// SKU that had ever touched LINE-6, which sweeps in one-off spillovers — and
-// worse, a single overflow run then became that SKU's 'move date', so every run
-// after an accident got counted as life after the capper. The library's capper
-// flag is the declared list and is the right filter.
+// The before/after version is gone rather than patched. It rested on a move date
+// INFERRED from the first run on LINE-6, and the Data Drop cannot confirm that —
+// it records which line ran, not whether the capper was running on it. Two
+// rounds of fixes made the arithmetic right and left the foundation guessed,
+// which is the wrong thing to keep polishing.
 //
-// A SKU already on the capper when the drop begins has no 'before' and is left
-// out rather than shown with an empty half. daysBefore/daysAfter come back so a
-// thin side is visible instead of implied.
-function capperBeforeAfterFrom_(runs) {
+// This reports measurements instead: what each capper recipe actually did over
+// the window. Nothing here depends on knowing when anything moved.
+function capperLast90From_(runs, window) {
   const lib = getSection_(STATE_KEYS.skuLibrary) || {};
   const libByNorm = {};
   Object.keys(lib).forEach(function(k) { libByNorm[normalizeSku_(k)] = k; });
@@ -1951,47 +1946,34 @@ function capperBeforeAfterFrom_(runs) {
     return !!(m && m.capper);
   };
 
-  const firstCapper = {};
-  runs.forEach(function(r) {
-    if (r.line !== CAPPER_LINE) return;
-    if (!isCapperSku(r.sku)) return;
-    if (firstCapper[r.sku] === undefined || r.d < firstCapper[r.sku]) firstCapper[r.sku] = r.d;
-  });
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const start = today.getTime() - window * 86400000;
 
-  // AFTER means on the capper, not merely later. v0.4.124 put every run after the
-  // cut date into 'after' regardless of line, so a capper recipe that still went
-  // onto LINE-1 now and then had those slow runs averaged into its capper figure —
-  // dragging it toward the very rates the capper replaced, and producing the
-  // result Cori refused to believe: capper recipes looking slower on the capper.
-  // The two analyses disagreeing was the tell, since capper-vs-other-lines had
-  // LINE-6 far faster on the same data.
-  //
-  // BEFORE needs no line filter: by construction there are no capper runs before
-  // this recipe's first one.
   const out = {};
   runs.forEach(function(r) {
-    const cut = firstCapper[r.sku];
-    if (cut === undefined) return;                       // never ran on the capper
-    if (!out[r.sku]) out[r.sku] = { before: bucket_(), after: bucket_(), cut: cut, offAfter: 0 };
-    if (r.d < cut) { addRun_(out[r.sku].before, r); return; }
-    if (r.line === CAPPER_LINE) { addRun_(out[r.sku].after, r); return; }
-    // Ran after the move, but not on the capper. Counted, not averaged in —
-    // a recipe doing much of its volume off the capper is worth seeing.
-    out[r.sku].offAfter++;
+    if (r.d < start) return;
+    if (!isCapperSku(r.sku)) return;
+    if (!out[r.sku]) out[r.sku] = { onCapper: bucket_(), offCapper: bucket_(), runs: 0, capperRuns: 0 };
+    const o = out[r.sku];
+    o.runs++;
+    if (r.line === CAPPER_LINE) { o.capperRuns++; addRun_(o.onCapper, r); }
+    else addRun_(o.offCapper, r);
   });
 
   const rows = [];
-  Object.keys(out).forEach(function(k) {
-    const b = finish_(out[k].before), a = finish_(out[k].after);
-    if (!b || !a || !(b.upm > 0)) return;
-    const d = new Date(out[k].cut);
+  Object.keys(out).sort().forEach(function(k) {
+    const o = out[k];
+    const on = finish_(o.onCapper), off = finish_(o.offCapper);
+    if (!on && !off) return;
     rows.push({ sku: k,
-                from: b.upm, to: a.upm, pct: Math.round((a.upm - b.upm) / b.upm * 100),
-                fromUplh: b.uplh, toUplh: a.uplh,
-                daysBefore: b.days, daysAfter: a.days, offAfter: out[k].offAfter,
-                since: d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2) });
+                // Split by line rather than by date. This is the only capper
+                // comparison the data can actually support, because the line is
+                // recorded and the move date is not.
+                capperUpm:  on  ? on.upm  : null,  capperUplh:  on  ? on.uplh  : null,  capperDays:  on  ? on.days  : 0,
+                otherUpm:   off ? off.upm : null,  otherUplh:   off ? off.uplh : null,  otherDays:   off ? off.days : 0,
+                perWeek: (on ? on.perWeek : 0) + (off ? off.perWeek : 0),
+                runs: o.runs, capperShare: o.runs ? Math.round(o.capperRuns / o.runs * 100) : 0 });
   });
-  rows.sort(function(x, y) { return y.pct - x.pct; });
   return rows;
 }
 
@@ -2014,7 +1996,7 @@ function getUpmMovers(days) {
   });
   moved.sort(function(x, y) { return y.pct - x.pct; });
 
-  const capper = capperBeforeAfterFrom_(runs);
+  const capper = capperLast90From_(runs, w);
   return { window: w, compared: moved.length,
            up: moved.filter(function(m) { return m.pct > 0; }).slice(0, 5),
            down: moved.filter(function(m) { return m.pct < 0; }).reverse().slice(0, 5),

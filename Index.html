@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.193 — 2026-09-04    (pairs with Code.js v0.4.125)
+  Sequins ✨ — Index.html    v0.5.194 — 2026-09-04    (pairs with Code.js v0.4.126)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.193 Capper "after" means ON the capper. Post-move runs on other lines were
-           being averaged in, dragging capper recipes toward the rates the capper
-           replaced — which is why they looked slower on it.
+  v0.5.194 Capper before/after is gone. It rested on a move date the data cannot
+           confirm. Replaced with the last 90 days as measured, split by line —
+           the line is recorded on every run, the move date is not.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -3511,56 +3511,32 @@ function renderQuarterly(r){
   h+=head('Got faster')+rows(r.up,'var(--teal)');
   h+=head('Got slower')+rows(r.down,'var(--red)');
 
-  // Before the capper vs after it, split at each SKU's OWN first run on LINE-6.
-  // Cori: the capper came in gradually, "we've kind of gradually tested things and
-  // added them over time", so there is no single cutover date to use and a
-  // per-SKU split is the only honest one.
+  // Capper recipes over the window, as measured. The before/after version is gone:
+  // it depended on a move date inferred from the first run on LINE-6, and the drop
+  // records which line ran, not whether the capper was running on it. Splitting by
+  // LINE is the only capper comparison this data can actually support, because the
+  // line is recorded and the date is not.
   if(r.capper&&r.capper.length){
-    h+=head('Capper \u2014 before vs after, per recipe');
+    h+=head('Capper recipes \u2014 last '+r.window+' days');
     h+='<div style="font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:4px;line-height:1.6">'
-      +r.capperCount+' recipe(s) have production both before and after their first capper run. '
-      +'Each is split on its own move date, since they went over gradually. '
-      +'Recipes already on the capper when the data starts have no \u2018before\u2019 and are not listed.</div>'
-      // Say the assumption out loud. The drop records WHICH LINE ran, not whether
-      // the capper was running on it, so the split date is inferred and can be wrong
-      // in one specific way: if the capper was fitted to a LINE-6 that already
-      // existed, the first LINE-6 run is the start of the data rather than the day
-      // the recipe moved. A chart that cannot admit that is worse than no chart.
-      +'<div style="font-family:var(--mono);font-size:11px;color:var(--amber);margin-bottom:6px;line-height:1.6">'
-      +'\u26a0 The move date is INFERRED from the first run on LINE-6. The Data Drop records which line ran, not '
-      +'whether the capper was running on it \u2014 so if the capper was fitted to a line that already existed, this '
-      +'date is the start of the data rather than the day the recipe moved. Read a very short \u2018before\u2019 as that, '
-      +'not as a real baseline.</div>';
-    var cpeak=1;
-    r.capper.forEach(function(m){cpeak=Math.max(cpeak,Math.abs(m.pct));});
+      +r.capper.length+' recipe(s) flagged capper in the SKU Library. Split by line, not by date \u2014 '
+      +'the line is recorded on every run, the day a recipe moved is not.</div>';
     h+=r.capper.map(function(m){
-      var col=ryg_(m.pct);
-      var w=Math.max(4,Math.round(Math.abs(m.pct)/cpeak*100));
-      var uplh=(m.fromUplh&&m.toUplh)?(m.fromUplh+' \u2192 '+m.toUplh+' UPLH'):'';
-      var ucol=(m.fromUplh&&m.toUplh)?ryg_((m.toUplh-m.fromUplh)/m.fromUplh*100):'var(--muted)';
-      // Sample size on the face of it: a recipe with four days before the move
-      // and eighty after is a weaker claim than an even split, and the reader
-      // should not have to ask.
-      var thin=(m.daysBefore<5||m.daysAfter<5);
-      return '<div style="display:flex;align-items:center;gap:8px;margin:2px 0;font-family:var(--mono);font-size:11px">'
+      function pair(upm,uplh,days){
+        if(upm===null)return '<span style="color:var(--muted)">\u2014</span>';
+        return upm+' UPM \u00b7 '+(uplh===null?'\u2014':uplh+' UPLH')+' \u00b7 '+days+'d';
+      }
+      // Coloured only where both sides exist, and only on the capper's favour.
+      // With one side missing there is nothing to be better or worse than.
+      var col='var(--muted)';
+      if(m.capperUpm!==null&&m.otherUpm!==null&&m.otherUpm>0)
+        col=ryg_((m.capperUpm-m.otherUpm)/m.otherUpm*100);
+      return '<div style="display:flex;align-items:center;gap:8px;margin:3px 0;font-family:var(--mono);font-size:11px">'
         +'<div style="width:210px;flex:0 0 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="'+escHtml(m.sku)+'">'+escHtml(m.sku)+'</div>'
-        +'<div style="width:90px;flex:0 0 auto;background:var(--surface2);border-radius:2px;height:8px;overflow:hidden">'
-          +'<div style="width:'+w+'%;height:100%;background:'+col+';opacity:.6"></div></div>'
-        +'<div style="width:46px;text-align:right;font-weight:600;color:'+col+';flex:0 0 auto">'+(m.pct>0?'+':'')+m.pct+'%</div>'
-        +'<div style="width:132px;text-align:right;color:var(--muted);flex:0 0 auto">'+m.from+' \u2192 '+m.to+' UPM</div>'
-        +'<div style="width:128px;text-align:right;color:'+ucol+';flex:0 0 auto">'+uplh+'</div>'
-        +'<div style="width:200px;text-align:right;line-height:1.35;color:'+(thin?'var(--amber)':'var(--muted)')+';flex:0 0 auto" '
-          +'title="Date of this recipe\u2019s first run on the capper, and how many production days sit either side of it.">'
-          // Spelled out. '4d/224d' read as four days ON the capper, which is the
-          // opposite of what it says \u2014 and the thin side is the one that decides
-          // how much the row is worth.
-          +'since '+escHtml(m.since)+'<br>'
-          +m.daysBefore+'d before \u00b7 '+m.daysAfter+'d on capper'
-          +(thin?' \u2014 thin':'')
-          // Runs after the move that were NOT on the capper. Excluded from the
-          // figure, counted here: a recipe doing much of its volume off the capper
-          // is a different story from one that moved and stayed.
-          +(m.offAfter?('<br>'+m.offAfter+' run(s) off capper since'):'')+'</div></div>';
+        +'<div style="width:200px;flex:0 0 auto;color:'+col+'">on capper \u00b7 '+pair(m.capperUpm,m.capperUplh,m.capperDays)+'</div>'
+        +'<div style="width:200px;flex:0 0 auto;color:var(--muted)">elsewhere \u00b7 '+pair(m.otherUpm,m.otherUplh,m.otherDays)+'</div>'
+        +'<div style="width:110px;text-align:right;color:var(--muted);flex:0 0 auto">'+m.capperShare+'% on capper</div>'
+        +'<div style="width:110px;text-align:right;color:var(--muted);flex:0 0 auto">'+fmtUnits(m.perWeek)+'/wk</div></div>';
     }).join('');
   }
   h+='</div>';
@@ -4009,7 +3985,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.193';
+var APP_VERSION='v0.5.194';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
