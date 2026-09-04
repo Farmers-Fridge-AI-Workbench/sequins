@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.188 — 2026-09-04    (pairs with Code.js v0.4.120)
+  Sequins ✨ — Index.html    v0.5.189 — 2026-09-04    (pairs with Code.js v0.4.121)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.188 Throughput trend carries UPLH beside UPM and volume (Samad). UPM is
-           the line, UPLH is the labour it took — a rate can rise while UPLH
-           falls if the speed was bought with people.
+  v0.5.189 UPLH gets a red/yellow/green traffic light on its own direction, and
+           the colour legend no longer gets clipped off the card — the rows
+           scroll instead of stretching it.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -3456,6 +3456,17 @@ function renderQuarterly(r){
         ? (fmtUnits(m.fromWk)+' \u2192 '+fmtUnits(m.toWk)+'/wk')
         : '';
       var uplh=(m.fromUplh&&m.toUplh) ? (m.fromUplh+' \u2192 '+m.toUplh+' UPLH') : '';
+      // Coloured on its OWN direction, not the row's. That is the point of having
+      // both: a green +26% UPM beside a red UPLH is a SKU that got faster by
+      // adding people, which is the one case UPM alone cannot show.
+      //
+      // Red / yellow / green, Cori's call. Yellow is the flat band rather than a
+      // warning \u2014 it says 'this did not move', which is a real answer.
+      var uplhCol='var(--muted)';
+      if(m.fromUplh&&m.toUplh){
+        var ud=(m.toUplh-m.fromUplh)/m.fromUplh;
+        uplhCol=ud>=0.03?'var(--green)':(ud<=-0.03?'var(--red)':'var(--amber)');
+      }
       // Flagged when volume moved far more than the rate did: that is the case
       // where the SKU did not get slower, there is just less of it per run.
       var volDrop=(m.fromWk>0&&m.toWk<m.fromWk*0.6);
@@ -3470,16 +3481,29 @@ function renderQuarterly(r){
         // Samad asked for UPLH alongside. It is the labour figure rather than the
         // line figure: UPM can rise while UPLH falls, if the extra rate was bought
         // with extra people.
-        +'<div style="width:128px;text-align:right;color:var(--muted);flex:0 0 auto" '
+        +'<div style="width:128px;text-align:right;color:'+uplhCol+';flex:0 0 auto" '
           +'title="Units per labour hour = units / (crew x hours). UPM measures the line; UPLH measures the labour it took.">'+uplh+'</div></div>';
     }).join('');
   }
   function head(t){return '<div style="font-family:var(--mono);font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--teal);margin:10px 0 3px">'+t+'</div>';}
   var h='<div style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.5">'
     +'Last <b>'+r.window+' days</b> against the <b>'+r.window+' before</b> \u00b7 '
-    +r.compared+' SKUs ran in both \u00b7 amber weekly volume = down more than 40%, which usually explains the rate.</div>';
+    +r.compared+' SKUs ran in both.</div>'
+    +'<div style="font-family:var(--mono);font-size:11px;color:var(--muted);line-height:1.6;margin-top:4px">'
+    +'<span style="color:var(--amber)">Amber volume</span> = down more than 40%, which usually explains a falling '
+    +'rate \u2014 shorter runs carry the same changeover. '
+    +'<b>UPLH</b> is a traffic light on its own direction: '
+    +'<span style="color:var(--green)">green</span> better, '
+    +'<span style="color:var(--amber)">yellow</span> flat, '
+    +'<span style="color:var(--red)">red</span> worse. '
+    +'UPM up with UPLH red means the speed was bought with people.</div>';
+  // Rows are fixed-width and total more than the card, which stretched the
+  // content box and clipped the legend above \u2014 so the one line explaining what
+  // amber meant was the first thing to disappear. Scroll the rows, not the card.
+  h+='<div style="overflow-x:auto">';
   h+=head('Got faster')+rows(r.up,'var(--teal)');
   h+=head('Got slower')+rows(r.down,'var(--red)');
+  h+='</div>';
   body.innerHTML=h;
 }
 function exportUpmComparison(){
@@ -3925,7 +3949,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.188';
+var APP_VERSION='v0.5.189';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;

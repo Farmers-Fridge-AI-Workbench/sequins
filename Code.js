@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.120 — 2026-09-04    (pairs with Index.html v0.5.188)
+ * Sequins ✨ — Code.js    v0.4.121 — 2026-09-04    (pairs with Index.html v0.5.189)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.120 fetchUpmHalves reads Line Population and returns UPLH per period,
- *          so the trend report can show units per labour hour alongside UPM.
+ * v0.4.121 No server change — pairing bump. Traffic-light colouring and the
+ *          legend fix are both client-side.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
