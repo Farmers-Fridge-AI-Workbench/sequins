@@ -1,9 +1,10 @@
 /**
- * Sequins ✨ — Code.js    v0.4.121 — 2026-09-04    (pairs with Index.html v0.5.189)
+ * Sequins ✨ — Code.js    v0.4.122 — 2026-09-04    (pairs with Index.html v0.5.190)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.121 No server change — pairing bump. Traffic-light colouring and the
- *          legend fix are both client-side.
+ * v0.4.122 readDataDropRuns_ parses the drop once and several analyses share
+ *          it; capperBeforeAfterFrom_ splits each SKU at its own first capper
+ *          run rather than at one cutover date.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -1842,41 +1843,23 @@ function applyObservedUpm_(days, actor) {
   return { ok: true, changed: changes.length, checked: stamp.checked, message: stamp.message, health: health };
 }
 
-// ─── THROUGHPUT OVER TIME (v0.4.114) ────────────────────────────────────────
-// Cori: "let's do the quarterly report -- and I want you to look at the data and
-// see the changes in the capper recipes from the beginning of the year to now."
-//
-// Built from the Data Drop, NOT from the UPM Updates history. The history only
-// starts the day we began adopting measured rates, so a quarterly report off it
-// would have exactly one data point. The drop goes back to January, so the
-// quarters are real.
-//
-// Same pass answers both questions, because they are the same shape: bucket every
-// run by quarter and by line, then read the buckets two ways. Quarter over
-// quarter is the report; LINE-6 against everything else is the capper.
+// ─── DATA DROP ANALYSIS (v0.4.122) ──────────────────────────────────────────
+// One read, several questions. The drop is ~10,900 rows and getValues on it is
+// the expensive part, so the parse happens once and each analysis consumes the
+// same array. Doing otherwise meant reading the sheet twice in a single call.
 const CAPPER_LINE = 'LINE-6';
 
-// A quarter against the previous quarter: the last 90 days versus the 90 before
-// them. `days` is the length of ONE quarter, so the read spans twice that.
-//
-// Calendar quarters were wrong because on 3 September 2026-Q3 was nine weeks old
-// and 2026-Q1 six months stale — a comparison against a period nobody plans
-// from. Splitting one 90-day window into halves was wrong for the plainer
-// reason that 45 days is not a quarter, which is what was asked for.
-function fetchUpmHalves(days) {
-  const window = Number(days) > 0 ? Number(days) : OBSERVED_UPM_DAYS;
+function readDataDropRuns_() {
   const sheet = SpreadsheetApp.openById(DATA_DROP_SHEET_ID).getSheetByName(DATA_DROP_TAB);
   if (!sheet) throw new Error('Tab "' + DATA_DROP_TAB + '" not found.');
   const lastRow = sheet.getLastRow(), lastCol = Math.min(sheet.getLastColumn(), 40);
-  if (lastRow < 2) return { skus: {}, window: window };
+  if (lastRow < 2) return [];
 
   const all = sheet.getRange(1, 1, lastRow, lastCol).getValues();
   const head = all[0].map(function(h) { return String(h || '').trim(); });
-  const iDate = head.indexOf('Date'), iSku = head.indexOf('Item Sku'),
+  const iDate = head.indexOf('Date'), iLine = head.indexOf('Line'), iSku = head.indexOf('Item Sku'),
         iStart = head.indexOf('Second of Chicago Start Time'), iEnd = head.indexOf('Second of Chicago End Time'),
         iUnits = head.indexOf('Units Produced'), iFlag = head.indexOf('Units per Minute Flag'),
-        // Labour hours are crew x time. The drop gives the time as start/end and
-        // the crew as Line Population, so UPLH is units / (pop * hours).
         iPop = head.indexOf('Line Population');
   if (iSku < 0 || iStart < 0 || iEnd < 0 || iUnits < 0 || iDate < 0) throw new Error('Data Drop columns moved.');
 
@@ -1884,63 +1867,114 @@ function fetchUpmHalves(days) {
     if (v instanceof Date) return v.getTime();
     const t = Date.parse(String(v || '')); return isNaN(t) ? null : t;
   };
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const start = today.getTime() - 2 * window * 86400000;   // start of the PRIOR quarter
-  const mid   = today.getTime() - window * 86400000;       // start of the CURRENT one
 
-  const out = {};
+  const runs = [];
   for (let r = 1; r < all.length; r++) {
     const row = all[r];
     const sku = String(row[iSku] || '').trim().toUpperCase();
     if (!sku) continue;
-    if (iFlag >= 0 && /^y$/i.test(String(row[iFlag] || '').trim())) continue;
-    const d = asTime(row[iDate]); if (d === null || d < start) continue;
+    if (iFlag >= 0 && /^y$/i.test(String(row[iFlag] || '').trim())) continue;   // flagged as anomalous
+    const d = asTime(row[iDate]); if (d === null) continue;
     const units = parseFloat(String(row[iUnits] || '').replace(/,/g, ''));
     const a = asTime(row[iStart]), b = asTime(row[iEnd]);
     if (a === null || b === null || !isFinite(units) || units <= 0) continue;
     let mins = (b - a) / 60000;
     if (mins < 0) mins += 1440;
     if (!(mins > 0) || mins > 720) continue;
-
-    const half = (d < mid) ? 'early' : 'late';
-    if (!out[sku]) out[sku] = { early: { u: 0, m: 0, pm: 0, d: {} }, late: { u: 0, m: 0, pm: 0, d: {} } };
-    const o = out[sku][half];
-    o.u += units; o.m += mins;
-    if (iPop >= 0) {
-      const pop = parseFloat(String(row[iPop] || '').replace(/,/g, ''));
-      if (isFinite(pop) && pop > 0) o.pm += pop * mins;   // person-minutes
-    }
-    const dt = new Date(d);
-    o.d[dt.getFullYear() + '-' + dt.getMonth() + '-' + dt.getDate()] = true;
+    const pop = iPop >= 0 ? parseFloat(String(row[iPop] || '').replace(/,/g, '')) : NaN;
+    runs.push({ d: d, sku: sku, line: String(row[iLine] || '').trim().toUpperCase(),
+                units: units, mins: mins, pop: isFinite(pop) && pop > 0 ? pop : 0 });
   }
+  return runs;
+}
 
+function bucket_() { return { u: 0, m: 0, pm: 0, days: {} }; }
+function addRun_(b, r) {
+  b.u += r.units; b.m += r.mins; if (r.pop) b.pm += r.pop * r.mins;
+  const dt = new Date(r.d);
+  b.days[dt.getFullYear() + '-' + dt.getMonth() + '-' + dt.getDate()] = true;
+}
+function finish_(b) {
+  const dc = Object.keys(b.days).length;
+  if (!(b.m > 0) || !dc) return null;
+  return { upm: Math.round(b.u / b.m * 10) / 10,
+           uplh: b.pm > 0 ? Math.round(b.u / (b.pm / 60)) : null,
+           days: dc,
+           // Units per week from production DAYS, not calendar weeks: a SKU running
+           // three days a week and one running seven are not comparable on
+           // calendar time.
+           perWeek: Math.round(b.u * 7 / dc) };
+}
+
+// A quarter against the previous quarter: the last 90 days versus the 90 before
+// them. `days` is the length of ONE quarter, so the span read is twice that.
+function upmHalvesFrom_(runs, window) {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const start = today.getTime() - 2 * window * 86400000;
+  const mid   = today.getTime() - window * 86400000;
+  const out = {};
+  runs.forEach(function(r) {
+    if (r.d < start) return;
+    const half = (r.d < mid) ? 'early' : 'late';
+    if (!out[r.sku]) out[r.sku] = { early: bucket_(), late: bucket_() };
+    addRun_(out[r.sku][half], r);
+  });
   const skus = {};
   Object.keys(out).forEach(function(k) {
-    const o = out[k], f = {};
-    ['early', 'late'].forEach(function(h) {
-      const b = o[h], dc = Object.keys(b.d).length;
-      if (b.m > 0 && dc > 0) {
-        f[h] = { upm: Math.round(b.u / b.m * 10) / 10, days: dc,
-                 uplh: b.pm > 0 ? Math.round(b.u / (b.pm / 60)) : null,
-                 // Units per week from production DAYS, not calendar weeks: a SKU
-                 // running three days a week and one running seven are not
-                 // comparable on calendar time.
-                 perWeek: Math.round(b.u * 7 / dc) };
-      }
-    });
-    skus[k] = f;
+    skus[k] = { early: finish_(out[k].early), late: finish_(out[k].late) };
   });
-  return { skus: skus, window: window };
+  return skus;
+}
+
+// Before the capper vs after it, per SKU. Cori: the capper came in "earlier this
+// year" and "it wasn't like we started with all the SKU's on one day, we've kind
+// of gradually tested things and added them over time" — so there is no single
+// cutover to split on. Each SKU is split at ITS OWN first run on LINE-6, which is
+// the date that recipe moved, and gradual rollout stops being a problem.
+//
+// A SKU already on the capper when the drop begins has no 'before' and is left
+// out rather than shown with an empty half. daysBefore/daysAfter come back so a
+// thin side is visible instead of implied.
+function capperBeforeAfterFrom_(runs) {
+  const firstCapper = {};
+  runs.forEach(function(r) {
+    if (r.line !== CAPPER_LINE) return;
+    if (firstCapper[r.sku] === undefined || r.d < firstCapper[r.sku]) firstCapper[r.sku] = r.d;
+  });
+
+  const out = {};
+  runs.forEach(function(r) {
+    const cut = firstCapper[r.sku];
+    if (cut === undefined) return;                       // never ran on the capper
+    if (!out[r.sku]) out[r.sku] = { before: bucket_(), after: bucket_(), cut: cut };
+    addRun_(out[r.sku][r.d < cut ? 'before' : 'after'], r);
+  });
+
+  const rows = [];
+  Object.keys(out).forEach(function(k) {
+    const b = finish_(out[k].before), a = finish_(out[k].after);
+    if (!b || !a || !(b.upm > 0)) return;
+    const d = new Date(out[k].cut);
+    rows.push({ sku: k,
+                from: b.upm, to: a.upm, pct: Math.round((a.upm - b.upm) / b.upm * 100),
+                fromUplh: b.uplh, toUplh: a.uplh,
+                daysBefore: b.days, daysAfter: a.days,
+                since: d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2) });
+  });
+  rows.sort(function(x, y) { return y.pct - x.pct; });
+  return rows;
 }
 
 function getUpmMovers(days) {
   const user = getCurrentUser();
   if (!user.isAdmin && !user.canEditRules) throw new Error('Not authorized');
-  const res = fetchUpmHalves(days), w = res.window;
+  const w = Number(days) > 0 ? Number(days) : OBSERVED_UPM_DAYS;
+  const runs = readDataDropRuns_();
 
+  const halves = upmHalvesFrom_(runs, w);
   const moved = [];
-  Object.keys(res.skus).forEach(function(k) {
-    const f = res.skus[k], a = f.early, b = f.late;
+  Object.keys(halves).forEach(function(k) {
+    const a = halves[k].early, b = halves[k].late;
     if (!a || !b || !(a.upm > 0)) return;
     // Volume rides along because it is usually the explanation. A rate that fell
     // because the runs got shorter is not a line that got slower.
@@ -1950,9 +1984,11 @@ function getUpmMovers(days) {
   });
   moved.sort(function(x, y) { return y.pct - x.pct; });
 
+  const capper = capperBeforeAfterFrom_(runs);
   return { window: w, compared: moved.length,
            up: moved.filter(function(m) { return m.pct > 0; }).slice(0, 5),
            down: moved.filter(function(m) { return m.pct < 0; }).reverse().slice(0, 5),
+           capper: capper, capperCount: capper.length,
            note: moved.length ? '' : 'Not enough production in both quarters to compare.' };
 }
 function applyObservedUpm(days) {
