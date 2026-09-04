@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.127 — 2026-09-04    (pairs with Index.html v0.5.195)
+ * Sequins ✨ — Code.js    v0.4.128 — 2026-09-04    (pairs with Index.html v0.5.196)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.127 capperLast90From_ reports LINE-6 vs other lines and no longer implies
- *          the capper was running whenever LINE-6 was.
+ * v0.4.128 CapperRunning appended to Run Sheet Actuals — the floor records per
+ *          SKU whether the capper was actually running.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -2169,7 +2169,10 @@ const RUN_ACTUALS_HEADER = ['UpdatedAt','UpdatedBy','Week','Day','Date','Room','
                             // columns on purpose: inserting mid-header would shift every
                             // column of any row already written. Order is cosmetic, an
                             // off-by-one in a floor record is not.
-                            'PlannedPeople'];
+                            'PlannedPeople',
+                            // v0.4.128. Appended, like PlannedPeople, so an existing
+                            // tab keeps every column where it already was.
+                            'CapperRunning'];
 const RUN_SHIFT_HEADER   = ['UpdatedAt','UpdatedBy','Week','Day','Date','Room','Line','LineLabel','LineLeadName','HeldOverTotes'];
 
 function runSheetTab_(name, header) {
@@ -2263,7 +2266,8 @@ function saveRunSheetActuals(payload) {
             r.labelVersion || '',
             r.start || '', r.end || '', r.people || '', r.units || '',
             '', '',   // ActualFullTotes / ActualPartialUnits — reserved, see header
-            r.plannedPeople === undefined || r.plannedPeople === null ? '' : r.plannedPeople];
+            r.plannedPeople === undefined || r.plannedPeople === null ? '' : r.plannedPeople,
+            r.capperRunning || ''];
   });
   const res = rows.length
     ? runSheetUpsert_(runSheetTab_(RUN_ACTUALS_TAB, RUN_ACTUALS_HEADER), RUN_ACTUALS_HEADER, rows, [4, 6, 9])

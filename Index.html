@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.195 — 2026-09-04    (pairs with Code.js v0.4.127)
+  Sequins ✨ — Index.html    v0.5.196 — 2026-09-04    (pairs with Code.js v0.4.128)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.195 The capper section says LINE-6, because that is what the data records.
-           The share-of-runs-on-the-capper figure is gone — it claimed the capper
-           was running whenever LINE-6 was.
+  v0.5.196 My Line records whether the capper was running, per SKU, on any line
+           with the capper capability. Per SKU because it can break mid-shift.
+           This is what will finally make capper-on vs capper-off measurable.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -139,6 +139,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .ml-run-times{font-family:var(--mono);font-size:12px;color:var(--muted);padding-bottom:9px;}
 .ml-run-times b{color:var(--teal);font-weight:600;}
 .ml-run-hint{font-family:var(--mono);font-size:11px;color:var(--amber);padding-bottom:10px;}
+.ml-capper{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;cursor:pointer;padding-bottom:10px;user-select:none;}
+.ml-capper input{accent-color:var(--teal);width:16px;height:16px;}
 .week-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 .week-chip{font-family:var(--mono);font-size:11px;padding:4px 12px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:var(--muted);cursor:pointer;}
 .week-chip:hover{border-color:var(--teal);color:var(--teal);}
@@ -3985,7 +3987,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.195';
+var APP_VERSION='v0.5.196';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -6865,6 +6867,12 @@ function mlSetEntryNow_(li,sku,field,val){
 }
 function mlRunBlock_(lineId,job){
   if(!mlCanWriteActuals_())return '';
+  // Capability, not a line name — the capper could move, and CLAUDE.md is explicit
+  // that constraints are expressed as caps. Resolved here rather than passed in
+  // because the card builder has no line object in scope.
+  var _cfg=STATE.lineConfig||DEFAULT_LINE_CONFIG,_lineObj=null;
+  _cfg.forEach(function(l){if(l.id===lineId)_lineObj=l;});
+  var isCapperLine=!!(_lineObj&&lineCaps(_lineObj).capper);
   var sku=job.sku||'';
   var people=String(mlEntryVal_(lineId,sku,'people')||'').trim();
   var start=String(mlEntryVal_(lineId,sku,'start')||'').trim();
@@ -6883,7 +6891,28 @@ function mlRunBlock_(lineId,job){
   }else{
     h+='<span class="ml-run-times"><b>'+escHtml(start)+'</b> → <b>'+escHtml(end)+'</b></span>';
   }
+  // Cori: "we also should consider having a capper on capper off button or check
+  // box for line 6 -- there's different UPM's for the SKU if the capper is on or
+  // off (and then we will have real data on whether it's capper on or capper off
+  // thruput!!)". This is the fix for the thing that has been wrong all along: every
+  // capper number so far has assumed LINE-6 running means the capper running, and
+  // nothing in the data could confirm it. Recorded per SKU rather than per day
+  // because she confirmed it can break mid-shift.
+  if(isCapperLine){
+    var cap=String(mlEntryVal_(lineId,sku,'capper')||'').trim();
+    var off=(cap==='off');
+    h+='<label class="ml-capper" title="Tick off if the capper stopped for this SKU. Recorded per SKU because it can break mid-shift.">'
+      +'<input type="checkbox" '+(off?'':'checked')+d+' onchange="mlCapperChanged(this)"> '
+      +'<span style="color:'+(off?'var(--red)':'var(--teal)')+'">capper '+(off?'OFF':'on')+'</span></label>';
+  }
   return h+'</div>';
+}
+function mlCapperChanged(inp){
+  var li=inp.getAttribute('data-li'),sku=inp.getAttribute('data-sku');
+  // Saved immediately, not on the debounce: this is a fact about the run, and the
+  // moment worth capturing is exactly when something went wrong.
+  mlSetEntryNow_(li,sku,'capper',inp.checked?'on':'off');
+  renderMyLine();
 }
 // Toggled in place rather than by re-rendering: a renderMyLine() here would
 // rebuild the list and blow focus away mid-keystroke.
@@ -6971,7 +7000,17 @@ function mlFlushSave_(){
       // Frozen alongside, for the same reason plannedUnits is: the library can
       // change, and an actual headcount is meaningless without the number it
       // was actually being measured against on the day.
-      plannedPeople:((lib[(j.sku||'').toUpperCase()]||{}).optimalHC)||''
+      plannedPeople:((lib[(j.sku||'').toUpperCase()]||{}).optimalHC)||'',
+      // Only recorded for a run somebody actually worked. An untouched row would
+      // otherwise write 'capper on' for every SKU on the sheet, which is the same
+      // assumption this control exists to get rid of.
+      capperRunning:(function(){
+        var v=String(mlEntryVal_(ctx.line,j.sku,'capper')||'').trim();
+        if(v)return v;
+        var touched=mlEntryVal_(ctx.line,j.sku,'start')||mlEntryVal_(ctx.line,j.sku,'end')
+                  ||mlEntryVal_(ctx.line,j.sku,'people')||mlEntryVal_(ctx.line,j.sku,'actual');
+        return touched?'on':'';
+      })()
     };
   });
   mlSaveStatus_('saving');
