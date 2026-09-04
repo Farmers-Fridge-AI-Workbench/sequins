@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.124 — 2026-09-04    (pairs with Index.html v0.5.192)
+ * Sequins ✨ — Code.js    v0.4.125 — 2026-09-04    (pairs with Index.html v0.5.193)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.124 No server change — pairing bump. Colouring, labelling and the capper
- *          caveat are client-side.
+ * v0.4.125 capperBeforeAfterFrom_ counts only capper runs in the after bucket,
+ *          and reports how many post-move runs went elsewhere.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -1958,12 +1958,26 @@ function capperBeforeAfterFrom_(runs) {
     if (firstCapper[r.sku] === undefined || r.d < firstCapper[r.sku]) firstCapper[r.sku] = r.d;
   });
 
+  // AFTER means on the capper, not merely later. v0.4.124 put every run after the
+  // cut date into 'after' regardless of line, so a capper recipe that still went
+  // onto LINE-1 now and then had those slow runs averaged into its capper figure —
+  // dragging it toward the very rates the capper replaced, and producing the
+  // result Cori refused to believe: capper recipes looking slower on the capper.
+  // The two analyses disagreeing was the tell, since capper-vs-other-lines had
+  // LINE-6 far faster on the same data.
+  //
+  // BEFORE needs no line filter: by construction there are no capper runs before
+  // this recipe's first one.
   const out = {};
   runs.forEach(function(r) {
     const cut = firstCapper[r.sku];
     if (cut === undefined) return;                       // never ran on the capper
-    if (!out[r.sku]) out[r.sku] = { before: bucket_(), after: bucket_(), cut: cut };
-    addRun_(out[r.sku][r.d < cut ? 'before' : 'after'], r);
+    if (!out[r.sku]) out[r.sku] = { before: bucket_(), after: bucket_(), cut: cut, offAfter: 0 };
+    if (r.d < cut) { addRun_(out[r.sku].before, r); return; }
+    if (r.line === CAPPER_LINE) { addRun_(out[r.sku].after, r); return; }
+    // Ran after the move, but not on the capper. Counted, not averaged in —
+    // a recipe doing much of its volume off the capper is worth seeing.
+    out[r.sku].offAfter++;
   });
 
   const rows = [];
@@ -1974,7 +1988,7 @@ function capperBeforeAfterFrom_(runs) {
     rows.push({ sku: k,
                 from: b.upm, to: a.upm, pct: Math.round((a.upm - b.upm) / b.upm * 100),
                 fromUplh: b.uplh, toUplh: a.uplh,
-                daysBefore: b.days, daysAfter: a.days,
+                daysBefore: b.days, daysAfter: a.days, offAfter: out[k].offAfter,
                 since: d.getFullYear() + '-' + ('0'+(d.getMonth()+1)).slice(-2) + '-' + ('0'+d.getDate()).slice(-2) });
   });
   rows.sort(function(x, y) { return y.pct - x.pct; });

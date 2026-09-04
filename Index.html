@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.192 — 2026-09-04    (pairs with Code.js v0.4.124)
+  Sequins ✨ — Index.html    v0.5.193 — 2026-09-04    (pairs with Code.js v0.4.125)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.192 One traffic-light rule for every percentage, UPM included. Sample
-           sizes say which side is thin in words. The capper split states that
-           its move date is inferred, because the drop cannot confirm it.
+  v0.5.193 Capper "after" means ON the capper. Post-move runs on other lines were
+           being averaged in, dragging capper recipes toward the rates the capper
+           replaced — which is why they looked slower on it.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -3555,8 +3555,12 @@ function renderQuarterly(r){
           // opposite of what it says \u2014 and the thin side is the one that decides
           // how much the row is worth.
           +'since '+escHtml(m.since)+'<br>'
-          +m.daysBefore+'d before \u00b7 '+m.daysAfter+'d after'
-          +(thin?' \u2014 thin':'')+'</div></div>';
+          +m.daysBefore+'d before \u00b7 '+m.daysAfter+'d on capper'
+          +(thin?' \u2014 thin':'')
+          // Runs after the move that were NOT on the capper. Excluded from the
+          // figure, counted here: a recipe doing much of its volume off the capper
+          // is a different story from one that moved and stayed.
+          +(m.offAfter?('<br>'+m.offAfter+' run(s) off capper since'):'')+'</div></div>';
     }).join('');
   }
   h+='</div>';
@@ -4005,7 +4009,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.192';
+var APP_VERSION='v0.5.193';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
