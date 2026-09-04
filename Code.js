@@ -1,10 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.122 — 2026-09-04    (pairs with Index.html v0.5.190)
+ * Sequins ✨ — Code.js    v0.4.123 — 2026-09-04    (pairs with Index.html v0.5.191)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.122 readDataDropRuns_ parses the drop once and several analyses share
- *          it; capperBeforeAfterFrom_ splits each SKU at its own first capper
- *          run rather than at one cutover date.
+ * v0.4.123 capperBeforeAfterFrom_ filters on the SKU Library capper flag, so a
+ *          one-off spill onto LINE-6 no longer reads as a recipe moving there.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -1932,13 +1931,30 @@ function upmHalvesFrom_(runs, window) {
 // cutover to split on. Each SKU is split at ITS OWN first run on LINE-6, which is
 // the date that recipe moved, and gradual rollout stops being a problem.
 //
+// Restricted to SKUs the SKU Library FLAGS as capper. Cori: "Why did you pull 40
+// recipes? You know which recipes we run on the capper." The first cut took any
+// SKU that had ever touched LINE-6, which sweeps in one-off spillovers — and
+// worse, a single overflow run then became that SKU's 'move date', so every run
+// after an accident got counted as life after the capper. The library's capper
+// flag is the declared list and is the right filter.
+//
 // A SKU already on the capper when the drop begins has no 'before' and is left
 // out rather than shown with an empty half. daysBefore/daysAfter come back so a
 // thin side is visible instead of implied.
 function capperBeforeAfterFrom_(runs) {
+  const lib = getSection_(STATE_KEYS.skuLibrary) || {};
+  const libByNorm = {};
+  Object.keys(lib).forEach(function(k) { libByNorm[normalizeSku_(k)] = k; });
+  const isCapperSku = function(sku) {
+    let m = lib[sku];
+    if (!m) { const alt = libByNorm[normalizeSku_(sku)]; if (alt) m = lib[alt]; }
+    return !!(m && m.capper);
+  };
+
   const firstCapper = {};
   runs.forEach(function(r) {
     if (r.line !== CAPPER_LINE) return;
+    if (!isCapperSku(r.sku)) return;
     if (firstCapper[r.sku] === undefined || r.d < firstCapper[r.sku]) firstCapper[r.sku] = r.d;
   });
 
