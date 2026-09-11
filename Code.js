@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.130 — 2026-09-11    (pairs with Index.html v0.5.198)
+ * Sequins ✨ — Code.js    v0.4.131 — 2026-09-11    (pairs with Index.html v0.5.199)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.130 No server change — pairing bump. The empty plan email was a client
- *          parse bug; the published plan was correct throughout.
+ * v0.4.131 No server change — pairing bump. Two instances disagreeing about
+ *          whether a day was published was a client cache that never expired.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────

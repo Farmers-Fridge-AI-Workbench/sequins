@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.198 — 2026-09-11    (pairs with Code.js v0.4.130)
+  Sequins ✨ — Index.html    v0.5.199 — 2026-09-11    (pairs with Code.js v0.4.131)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.198 The plan email opened empty because openPlanEmail never parsed the
-           JSON string getPublishedPlan returns. One parser now serves both
-           callers, and an email with no lines is refused rather than rendered.
+  v0.5.199 A browser that saw a day before it was published kept saying "not
+           published" for the life of the page. The poll now drops cached nulls
+           and the day on screen, so two instances stop disagreeing.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -2997,6 +2997,35 @@ function planCached_(wk,day){return!!(wk&&day&&STATE.publishedPlans[wk]&&Object.
 // unpublished day, and must never be silent.
 var _planLoading={},_planError={},_planTimer={};
 function planLoadError_(wk,day){return(wk&&day)?(_planError[wk+'||'+day]||null):null;}
+// v0.5.199. Cori: "Samad said it was published - the instance I was looking at
+// showed it wasn't published." Both were right, and nothing was lost.
+//
+// planCached_ treats a cached NULL as a cached answer, deliberately, so a day
+// that is genuinely unpublished is not refetched in a loop. But nothing ever
+// cleared it. A browser that looked at a day BEFORE it was published kept
+// answering 'not published' for the life of that page, however many times the
+// day card was clicked — while the browser that did the publishing showed it
+// fine. Two instances, one archive, permanently different answers.
+//
+// The 8s poll already knows when the server changed. On a change: drop every
+// cached null so an unpublished day gets another look, and drop the day
+// currently on screen so somebody else's re-publish is picked up instead of a
+// superseded sequence sitting there looking current. Loaded plans for other
+// days are kept — they are large, versioned, and re-read when next opened.
+function invalidatePlanCache_(){
+  var dropped=0;
+  Object.keys(STATE.publishedPlans||{}).forEach(function(wk){
+    var days=STATE.publishedPlans[wk]||{};
+    Object.keys(days).forEach(function(d){
+      var isNull=(days[d]===null||days[d]===undefined);
+      var isCurrent=(wk===CURRENT_WEEK&&d===CURRENT_DAY);
+      if(isNull||isCurrent){delete days[d];dropped++;}
+    });
+  });
+  // A failed read is worth one more attempt once the server has moved on.
+  Object.keys(_planError).forEach(function(k){delete _planError[k];});
+  return dropped;
+}
 function ensurePlanLoaded(wk,day,cb){
   if(!wk||!day){if(cb)cb();return;}
   if(planCached_(wk,day)){if(cb)cb();return;}
@@ -4007,7 +4036,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.198';
+var APP_VERSION='v0.5.199';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4372,7 +4401,7 @@ function buildUnplacedOptions_(job,lineState,lines,rules,lcById,capMin){
   });
   return wrap;
 }
-function startPolling(){if(_pollInterval)return;_pollInterval=setInterval(function(){google.script.run.withSuccessHandler(function(ts){if(!ts||ts===_lastModified)return;_lastModified=ts;document.getElementById('syncIndicator').style.display='';google.script.run.withSuccessHandler(function(s){document.getElementById('syncIndicator').style.display='none';if(!s)return;if(s.demand)STATE.demand=s.demand;if(s.skuLibrary&&!_cfgDirty.sku)STATE.skuLibrary=s.skuLibrary;if(s.lineConfig&&!_cfgDirty.line)STATE.lineConfig=s.lineConfig;if(s.planners)STATE.planners=s.planners;if(s.overrides)STATE.overrides=s.overrides;if(s.sequencingRules&&!_cfgDirty.rules)STATE.sequencingRules=s.sequencingRules;if(s.breakOverrides)STATE.breakOverrides=s.breakOverrides;if(s.scenarios)STATE.scenarios=s.scenarios;if(s.floorViewers)STATE.floorViewers=s.floorViewers;renderSequence();}).withFailureHandler(function(){document.getElementById('syncIndicator').style.display='none';}).getState();}).withFailureHandler(function(){}).getLastModified();},8000);}
+function startPolling(){if(_pollInterval)return;_pollInterval=setInterval(function(){google.script.run.withSuccessHandler(function(ts){if(!ts||ts===_lastModified)return;_lastModified=ts;invalidatePlanCache_();document.getElementById('syncIndicator').style.display='';google.script.run.withSuccessHandler(function(s){document.getElementById('syncIndicator').style.display='none';if(!s)return;if(s.demand)STATE.demand=s.demand;if(s.skuLibrary&&!_cfgDirty.sku)STATE.skuLibrary=s.skuLibrary;if(s.lineConfig&&!_cfgDirty.line)STATE.lineConfig=s.lineConfig;if(s.planners)STATE.planners=s.planners;if(s.overrides)STATE.overrides=s.overrides;if(s.sequencingRules&&!_cfgDirty.rules)STATE.sequencingRules=s.sequencingRules;if(s.breakOverrides)STATE.breakOverrides=s.breakOverrides;if(s.scenarios)STATE.scenarios=s.scenarios;if(s.floorViewers)STATE.floorViewers=s.floorViewers;renderSequence();}).withFailureHandler(function(){document.getElementById('syncIndicator').style.display='none';}).getState();}).withFailureHandler(function(){}).getLastModified();},8000);}
 
 function publishPlan(){
   var dayData=STATE.demand[CURRENT_WEEK]&&STATE.demand[CURRENT_WEEK][CURRENT_DAY];
