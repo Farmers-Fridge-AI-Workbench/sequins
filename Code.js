@@ -1,9 +1,10 @@
 /**
- * Sequins ✨ — Code.js    v0.4.128 — 2026-09-04    (pairs with Index.html v0.5.196)
+ * Sequins ✨ — Code.js    v0.4.129 — 2026-09-11    (pairs with Index.html v0.5.197)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.128 CapperRunning appended to Run Sheet Actuals — the floor records per
- *          SKU whether the capper was actually running.
+ * v0.4.129 Publishing takes a lock and VERIFIES its own write by reading the
+ *          block back. A publish that does not land now throws instead of
+ *          reporting success. Unpublish takes the same lock.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -3704,6 +3705,18 @@ function savePublishedPlan(weekLabel, day, snap) {
   const user = getCurrentUser();
   if (!user.isAdmin && !user.isPlanner) throw new Error('Not authorized');
   const sheet = planArchiveSheet_();
+
+  // v0.4.129: the whole read-then-append is under a lock now. It was not, and
+  // the sequence is a textbook race: nextPlanVersion_ reads the max version,
+  // then the append targets getLastRow() + 1. Two publishes close enough
+  // together — two people, or one double-click — compute the SAME target row,
+  // and the second setValues overwrites the first's block. The first day keeps
+  // its version number and loses its rows, which reads back as never published.
+  // Nothing threw, so the client's rollback never fired and it reported success.
+  const lock = LockService.getScriptLock();
+  try { lock.waitLock(30000); }
+  catch (e) { throw new Error('Another publish is in progress and did not finish within 30 seconds. Nothing was written — try again.'); }
+  try {
   const version = nextPlanVersion_(sheet, weekLabel, day);
   const pubAt = snap.publishedAt || new Date().toISOString();
   const pubBy = snap.publishedBy || user.email;
@@ -3751,10 +3764,36 @@ function savePublishedPlan(weekLabel, day, snap) {
     rows.push(tailSku(base('', 'UNPLACED', '', u.sku, u.qty)
       .concat(['', '', '', '', false, false, false, false, '', u.unplacedReason || '', hasAttrsBySku[u.sku] !== false, ''])));
   });
-  if (rows.length) {
-    sheet.getRange(sheet.getLastRow() + 1, 1, rows.length, PLAN_ARCHIVE_HEADER.length).setValues(rows);
+  // A publish that produces no rows used to skip the write and still return
+  // ok:true, so the client cached a snapshot nothing on disk backed. There is no
+  // legitimate empty publish: refuse it and let the client's rollback fire.
+  if (!rows.length) {
+    throw new Error('Nothing to publish — the sequenced plan produced no rows. Nothing was written.');
   }
-  writeAuditLog_(user.email, 'publish_plan', weekLabel, day, 'v' + version + ' · ' + rows.length + ' rows');
+  const firstRow = sheet.getLastRow() + 1;
+  sheet.getRange(firstRow, 1, rows.length, PLAN_ARCHIVE_HEADER.length).setValues(rows);
+  SpreadsheetApp.flush();   // make the write real before reading it back
+
+  // VERIFY. The point of this function is that the plan is on disk; saying so
+  // without looking is how a false success happens. Read back exactly the block
+  // just written and confirm every row carries this week, day and version — that
+  // catches a short write, a clobbered block, and a write that landed somewhere
+  // other than where it was aimed.
+  const back = sheet.getRange(firstRow, 1, rows.length, PLAN_ARCHIVE_HEADER.length).getValues();
+  let verified = 0;
+  for (let i = 0; i < back.length; i++) {
+    if (String(back[i][2]) === String(version) &&
+        String(back[i][3]) === String(weekLabel) &&
+        String(back[i][4]) === String(day)) verified++;
+  }
+  if (verified !== rows.length) {
+    writeAuditLog_(user.email, 'publish_verify_failed', weekLabel, day,
+      'v' + version + ' — wrote ' + rows.length + ', verified ' + verified);
+    throw new Error('The plan did not save correctly: ' + rows.length + ' rows were written but only ' +
+      verified + ' could be read back. The plan is NOT stored. Nothing else was changed — publish again.');
+  }
+  writeAuditLog_(user.email, 'publish_plan', weekLabel, day,
+    'v' + version + ' · ' + rows.length + ' rows · verified');
   // War Room write is deliberately AFTER the archive write and deliberately
   // cannot fail the publish. The plan is the record; the metrics cell is a
   // downstream courtesy. Anything that goes wrong comes back as a message the
@@ -3774,7 +3813,13 @@ function savePublishedPlan(weekLabel, day, snap) {
   try { asm20 = writeAssemblySequencing20_(snap, date); }
   catch (e) { asm20 = { ok: false, message: 'Assembly Sequencing 2.0: unexpected error — ' + e.message }; }
   if (asm20) writeAuditLog_(user.email, 'asm20_backup', weekLabel, day, asm20.message);
-  return { ok: true, version: version, warRoom: warRoom, asm20: asm20 };
+  return { ok: true, version: version, rows: rows.length, verified: verified,
+           warRoom: warRoom, asm20: asm20 };
+  } finally {
+    // Released even when a verify failure throws — a stuck lock would block
+    // every later publish for the full 30 seconds apiece.
+    try { lock.releaseLock(); } catch (e) {}
+  }
 }
 // ─── WAR ROOM: Assembly $ / unit plan (v0.4.51) ──────────────────────────────
 // Replaces loadDailyEmailToRow91, which searched Gmail for the daily Assembly
@@ -4108,11 +4153,22 @@ function unpublishPlan(weekLabel, day) {
   const user = getCurrentUser();
   if (!user.isAdmin && !user.isPlanner) throw new Error('Not authorized');
   const sheet = planArchiveSheet_();
+  // Same lock as savePublishedPlan, and for the same reason: this also reads the
+  // version then appends at getLastRow() + 1. An unpublish racing a publish would
+  // overwrite the plan's block with a one-row tombstone — losing the plan AND
+  // leaving the day looking deliberately unpublished rather than broken.
+  const lock = LockService.getScriptLock();
+  try { lock.waitLock(30000); }
+  catch (e) { throw new Error('Another publish or unpublish is in progress and did not finish within 30 seconds. Nothing was written.'); }
+  try {
   const version = nextPlanVersion_(sheet, weekLabel, day);
   const row = [new Date().toISOString(), user.email, version, weekLabel, day, '', '', '', '', 'UNPUBLISHED', '', '', '', '', '', '', '', false, false, false, false, '', '', '', '', '', ''];
   sheet.getRange(sheet.getLastRow() + 1, 1, 1, PLAN_ARCHIVE_HEADER.length).setValues([row]);
   writeAuditLog_(user.email, 'unpublish_plan', weekLabel, day, 'v' + version);
-  return { ok: true };
+  return { ok: true, version: version };
+  } finally {
+    try { lock.releaseLock(); } catch (e) {}
+  }
 }
 // Read the latest published plan for a week/day back from the archive and
 // rebuild the snapshot shape the client views expect. null if never published
