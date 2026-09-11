@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.132 — 2026-09-11    (pairs with Index.html v0.5.200)
+ * Sequins ✨ — Code.js    v0.4.133 — 2026-09-11    (pairs with Index.html v0.5.201)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.132 Publish and unpublish bump lastModified, so every other open browser
- *          drops its cached plans within 8 seconds instead of never.
+ * v0.4.133 No server change — pairing bump. Sandbox-only and wildcard are both
+ *          client-side line predicates.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────

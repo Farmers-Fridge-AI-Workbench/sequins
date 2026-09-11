@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.200 — 2026-09-11    (pairs with Code.js v0.4.132)
+  Sequins ✨ — Index.html    v0.5.201 — 2026-09-11    (pairs with Code.js v0.4.133)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.200 Pairing bump: publishing now bumps lastModified server-side, which is
-           the signal the poll needs before it will drop anything. Without it the
-           v0.5.199 invalidation only fired by accident.
+  v0.5.201 The Sandbox checkbox can finally take a line live — a hardcoded ID
+           list was overriding it, so LINE-7 could never be unticked. Wildcard no
+           longer follows a line into live planning.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -1064,16 +1064,46 @@ var SANDBOX_ONLY_LINES=[
 // entry carrying wildcard:true was never the object the engine saw. The flag
 // silently did nothing. Same trap as sandboxOnly in v0.4.60; the lesson is that
 // a property set only on the code definition never reaches a saved config.
-function isWildcardLine_(l){return !!(l&&(l.wildcard||WILDCARD_IDS[l.id]));}
+// v0.5.201: same stored-wins rule, plus a hard gate. A wildcard is a MODELLING
+// DEVICE — see the note above: it will absorb capper jars and 4oz cups that no
+// bare assembly table can physically produce, which is acceptable when the
+// question is "is there enough capacity" and dangerous the moment the line is
+// real. Taking LINE-7 live would otherwise have carried wildcard:true straight
+// into Monday's actual plan and put work on a table that cannot do it.
+//
+// So: wildcard applies only while a line is sandbox-only. A live line is
+// governed by its real capabilities, like every other line.
+function isWildcardLine_(l){
+  if(!l)return false;
+  if(!isSandboxOnlyLine_(l))return false;
+  if(Object.prototype.hasOwnProperty.call(l,'wildcard')&&l.wildcard!==null&&l.wildcard!=='')
+    return !!l.wildcard;
+  return !!WILDCARD_IDS[l.id];
+}
 var SANDBOX_ONLY_IDS={},WILDCARD_IDS={};
 SANDBOX_ONLY_LINES.forEach(function(l){
   SANDBOX_ONLY_IDS[l.id]=true;
   if(l.wildcard)WILDCARD_IDS[l.id]=true;
 });
-// Either the stored flag OR the code list. The list matters because a stored
-// config written before this version has no flag on the line, and a deployment
-// must not need a config edit to keep sandbox-only lines out of live planning.
-function isSandboxOnlyLine_(l){return !!(l&&(l.sandboxOnly||SANDBOX_ONLY_IDS[l.id]));}
+// v0.5.201. The stored flag WINS; the code list is only a default for a line
+// that has never been configured either way.
+//
+// It used to be a plain OR, which made the Line Config checkbox a decoration:
+// unticking Sandbox set sandboxOnly=false, the re-render ORed that with the code
+// list, got true, and the box snapped straight back. LINE-7 could not be taken
+// live from the UI at all. Cori: "I turned on line 7 but it's not showing up on
+// Monday... Also can't click off the sandbox". She had done nothing wrong.
+//
+// The original reason for the list still holds and is preserved: a config saved
+// before the flag existed carries no sandboxOnly property, and must not need a
+// config edit to keep a staged line out of live planning. That is the ABSENT
+// case. An explicit false is a decision, and a decision outranks a default.
+function isSandboxOnlyLine_(l){
+  if(!l)return false;
+  if(Object.prototype.hasOwnProperty.call(l,'sandboxOnly')&&l.sandboxOnly!==null&&l.sandboxOnly!=='')
+    return !!l.sandboxOnly;
+  return !!SANDBOX_ONLY_IDS[l.id];
+}
 // The line set Sandbox works from: real config plus any sandbox-only line that
 // isn't in it. Live paths never call this, so these lines cannot leak.
 function sbAllLines_(){
@@ -4036,7 +4066,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.200';
+var APP_VERSION='v0.5.201';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
