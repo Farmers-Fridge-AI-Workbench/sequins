@@ -1,10 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.129 — 2026-09-11    (pairs with Index.html v0.5.197)
+ * Sequins ✨ — Code.js    v0.4.130 — 2026-09-11    (pairs with Index.html v0.5.198)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.129 Publishing takes a lock and VERIFIES its own write by reading the
- *          block back. A publish that does not land now throws instead of
- *          reporting success. Unpublish takes the same lock.
+ * v0.4.130 No server change — pairing bump. The empty plan email was a client
+ *          parse bug; the published plan was correct throughout.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────

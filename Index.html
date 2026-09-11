@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.197 — 2026-09-11    (pairs with Code.js v0.4.129)
+  Sequins ✨ — Index.html    v0.5.198 — 2026-09-11    (pairs with Code.js v0.4.130)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.197 Publish failure alert no longer blames the Script Properties limit —
-           plans have not lived there since the archive migration, and the server
-           now returns a specific reason.
+  v0.5.198 The plan email opened empty because openPlanEmail never parsed the
+           JSON string getPublishedPlan returns. One parser now serves both
+           callers, and an email with no lines is refused rather than rendered.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -2240,6 +2240,19 @@ function warRoomCost_(lineState,lines){
 // plan has to keep nagging after a reload, and has to nag whoever opens
 // Sequins next, not just the person who published.
 var PLAN_EMAIL_CTX=null;
+// getPublishedPlan returns a JSON STRING (v0.4.24; older builds returned an
+// object). ensurePlanLoaded knew that and parsed it; openPlanEmail did not, and
+// handed the raw string to the email renderer. A string is truthy, so the ‘no
+// published plan’ guard passed, and every field read off it came back undefined:
+// no date, zero units, zero lines, an empty Sequence Summary. The plan was fine
+// the whole time — only the email preview was broken.
+//
+// One parser, used by both callers, so a third one cannot make the same mistake.
+function parsePlanSnap_(res){
+  if(res===null||res===undefined||res==='')return null;
+  if(typeof res!=='string')return res;
+  return JSON.parse(res);   // caller decides what a parse failure means
+}
 function planEmailState_(wk,dy){
   var m=STATE.planEmail||{};
   return (m[wk]&&m[wk][dy])||null;
@@ -2269,8 +2282,16 @@ function renderPlanEmailPill(){
   el.onclick=function(){openPlanEmail(p.week,p.day);};
 }
 function openPlanEmail(wk,dy){
-  google.script.run.withSuccessHandler(function(snap){
+  google.script.run.withSuccessHandler(function(res){
+    var snap;
+    try{snap=parsePlanSnap_(res);}
+    catch(e){alert('The published plan for '+dy+' came back unreadable:\n\n'+e.message+'\n\nThe plan itself is still in the archive. Nothing was sent.');return;}
     if(!snap){alert('No published plan found for '+dy+'. Publish it first.');return;}
+    // A snapshot that parsed but carries no plan would render an email of zeroes,
+    // which is exactly what went out to be looked at before. Refuse instead.
+    if(!snap.lineState||!snap.lines||!snap.lines.length){
+      alert('The published plan for '+dy+' loaded but contains no lines, so there is nothing to email.\n\nRe-publish that day and try again.');return;
+    }
     PLAN_EMAIL_CTX={week:wk,day:dy,snap:snap,
       subject:planEmailSubject_(snap),html:planEmailHtml_(snap)};
     showPlanEmailModal_();
@@ -3001,8 +3022,7 @@ function ensurePlanLoaded(wk,day,cb){
   google.script.run.withSuccessHandler(function(res){
     if(!STATE.publishedPlans[wk])STATE.publishedPlans[wk]={};
     var snap=null;
-    // v0.4.24 returns a JSON string; older builds returned an object.
-    try{snap=(typeof res==='string')?(res?JSON.parse(res):null):(res||null);}
+    try{snap=parsePlanSnap_(res);}
     catch(e){_planError[k]='The published plan came back unreadable: '+e.message;done();return;}
     STATE.publishedPlans[wk][day]=snap;delete _planError[k];done();
   }).withFailureHandler(function(err){
@@ -3987,7 +4007,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.197';
+var APP_VERSION='v0.5.198';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
