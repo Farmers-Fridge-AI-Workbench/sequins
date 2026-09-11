@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.131 — 2026-09-11    (pairs with Index.html v0.5.199)
+ * Sequins ✨ — Code.js    v0.4.132 — 2026-09-11    (pairs with Index.html v0.5.200)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.131 No server change — pairing bump. Two instances disagreeing about
- *          whether a day was published was a client cache that never expired.
+ * v0.4.132 Publish and unpublish bump lastModified, so every other open browser
+ *          drops its cached plans within 8 seconds instead of never.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -3793,6 +3793,20 @@ function savePublishedPlan(weekLabel, day, snap) {
   }
   writeAuditLog_(user.email, 'publish_plan', weekLabel, day,
     'v' + version + ' · ' + rows.length + ' rows · verified');
+
+  // v0.4.132: publishing now ANNOUNCES itself. Every other open browser polls
+  // getLastModified every 8 seconds and drops its cached plans when it moves —
+  // which is how a colleague's screen stops insisting a published day is not
+  // published. Until now a publish never touched this: it only moved by accident,
+  // when arming the plan email happened to write to the State Store, and that arm
+  // is wrapped in a try/catch precisely because it is allowed to fail. A refresh
+  // signal that works by luck is not a signal.
+  //
+  // Deliberately after the verify and deliberately non-fatal. The plan is already
+  // on disk and confirmed by this point; failing the publish over a stale-cache
+  // hint would trade a real record for a cosmetic one.
+  try { touchLastModified_(); }
+  catch (e) { Logger.log('lastModified bump failed after publish (non-fatal, plan is stored): ' + e.message); }
   // War Room write is deliberately AFTER the archive write and deliberately
   // cannot fail the publish. The plan is the record; the metrics cell is a
   // downstream courtesy. Anything that goes wrong comes back as a message the
@@ -4164,6 +4178,10 @@ function unpublishPlan(weekLabel, day) {
   const row = [new Date().toISOString(), user.email, version, weekLabel, day, '', '', '', '', 'UNPUBLISHED', '', '', '', '', '', '', '', false, false, false, false, '', '', '', '', '', ''];
   sheet.getRange(sheet.getLastRow() + 1, 1, 1, PLAN_ARCHIVE_HEADER.length).setValues([row]);
   writeAuditLog_(user.email, 'unpublish_plan', weekLabel, day, 'v' + version);
+  // Same reason, opposite direction: without this an unpublished day stays on
+  // every other screen looking live.
+  try { touchLastModified_(); }
+  catch (e) { Logger.log('lastModified bump failed after unpublish (non-fatal): ' + e.message); }
   return { ok: true, version: version };
   } finally {
     try { lock.releaseLock(); } catch (e) {}
