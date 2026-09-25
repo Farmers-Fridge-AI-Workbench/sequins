@@ -1,9 +1,10 @@
 /**
- * Sequins ✨ — Code.js    v0.4.133 — 2026-09-11    (pairs with Index.html v0.5.201)
+ * Sequins ✨ — Code.js    v0.4.135 — 2026-09-25    (pairs with Index.html v0.5.203)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.133 No server change — pairing bump. Sandbox-only and wildcard are both
- *          client-side line predicates.
+ * v0.4.135 Every client-callable function that can write now checks the caller.
+ *          Apps Script exposes all globals to google.script.run, so 13 editor-only
+ *          maintenance and trigger functions were reachable from any FF browser.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -343,6 +344,25 @@ function getCurrentUser() {
   const floorViewers = getSection_(STATE_KEYS.floorViewers) || [];
   const isFloorViewer = floorViewers.map(f => f.toLowerCase()).includes(email.toLowerCase());
   return { email, isAdmin, isPlanner, canEditRules, isFloorViewer, name: email.split('@')[0] };
+}
+
+// v0.4.133: for functions a SCHEDULER calls but a browser must not.
+//
+// A plain isAdmin throw would be wrong here. Time-driven triggers run with no
+// interactive caller and Session.getActiveUser() can come back empty in that
+// context, which would silently kill the nightly label and allergen syncs and the
+// weekly UPM update. Breaking a working sync to close a hole nobody has used is a
+// bad trade.
+//
+// So: no identifiable caller means the scheduler, and it passes. A real caller is
+// held to the admin bar. That matches how every other role check here already
+// works — getCurrentUser() reads the same getActiveUser(), so if it could not
+// identify a browser caller, roles would have been broken all along.
+function assertAdminOrScheduled_() {
+  let email = '';
+  try { email = Session.getActiveUser().getEmail() || ''; } catch (e) { email = ''; }
+  if (!email) return;                       // scheduled run, no interactive caller
+  if (!getCurrentUser().isAdmin) throw new Error('Not authorized');
 }
 
 function getAdminList_() {
@@ -1416,6 +1436,7 @@ function pushedDemandActor_() {
 }
 
 function importPushedDemand() {
+  assertAdminOrScheduled_();
   const user = pushedDemandActor_();
 
   const plan = planPushedDemandImport_();
@@ -1486,6 +1507,7 @@ function previewPushedDemand() {
 // demand arriving mid-session can move an unpublished plan. Line Sequence is
 // safe — it renders the published snapshot and never moves until you publish.
 function pushedDemandTrigger() {
+  assertAdminOrScheduled_();
   try {
     const res = importPushedDemand();
     Logger.log('pushedDemandTrigger: imported ' + ((res && res.imported) || 0) + ' day(s)');
@@ -1497,7 +1519,21 @@ function pushedDemandTrigger() {
 // Default every 15 minutes. Apps Script's Run button can't pass arguments, so
 // the interval lives here — edit the constant and re-install to change it.
 // Accepted values are 1, 5, 10, 15 and 30.
+// v0.4.133 — ADMIN GATE ON MAINTENANCE FUNCTIONS.
+// Apps Script exposes EVERY global function to google.script.run, whether or not
+// the UI ever calls it. These six are editor-only maintenance and none is wired
+// to a button, but any signed-in farmersfridge.com account could invoke them
+// from a browser console — and with executeAs USER_DEPLOYING they would run with
+// the deployer's permissions. Two of them delete data.
+//
+// Not a theoretical worry as of 2026-09-25: Cori is circulating the app link
+// inside FF, so the set of people who can reach the front door is about to grow.
+// 'Nobody would' is not an access control.
+//
+// Session.getActiveUser() returns the real email when these are run from the
+// Apps Script editor too, so the owner's own maintenance runs still pass.
 function installPushedDemandTrigger() {
+  if (!getCurrentUser().isAdmin) throw new Error('Not authorized');
   const EVERY_MINUTES = 15;
   const existing = ScriptApp.getProjectTriggers().filter(function(t) {
     return t.getHandlerFunction() === 'pushedDemandTrigger';
@@ -1512,6 +1548,7 @@ function installPushedDemandTrigger() {
 }
 
 function removePushedDemandTrigger() {
+  assertAdminOrScheduled_();
   let n = 0;
   ScriptApp.getProjectTriggers().forEach(function(t) {
     if (t.getHandlerFunction() === 'pushedDemandTrigger') { ScriptApp.deleteTrigger(t); n++; }
@@ -2011,7 +2048,10 @@ function applyObservedUpm(days) {
 
 // Trigger entry point. Trivial on purpose — everything it needs in order to
 // refuse lives inside applyObservedUpm_.
-function weeklyUpmUpdate() { applyObservedUpm_(OBSERVED_UPM_DAYS, 'weekly trigger'); }
+function weeklyUpmUpdate() {
+  assertAdminOrScheduled_();
+  applyObservedUpm_(OBSERVED_UPM_DAYS, 'weekly trigger');
+}
 
 // v0.4.115: no switch. Cori: "I don't really want to turn it on and off tho -
 // can we just make it run by itself without a check box?" So the trigger installs
@@ -2399,6 +2439,7 @@ const UNITS_PER_TOTE_SEED = {
  * Run from the editor. Logger.log only, per house convention.
  */
 function seedUnitsPerTote() {
+  assertAdminOrScheduled_();
   const library = getSection_(STATE_KEYS.skuLibrary) || {};
   const keys = Object.keys(library);
   if (!keys.length) {
@@ -2509,6 +2550,7 @@ function syncLabelVersions_() {
 // has no client to surface an error to; a failure just needs to be visible
 // in Executions/Logs, not thrown into the void.
 function labelVersionSyncTrigger() {
+  assertAdminOrScheduled_();
   try {
     const result = syncLabelVersions_();
     Logger.log('labelVersionSyncTrigger: ' + JSON.stringify(result));
@@ -2521,6 +2563,7 @@ function labelVersionSyncTrigger() {
 // Run) to install the daily trigger. Safe to re-run — checks for an
 // existing trigger on this handler first, so it can never create duplicates.
 function installLabelVersionSyncTrigger() {
+  if (!getCurrentUser().isAdmin) throw new Error('Not authorized');
   const existing = ScriptApp.getProjectTriggers().filter(function(t) {
     return t.getHandlerFunction() === 'labelVersionSyncTrigger';
   });
@@ -2696,11 +2739,13 @@ function syncAllergens_() {
 // Daily handler. Own try/catch: a time-driven run has no client to throw to, so
 // a failure needs to land in Executions rather than vanish.
 function allergenSyncTrigger() {
+  assertAdminOrScheduled_();
   try { Logger.log('allergenSyncTrigger: ' + JSON.stringify(syncAllergens_())); }
   catch(e) { Logger.log('allergenSyncTrigger failed: ' + e.message); }
 }
 // Run ONCE from the editor. Idempotent - checks first, so it cannot duplicate.
 function installAllergenSyncTrigger() {
+  if (!getCurrentUser().isAdmin) throw new Error('Not authorized');
   const existing = ScriptApp.getProjectTriggers().filter(function(t) {
     return t.getHandlerFunction() === 'allergenSyncTrigger';
   });
@@ -3098,6 +3143,7 @@ function previewPruneDemandHistory() {
   return out;
 }
 function pruneDemandHistory() {
+  if (!getCurrentUser().isAdmin) throw new Error('Not authorized');
   const sp = PropertiesService.getScriptProperties();
   const props = sp.getProperties();
   const keys = Object.keys(props).filter(function(k) { return k.indexOf(DEMAND_HIST_PREFIX) === 0; });
@@ -3504,6 +3550,7 @@ function previewRetireDemandBefore(cutoffYear, cutoffWeek) {
   return { keys: hit.length, bytes: bytes, byWeek: byWeek, totalNow: total, totalAfter: total - bytes };
 }
 function retireDemandBefore(cutoffYear, cutoffWeek) {
+  if (!getCurrentUser().isAdmin) throw new Error('Not authorized');
   if (!cutoffYear || !cutoffWeek) throw new Error('Give a cutoff, e.g. retireDemandBefore(2026, 32)');
   const sp = PropertiesService.getScriptProperties();
   const props = sp.getProperties();
@@ -3597,6 +3644,7 @@ function debugPropertySizes() {
   return { total: total, budget: 500000, keys: keys.length, groups: ranked, largest: each.slice(0, 12), weeks: weeks };
 }
 function reclaimSandboxProperty() {
+  if (!getCurrentUser().isAdmin) throw new Error('Not authorized');
   const raw = PropertiesService.getScriptProperties().getProperty(STATE_KEYS.sandboxes);
   if (raw === null) { Logger.log('reclaimSandboxProperty: nothing to reclaim.'); return { ok: true, freed: 0 }; }
   let legacy = [];
