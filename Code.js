@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.136 — 2026-09-30    (pairs with Index.html v0.5.204)
+ * Sequins ✨ — Code.js    v0.4.137 — 2026-09-30    (pairs with Index.html v0.5.205)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.136 No server change — paired with Index.html v0.5.204, which adds target
- *          labor hours to the plan email. The email is built client-side.
+ * v0.4.137 No server change — paired with Index.html v0.5.205, which puts
+ *          simulated / target labor hours in the Line Sequence KPI strip.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────

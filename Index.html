@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.204 — 2026-09-30    (pairs with Code.js v0.4.136)
+  Sequins ✨ — Index.html    v0.5.205 — 2026-09-30    (pairs with Code.js v0.4.137)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.204 Target labor hours in the plan email, beside the simulated figure
-           and the variance between them. Samad's formula, (target $/unit x
-           units) / hourly rate; the target is a rule, not a constant.
+  v0.5.205 Simulated / target labor hours in the Line Sequence KPI strip, off
+           the same helper the plan email uses. Cards shrink a little so all
+           eight stay on one row.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -152,9 +152,9 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .day-tab.active.mode-forecast{background:var(--amber);border-color:var(--amber);color:#000;}
 .day-tab.active.mode-actual{background:var(--green);border-color:var(--green);color:#000;}
 .day-tab .dt-date{font-size:9px;opacity:.8;font-weight:400;}
-.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:6px;}
-.kpi{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 10px;min-width:0;overflow:hidden;}
-.kpi-val{font-family:var(--mono);font-size:20px;font-weight:500;line-height:1.1;margin-bottom:2px;white-space:nowrap;}
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(104px,1fr));gap:6px;}
+.kpi{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:7px 9px;min-width:0;overflow:hidden;}
+.kpi-val{font-family:var(--mono);font-size:18px;font-weight:500;line-height:1.1;margin-bottom:2px;white-space:nowrap;}
 .kpi-lbl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;line-height:1.25;}
 .kpi-val.teal{color:var(--teal);}.kpi-val.green{color:var(--green);}.kpi-val.amber{color:var(--amber);}.kpi-val.red{color:var(--red);}
 .seq-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;}
@@ -476,6 +476,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           <div class="kpi"><div class="kpi-val green" id="k-placed">—</div><div class="kpi-lbl">Placed</div></div>
           <div class="kpi"><div class="kpi-val amber" id="k-unplaced">—</div><div class="kpi-lbl">Unplaced</div></div>
           <div class="kpi"><div class="kpi-val red" id="k-noattrs">—</div><div class="kpi-lbl">No attrs</div></div>
+          <div class="kpi"><div class="kpi-val" id="k-labor">—</div><div class="kpi-lbl" title="Simulated labor hours against target. Target is (target assembly $/unit × units) ÷ hourly rate — both set in Line Config. Amber means the plan is over target. Same two numbers the plan email sends.">Labor sim / target</div></div>
         </div>
         <div class="card" style="padding-bottom:0">
           <div class="card-title metrics-toggle-row" onclick="toggleMetrics()" style="margin-bottom:0;padding-bottom:12px">Per-Line Summary <span class="metrics-arrow" id="seqMetricsArrow">▾</span></div>
@@ -2265,6 +2266,16 @@ function warRoomCost_(lineState,lines){
           offHC:offHC,spanH:spanH,offHrs:offHrs,totalHrs:totalHrs,
           perUnit:units>0?(totalHrs*rate)/units:0};
 }
+// Simulated labor hours and Samad's target, together, because they are only
+// ever read against each other. Both the KPI strip and the plan email call
+// this — the same day showing 458 in one and something else in the other is
+// exactly the kind of drift that costs trust in the number.
+function planLaborHours_(lineState,lines){
+  var rules=getRules(),rate=ruleNum_(rules,'hourlyRate');
+  var wr=warRoomCost_(lineState||{},lines||[]);
+  var tgt=rate>0?(ruleNum_(rules,'targetAssemblyPerUnit')*wr.units)/rate:0;
+  return{units:wr.units,sim:wr.totalHrs,target:tgt,variance:wr.totalHrs-tgt,wr:wr};
+}
 // ─── PLAN EMAIL: preview, pill, send (v0.5.108) ──────────────────────────────
 // The pill is the whole point of the persistent state: an armed-but-unsent
 // plan has to keep nagging after a reload, and has to nag whoever opens
@@ -2435,7 +2446,7 @@ function planEmailRows_(snap){
 function planEmailSummary_(snap){
   var rules=getRules(),rate=ruleNum_(rules,'hourlyRate');
   var proc=ruleNum_(rules,'processingStaticPerUnit');
-  var wr=warRoomCost_(snap.lineState||{},snap.lines||[]);
+  var lab=planLaborHours_(snap.lineState||{},snap.lines||[]),wr=lab.wr;
   // Lines Running counts lines that ran product, excluding the green belt.
   // The legacy sheet did this with a hardcoded −1, which was wrong on the days
   // LINE-0 didn't run; excluding it by name is right on every day.
@@ -2458,12 +2469,10 @@ function planEmailSummary_(snap){
   //
   // Volume is the whole day's units, green belt included — excluding LINE-0
   // gives 423.7 and does not reproduce his figure.
-  var tgtPer=ruleNum_(rules,'targetAssemblyPerUnit');
-  var tgtHrs=rate>0?(tgtPer*wr.units)/rate:0;
   return{units:wr.units,linesRunning:running,simPerUnit:wr.perUnit,proc:proc,
     ap:wr.perUnit+proc,hoursBank:rate>0?(proc*wr.units)/rate:0,
-    totalLaborHrs:wr.totalHrs,targetPerUnit:tgtPer,targetLaborHrs:tgtHrs,
-    laborVariance:wr.totalHrs-tgtHrs,rate:rate};
+    totalLaborHrs:wr.totalHrs,targetPerUnit:ruleNum_(rules,'targetAssemblyPerUnit'),
+    targetLaborHrs:lab.target,laborVariance:lab.variance,rate:rate};
 }
 // The link needs the deployed web-app URL, which only the server knows.
 function loadWebAppUrl_(){google.script.run.withSuccessHandler(function(u){window._webAppUrl=u||'';}).withFailureHandler(function(){}).getWebAppUrl();}
@@ -3150,7 +3159,7 @@ function renderSequence(){
     document.getElementById('lineMetricsTable').innerHTML='';
     document.getElementById('unplacedCard').style.display='none';
     document.getElementById('noAttrsCard').style.display='none';
-    ['k-skus','k-units','k-lines','k-placed','k-unplaced','k-noattrs','k-headcount'].forEach(function(id){var e=document.getElementById(id);if(e)e.textContent='--';});
+    ['k-skus','k-units','k-lines','k-placed','k-unplaced','k-noattrs','k-headcount','k-labor'].forEach(function(id){var e=document.getElementById(id);if(e)e.textContent='--';});
     return;
   }
   if(npc)npc.style.display='none';
@@ -3170,6 +3179,13 @@ function renderSequence(){
   document.getElementById('k-noattrs').className='kpi-val '+(naj.length>0?'red':'green');
   var hcS=planHeadcount_(lineState,lines);
   document.getElementById('k-headcount').textContent=hcS.day+' / '+hcS.night;
+  // Whole hours: the strip has ~100px per card and 473.6 / 458.6 does not fit.
+  // The email carries the decimals for anyone who wants them.
+  var lab=planLaborHours_(lineState,lines),kl=document.getElementById('k-labor');
+  if(kl){
+    kl.textContent=Math.round(lab.sim)+' / '+Math.round(lab.target);
+    kl.className='kpi-val '+(lab.variance>0?'amber':'green');
+  }
   var nac=document.getElementById('noAttrsCard');
   if(naj.length>0){nac.style.display='';document.getElementById('noAttrsList').innerHTML=naj.map(function(j){return'<div class="sku-row" style="background:transparent"><span class="sku-name">'+j.sku+'</span><span class="sku-units">'+fmtUnits(j.qty)+'</span></div>';}).join('');}else{nac.style.display='none';}
   document.getElementById('seqCurfewBanner').innerHTML=curfewBannerHtml_(lines,lineState);
@@ -4088,7 +4104,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.204';
+var APP_VERSION='v0.5.205';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
