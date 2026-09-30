@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.203 — 2026-09-25    (pairs with Code.js v0.4.135)
+  Sequins ✨ — Index.html    v0.5.204 — 2026-09-30    (pairs with Code.js v0.4.136)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.201 The Sandbox checkbox can finally take a line live — a hardcoded ID
-           list was overriding it, so LINE-7 could never be unticked. Wildcard no
-           longer follows a line into live planning.
+  v0.5.204 Target labor hours in the plan email, beside the simulated figure
+           and the variance between them. Samad's formula, (target $/unit x
+           units) / hourly rate; the target is a rule, not a constant.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -989,7 +989,7 @@ var DEFAULT_LINE_CONFIG=[
   {id:'NIGHT-1',label:'Night Shift 1',type:'night',hc:9,pool:'night',startTime:'00:20',caps:{capper:true,smallCup:false,usdaApproved:false,night:true},days:{Mon:true,Tue:true,Wed:true,Thu:true,Fri:false,Sat:false,Sun:true}},
   {id:'NIGHT-2',label:'Night Shift 2',type:'night',hc:9,pool:'night',startTime:'00:20',caps:{capper:false,smallCup:false,usdaApproved:false,night:true},days:{Mon:true,Tue:true,Wed:true,Thu:true,Fri:false,Sat:false,Sun:false}}
 ];
-var DEFAULT_RULES={greenBeltPackages:['4oz jar'],homeLines:{wrap:'LINE-3',sandwich:'LINE-2',salad:'LINE-1',bowl:'LINE-5',green:'LINE-0'},lineSeeds:{},sausageSesameRule:true,targetRuntimeMin:510,slotCap:14,nightShiftUnitCap:9500,changeoverMin:8.5,hourlyRate:24.39,offlineLaborHeadcount:5,processingStaticPerUnit:0.11,planEmailRecipients:'',planEmailCc:'',breakMinRuntimeMin:240,break30OffsetMin:240,break30DurationMin:30,break15OffsetMin:360,break15DurationMin:15,break30Paid:false,break15Paid:true,otMultiplier:1.5};
+var DEFAULT_RULES={greenBeltPackages:['4oz jar'],homeLines:{wrap:'LINE-3',sandwich:'LINE-2',salad:'LINE-1',bowl:'LINE-5',green:'LINE-0'},lineSeeds:{},sausageSesameRule:true,targetRuntimeMin:510,slotCap:14,nightShiftUnitCap:9500,changeoverMin:8.5,hourlyRate:24.39,offlineLaborHeadcount:5,processingStaticPerUnit:0.11,targetAssemblyPerUnit:0.33,planEmailRecipients:'',planEmailCc:'',breakMinRuntimeMin:240,break30OffsetMin:240,break30DurationMin:30,break15OffsetMin:360,break15DurationMin:15,break30Paid:false,break15Paid:true,otMultiplier:1.5};
 function getRules(){
   // v0.5.106: merge over DEFAULT_RULES instead of an all-or-nothing ||.
   // A stored rules object written before a key existed used to return
@@ -2444,9 +2444,26 @@ function planEmailSummary_(snap){
     var ls=(snap.lineState||{})[line.id];
     if(ls&&ls.totalUnits>0&&String(line.id).toUpperCase()!=='LINE-0')running++;
   });
+  // v0.5.204 (Samad): target labor hours, which the floor had been working out
+  // by hand next to the simulated figure. His formula is
+  //     (0.33 x total production volume) / 24.39
+  // — a target ASSEMBLY $/unit converted to hours at the labor rate. Both of
+  // those are already rules here (hourlyRate is the 24.39), so the only new
+  // input is the 0.33, and it is a rule rather than a constant because a target
+  // is exactly the kind of number that gets revised.
+  //
+  // Same arithmetic as Hours Bank one cell over, which is the processing $/unit
+  // through the same conversion. Verified against Samad's own 9/30 numbers:
+  // 0.33 x 33,896 / 24.39 = 458.6 target against 473.6 simulated, his 458/473.
+  //
+  // Volume is the whole day's units, green belt included — excluding LINE-0
+  // gives 423.7 and does not reproduce his figure.
+  var tgtPer=ruleNum_(rules,'targetAssemblyPerUnit');
+  var tgtHrs=rate>0?(tgtPer*wr.units)/rate:0;
   return{units:wr.units,linesRunning:running,simPerUnit:wr.perUnit,proc:proc,
     ap:wr.perUnit+proc,hoursBank:rate>0?(proc*wr.units)/rate:0,
-    totalLaborHrs:wr.totalHrs,rate:rate};
+    totalLaborHrs:wr.totalHrs,targetPerUnit:tgtPer,targetLaborHrs:tgtHrs,
+    laborVariance:wr.totalHrs-tgtHrs,rate:rate};
 }
 // The link needs the deployed web-app URL, which only the server knows.
 function loadWebAppUrl_(){google.script.run.withSuccessHandler(function(u){window._webAppUrl=u||'';}).withFailureHandler(function(){}).getWebAppUrl();}
@@ -2466,15 +2483,20 @@ function planEmailHtml_(snap){
    ['Simulated $/unit','$'+sum.simPerUnit.toFixed(3)],['Processing (static)','$'+sum.proc.toFixed(3)],
    ['Total Simulated $/unit (A&P)','$'+sum.ap.toFixed(3)],['Hours Bank',sum.hoursBank.toFixed(1)],
    ['Total Labor Hours',sum.totalLaborHrs.toFixed(1)],
+   // Target sits immediately beside simulated because the variance between
+   // them is the whole point — a target on its own tells nobody anything.
+   ['Target Labor Hours',sum.targetLaborHrs.toFixed(1)],
+   ['Labor Variance',(sum.laborVariance>0?'+':'')+sum.laborVariance.toFixed(1)],
    // v0.5.147 (Samad): the two hour figures above already existed but never as
    // one number, and hours are what the floor actually plans against. This is
    // his (A&P $/unit x units) / rate, which reduces exactly to assembly hours
    // plus the processing hours bank — same arithmetic, no new inputs.
    ['Total Hours (A&P)',(sum.totalLaborHrs+sum.hoursBank).toFixed(1)]
   ].forEach(function(p){
+    var c=(p[0]==='Labor Variance')?(sum.laborVariance>0?'#c0392b':'#1e8449'):'#222';
     h+='<td style="'+TD+'background:#fafafa;text-align:center;min-width:92px">'+
        '<div style="font-size:10px;color:#666;text-transform:uppercase;letter-spacing:.04em">'+esc(p[0])+'</div>'+
-       '<div style="font-size:16px;font-weight:600;padding-top:2px">'+esc(p[1])+'</div></td>';
+       '<div style="font-size:16px;font-weight:600;padding-top:2px;color:'+c+'">'+esc(p[1])+'</div></td>';
   });
   h+='</tr></table>';
   h+='<div style="font-size:13px;font-weight:600;margin:0 0 6px">Sequence Summary</div>';
@@ -4066,7 +4088,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.203';
+var APP_VERSION='v0.5.204';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4097,6 +4119,8 @@ function renderRules(){
     note('Offline labor is line-support headcount that isn\u2019t on a line \u2014 charged across the day-shift span (earliest day start to last day end) in the War Room $/unit figure only. It does not affect sequencing, Per-Line Summary or Labor Hrs.'),
     note('Paid breaks count toward Labor Hrs, UPLH and $/Unit. Unpaid ones still sit in the schedule and still move the line\u2019s end time \u2014 they just aren\u2019t billed.'),
     field('Processing static ($/unit)','processingStaticPerUnit',ruleNum_(rules,'processingStaticPerUnit'),'num'),
+    field('Target assembly ($/unit)','targetAssemblyPerUnit',ruleNum_(rules,'targetAssemblyPerUnit'),'num'),
+    note('Target assembly $/unit drives <b>Target Labor Hours</b> in the plan email: (target $/unit × units) ÷ hourly rate. It is a target, not a measurement — nothing in the sequencer reads it.'),
     hdr('Assembly plan email'),
     note('Moved to <b>Users</b> — Recipients and CC are managed there. They are a distribution list, not a sequencing rule.'),
     hdr('Breaks'),

@@ -1,10 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.135 — 2026-09-25    (pairs with Index.html v0.5.203)
+ * Sequins ✨ — Code.js    v0.4.136 — 2026-09-30    (pairs with Index.html v0.5.204)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.135 Every client-callable function that can write now checks the caller.
- *          Apps Script exposes all globals to google.script.run, so 13 editor-only
- *          maintenance and trigger functions were reachable from any FF browser.
+ * v0.4.136 No server change — paired with Index.html v0.5.204, which adds target
+ *          labor hours to the plan email. The email is built client-side.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
