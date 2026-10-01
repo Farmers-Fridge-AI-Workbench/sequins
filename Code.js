@@ -1,9 +1,10 @@
 /**
- * Sequins ✨ — Code.js    v0.4.137 — 2026-09-30    (pairs with Index.html v0.5.205)
+ * Sequins ✨ — Code.js    v0.4.138 — 2026-10-01    (pairs with Index.html v0.5.206)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.137 No server change — paired with Index.html v0.5.205, which puts
- *          simulated / target labor hours in the Line Sequence KPI strip.
+ * v0.4.138 The week that crosses New Year is labelled by the right year. The
+ *          forecast tags only Mondays, so Week 1 read as Wk 1 · 2026 and sorted
+ *          above Wk 40. Week 53 from Finance resolves to the same seven days.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -882,6 +883,31 @@ function getLastModified() {
 // right by the standard, wrong for this source. The last day lands in January in
 // every straddling case, and any week that does not straddle New Year has all
 // seven days in one year anyway.
+// The Compiled Forecast numbers its weeks without a year, so the year has to be
+// read off the dates in the column. Taking it from whatever day column happens
+// to exist breaks on the one week a year that crosses New Year: the Summary tab
+// tags only MONDAY columns, so 'Week 1' resolved to its Monday, 2026-12-28, and
+// labelled itself Wk 1 · 2026 — sorting above Wk 40 instead of after Wk 52. Every
+// other week survived on luck, its Monday and its Sunday being in the same year.
+//
+// Rule: a LOW week number takes the year the week ENDS in, anything else the year
+// it STARTS in. Dec 28 2026 – Jan 3 2027 is one physical week with two possible
+// names: the forecast calls it Week 1 (-> Wk 1 · 2027) and Finance has been
+// calling it Week 53 (-> Wk 53 · 2026). Both sort after Wk 52 · 2026 and both
+// resolve to the same seven days, which is what actually matters downstream.
+// Cori confirmed the convention 2026-10-01.
+function forecastWeekYear_(wkNum, anyDate) {
+  const d = (anyDate instanceof Date) ? anyDate : new Date(anyDate);
+  if (!d || isNaN(d.getTime())) return new Date().getFullYear();
+  const dow = d.getDay();                                   // 0 = Sunday
+  const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - (dow === 0 ? 6 : dow - 1));
+  const sun = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + 6);
+  return (Number(wkNum) <= 4) ? sun.getFullYear() : mon.getFullYear();
+}
+function forecastWeekLabel_(wkNum, anyDate) {
+  return 'Wk ' + parseInt(wkNum, 10) + ' · ' + forecastWeekYear_(wkNum, anyDate);
+}
+
 function fetchForecastWeeks() {
   const ss    = SpreadsheetApp.openById(FORECAST_SHEET_ID);
   const sheet = ss.getSheetByName(FORECAST_TAB);
@@ -912,7 +938,7 @@ function fetchForecastWeeks() {
   const thisYear = new Date().getFullYear();
   const out = Object.keys(weeks).map(k => {
     const w = weeks[k];
-    const year = w.last ? w.last.getFullYear() : thisYear;
+    const year = w.last ? forecastWeekYear_(w.wkNum, w.last) : thisYear;
     if (w.days.length > 7) {
       Logger.log('fetchForecastWeeks: week ' + w.wkNum + ' has ' + w.days.length +
         ' day columns - the same week number may appear twice and they have been merged under ' + year);
@@ -995,11 +1021,10 @@ function fetchForecastWeekData(weekLabel) {
     if (cell) lastLabel = cell;
     const wkMatch = lastLabel.match(/Week\s+(\d+)/i);
     if (!wkMatch) continue;
-    const label = 'Wk ' + parseInt(wkMatch[1]) + ' · ' + new Date().getFullYear();
-    if (label !== weekLabel) continue;
     const dayName = String(allData[1][ci] || '').trim();
     if (!DAYS.includes(dayName)) continue;
     const dateVal = allData[2][ci];
+    if (forecastWeekLabel_(wkMatch[1], dateVal) !== weekLabel) continue;
     const dateStr = dateVal instanceof Date
       ? Utilities.formatDate(new Date(dateVal), tz, 'yyyy-MM-dd') : '';
     weekCols.push({ col: ci, day: dayName, date: dateStr });
@@ -1259,7 +1284,7 @@ function forecastDateMap_() {
     if (!(dateVal instanceof Date)) continue;
     const dateStr = Utilities.formatDate(new Date(dateVal), tz, 'yyyy-MM-dd');
     map[dateStr] = {
-      weekLabel: 'Wk ' + parseInt(wkMatch[1]) + ' \u00b7 ' + new Date().getFullYear(),
+      weekLabel: forecastWeekLabel_(wkMatch[1], dateVal),
       day: dayName
     };
   }
