@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.212 — 2026-10-01    (pairs with Code.js v0.4.144)
+  Sequins ✨ — Index.html    v0.5.213 — 2026-10-01    (pairs with Code.js v0.4.145)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.212 A SKU with no allergen data reports as its own thing, once, pointing at
-           the SKU Library — it was being reported as an allergen order break,
-           seven times a week, as though the holiday plan had caused it.
+  v0.5.213 A SKU with no allergen data still runs, so it no longer counts against
+           an option. It is said once above the table instead, which leaves the
+           per-option count showing only what actually blocks a plan.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4123,7 +4123,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.212';
+var APP_VERSION='v0.5.213';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -6559,6 +6559,15 @@ function hpRenderResult(){
     ak.length+" SKU"+(ak.length>1?"s are":" is")+" in those weeks but ordered nothing this week, and "+
     (ak.length>1?"are":"is")+" still being given volume here: "+
     escHtml(ak.slice(0,8).join(", "))+(ak.length>8?"\u2026":"")+". Check whether they came off the menu.</div>";
+  var noAll={};
+  HP_RESULT.forEach(function(R){R.days.forEach(function(r){
+    hpFlags_(r).forEach(function(f){if(f.kind==="no allergen data")noAll[f.sku]=true;});});});
+  var nak=Object.keys(noAll).sort();
+  if(nak.length)h+="<div class=\"sb-note\" style=\"margin-bottom:8px;color:var(--amber)\">"+
+    nak.length+" SKU"+(nak.length>1?"s have":" has")+" no allergen data in the SKU Library: "+
+    escHtml(nak.join(", "))+". "+(nak.length>1?"They":"It")+" still run"+(nak.length>1?"":"s")+
+    " \u2014 the engine gives "+(nak.length>1?"them":"it")+" the worst case, all six allergens, so "+
+    (nak.length>1?"they can":"it can")+" only go last on a line. Same whichever days you close, so it is not counted against any option below.</div>";
   h+="<div style=\"overflow-x:auto\"><table style=\"border-collapse:collapse;width:100%\">";
   h+="<tr><th style=\""+TH+";text-align:left\">Option</th>";
   DAYS_ORDER.forEach(function(d){
@@ -6572,9 +6581,12 @@ function hpRenderResult(){
     var delta=R.baseline?"<div style=\"font-size:9px;color:var(--muted)\">everything else is measured against this</div>"
       :"<div style=\"font-size:9px;color:var("+(d<0?"--green":"--red")+")\">"+
       (d<0?"saves ":"costs ")+sbMoney_(Math.abs(d))+(d<0?"":" more")+"</div>";
-    var nf=0;R.days.forEach(function(r){nf+=hpFlags_(r).length;});
+    var nf=0;R.days.forEach(function(r){
+      hpFlags_(r).forEach(function(f){if(f.kind!=='no allergen data')nf++;});
+    });
     var look=nf?"<div style=\"font-size:9px;color:var(--red);cursor:pointer\" onclick=\"hpToggleDetail("+idx+")\">"+
-      "<span id=\"hpArrow"+idx+"\">\u25b8</span> "+nf+" thing"+(nf>1?"s":"")+" to look at</div>":"";
+      "<span id=\"hpArrow"+idx+"\">\u25b8</span> "+nf+" thing"+(nf>1?"s":"")+" to look at</div>"
+      :"<div style=\"font-size:9px;color:var(--green)\">nothing in the way</div>";
     h+="<tr"+(R.baseline?" style=\"color:var(--teal)\"":"")+">"+
        "<td style=\""+TD+"\"><b>"+escHtml(R.name)+"</b>"+look+"</td>";
     DAYS_ORDER.forEach(function(x){h+=hpCell_(R,x,!!hol[x]);});
