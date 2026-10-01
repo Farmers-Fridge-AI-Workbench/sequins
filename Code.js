@@ -1,10 +1,10 @@
 /**
- * Sequins ✨ — Code.js    v0.4.138 — 2026-10-01    (pairs with Index.html v0.5.206)
+ * Sequins ✨ — Code.js    v0.4.139 — 2026-10-01    (pairs with Index.html v0.5.207)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.138 The week that crosses New Year is labelled by the right year. The
- *          forecast tags only Mondays, so Week 1 read as Wk 1 · 2026 and sorted
- *          above Wk 40. Week 53 from Finance resolves to the same seven days.
+ * v0.4.139 No server change — paired with Index.html v0.5.207, which adds the
+ *          Holiday Planning view. It runs entirely client-side off the engine
+ *          and stored demand, and writes nothing.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────

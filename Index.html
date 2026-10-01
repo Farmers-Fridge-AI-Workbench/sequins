@@ -1,9 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.206 — 2026-10-01    (pairs with Code.js v0.4.138)
+  Sequins ✨ — Index.html    v0.5.207 — 2026-10-01    (pairs with Code.js v0.4.139)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.206 No client change — paired with Code.js v0.4.138, which fixes the year
-           on the week that crosses New Year.
+  v0.5.207 Holiday Planning. Give the week total, it ranks which days are worth
+           closing — every option sequenced for real, priced on labor plus
+           holiday pay. Read-only; it produces an ask for Demand Planning.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -401,6 +402,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
       <div id="workbenchNav" style="display:none"><button class="nav-item" onclick="switchView('workbench',this)"><span class="icon">🔧</span>Workbench</button></div>
       <div id="sandboxNav" style="display:none"><button class="nav-item" onclick="switchView('sandbox',this)"><span class="icon">🧪</span>Sandbox</button></div>
       <div id="linePlannerNav" style="display:none"><button class="nav-item" onclick="switchView('lineplanner',this)"><span class="icon">📐</span>Line Planner</button></div>
+      <div id="holidayNav" style="display:none"><button class="nav-item" onclick="switchView('holiday',this)"><span class="icon">🎄</span>Holiday</button></div>
     </div>
     <div class="nav-spacer"></div>
     <div class="sidebar-section" id="myLineNav" style="display:none">
@@ -614,6 +616,15 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
     </div>
 
     <!-- LOAD DEMAND -->
+    <div class="view" id="view-holiday">
+      <div class="sb-banner">HOLIDAY PLANNING — nothing here publishes, and nothing here changes demand. It produces the daily split to send Demand Planning.</div>
+      <div class="page-header" style="margin-bottom:14px">
+        <div><div class="page-title">Holiday Planning</div><div class="page-sub">Give the week’s total and it works out which days are worth closing.</div></div>
+      </div>
+      <div class="card" id="hpControls"></div>
+      <div class="card" id="hpOut" style="margin-top:12px"></div>
+    </div>
+
     <div class="view" id="view-sandbox">
       <div class="sb-banner">SANDBOX — nothing here publishes. Nothing here changes SKU Library, Line Config or demand.</div>
       <div class="page-header" style="margin-bottom:14px">
@@ -989,7 +1000,7 @@ var DEFAULT_LINE_CONFIG=[
   {id:'NIGHT-1',label:'Night Shift 1',type:'night',hc:9,pool:'night',startTime:'00:20',caps:{capper:true,smallCup:false,usdaApproved:false,night:true},days:{Mon:true,Tue:true,Wed:true,Thu:true,Fri:false,Sat:false,Sun:true}},
   {id:'NIGHT-2',label:'Night Shift 2',type:'night',hc:9,pool:'night',startTime:'00:20',caps:{capper:false,smallCup:false,usdaApproved:false,night:true},days:{Mon:true,Tue:true,Wed:true,Thu:true,Fri:false,Sat:false,Sun:false}}
 ];
-var DEFAULT_RULES={greenBeltPackages:['4oz jar'],homeLines:{wrap:'LINE-3',sandwich:'LINE-2',salad:'LINE-1',bowl:'LINE-5',green:'LINE-0'},lineSeeds:{},sausageSesameRule:true,targetRuntimeMin:510,slotCap:14,nightShiftUnitCap:9500,changeoverMin:8.5,hourlyRate:24.39,offlineLaborHeadcount:5,processingStaticPerUnit:0.11,targetAssemblyPerUnit:0.33,planEmailRecipients:'',planEmailCc:'',breakMinRuntimeMin:240,break30OffsetMin:240,break30DurationMin:30,break15OffsetMin:360,break15DurationMin:15,break30Paid:false,break15Paid:true,otMultiplier:1.5};
+var DEFAULT_RULES={greenBeltPackages:['4oz jar'],homeLines:{wrap:'LINE-3',sandwich:'LINE-2',salad:'LINE-1',bowl:'LINE-5',green:'LINE-0'},lineSeeds:{},sausageSesameRule:true,targetRuntimeMin:510,slotCap:14,nightShiftUnitCap:9500,changeoverMin:8.5,hourlyRate:24.39,offlineLaborHeadcount:5,processingStaticPerUnit:0.11,targetAssemblyPerUnit:0.33,holidayDates:'2026-11-26,2026-12-25,2027-01-01',offPeakDates:'2026-01-01,2026-05-25,2026-07-04,2026-09-07,2026-10-12,2026-11-27,2026-12-24,2026-12-31',holidayPayMultiplier:2,holidayFullShiftUntil:'2026-12-31',planEmailRecipients:'',planEmailCc:'',breakMinRuntimeMin:240,break30OffsetMin:240,break30DurationMin:30,break15OffsetMin:360,break15DurationMin:15,break30Paid:false,break15Paid:true,otMultiplier:1.5};
 function getRules(){
   // v0.5.106: merge over DEFAULT_RULES instead of an all-or-nothing ||.
   // A stored rules object written before a key existed used to return
@@ -4103,7 +4114,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.206';
+var APP_VERSION='v0.5.207';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4135,6 +4146,12 @@ function renderRules(){
     note('Paid breaks count toward Labor Hrs, UPLH and $/Unit. Unpaid ones still sit in the schedule and still move the line\u2019s end time \u2014 they just aren\u2019t billed.'),
     field('Processing static ($/unit)','processingStaticPerUnit',ruleNum_(rules,'processingStaticPerUnit'),'num'),
     field('Target assembly ($/unit)','targetAssemblyPerUnit',ruleNum_(rules,'targetAssemblyPerUnit'),'num'),
+    field('Paid holidays (YYYY-MM-DD, comma separated)','holidayDates',rules.holidayDates===undefined?DEFAULT_RULES.holidayDates:rules.holidayDates,'text'),
+    field('Off-peak days (schools closed etc.)','offPeakDates',rules.offPeakDates===undefined?DEFAULT_RULES.offPeakDates:rules.offPeakDates,'text'),
+    field('Holiday pay multiplier','holidayPayMultiplier',ruleNum_(rules,'holidayPayMultiplier'),'num'),
+    field('Full-shift holiday rule ends','holidayFullShiftUntil',rules.holidayFullShiftUntil===undefined?DEFAULT_RULES.holidayFullShiftUntil:rules.holidayFullShiftUntil,'text'),
+    note('<b>Paid holidays</b> drive holiday pay and are what Holiday Planning offers to close. <b>Off-peak days</b> only keep a week out of the day-shape baseline — a week with the schools shut is no basis for a normal week, but it pays normally. A paid holiday counts as both.'),
+    note('Up to the <b>full-shift</b> date, working a paid holiday at all pays everyone a full shift at the multiplier. After it, the multiplier applies to hours actually worked.'),
     note('Target assembly $/unit drives <b>Target Labor Hours</b> in the plan email: (target $/unit × units) ÷ hourly rate. It is a target, not a measurement — nothing in the sequencer reads it.'),
     hdr('Assembly plan email'),
     note('Moved to <b>Users</b> — Recipients and CC are managed there. They are a distribution list, not a sequencing rule.'),
@@ -5940,12 +5957,505 @@ function runSandbox(){
 // server-side guards, so hiding a button is never the only thing standing
 // between a role and a view — switchView('workbench') from the console lands
 // back on Line Sequence like any other unentitled route.
+// ─── HOLIDAY PLANNING (v0.5.207) ─────────────────────────────────────────────
+// Demand Planning gives us a week total and we decide the day split and which
+// days go dark. That is the opposite of every other view here, which takes
+// demand as given — so this is its own thing rather than another Sandbox mode,
+// even though it borrows the Sandbox's engine plumbing wholesale.
+//
+// Nothing in here writes. It produces a recommendation to send Demand Planning.
+//
+// Named holidays are PAID holidays. Christmas Eve and New Year's Eve are not on
+// the list: they are early-finish days, which is a day state, not a holiday.
+var HP_WEEK=null,HP_RESULT=null,HP_BUSY=false;
+
+function hpRuleStr_(key,dflt){
+  var v=(getRules()||{})[key];
+  return (v===undefined||v===null||v==='')?dflt:String(v);
+}
+// TWO lists, because a day that pays double and a week that is unrepresentative
+// are different things (Cori, 2026-10-01: "even 10/12 will be a holiday — schools
+// are closed and stuff"). Columbus Day is not a paid holiday here, but a week
+// with the schools shut is no basis for a normal day shape.
+//
+//   holidayDates  — PAID holidays. Drive holiday pay and are closure candidates.
+//   offPeakDates  — days that make a week unrepresentative. Baseline only.
+//
+// Both are editable in Line Config. Seeded rather than hardcoded: the list is a
+// fact about the calendar and the contract, not about the code.
+function hpDateSet_(key){
+  var raw=hpRuleStr_(key,DEFAULT_RULES[key]),out={};
+  raw.split(',').forEach(function(s){
+    s=s.replace(/\s+/g,'');
+    if(/^\d{4}-\d{2}-\d{2}$/.test(s))out[s]=true;
+  });
+  return out;
+}
+function hpHolidays_(){return hpDateSet_('holidayDates');}
+// A paid holiday also makes its week unrepresentative, so it counts for both.
+function hpSkipShape_(){
+  var out=hpDateSet_('offPeakDates'),h=hpHolidays_();
+  Object.keys(h).forEach(function(k){out[k]=true;});
+  return out;
+}
+function hpIso_(d){
+  function p(n){return(n<10?'0':'')+n;}
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());
+}
+// Monday of a 'Wk N · YYYY' label, using the same convention Code.js labels by:
+// a low week number belongs to the year the week ENDS in. Anchoring on Jan 4
+// (always in week 1) keeps this agreeing with the forecast for both the Week 1
+// and the Week 53 naming of the New Year week.
+function hpMondayOf_(label){
+  var m=/Wk\s*(\d+)\s*·\s*(\d+)/.exec(label||'');
+  if(!m)return null;
+  var n=parseInt(m[1],10),yr=parseInt(m[2],10);
+  var jan4=new Date(yr,0,4),dow=jan4.getDay()||7;
+  var wk1=new Date(yr,0,4-(dow-1));
+  var mon=new Date(wk1.getFullYear(),wk1.getMonth(),wk1.getDate()+(n-1)*7);
+  return mon;
+}
+// Every stored demand day carries the date the Compiled Forecast gave it, so
+// that is what a week label means here — Sequins never re-derives it. This
+// matters precisely at New Year: the forecast calls Dec 28 – Jan 3 "Week 1",
+// while ISO calls that same span week 53 and starts week 1 on Jan 4. Computing
+// it would have put New Year's Day outside its own week. hpMondayOf_ survives
+// only as the fallback for a week with nothing stored yet.
+function hpWeekDates_(label){
+  var w=STATE.demand[label]||{},out=[],missing=false;
+  DAYS_ORDER.forEach(function(d){
+    var iso=String((w[d]&&w[d].date)||"");
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(iso)){missing=true;return;}
+    var q=iso.split("-");
+    out.push({day:d,date:new Date(+q[0],+q[1]-1,+q[2]),iso:iso});
+  });
+  if(!missing&&out.length===7)return out;
+  var mon=hpMondayOf_(label);if(!mon)return [];
+  out=[];
+  for(var i=0;i<7;i++){
+    var d=new Date(mon.getFullYear(),mon.getMonth(),mon.getDate()+i);
+    out.push({day:DAYS_ORDER[i],date:d,iso:hpIso_(d)});
+  }
+  return out;
+}
+function hpWeekHolidays_(label){
+  var hol=hpHolidays_(),out=[];
+  hpWeekDates_(label).forEach(function(x){if(hol[x.iso])out.push(x);});
+  return out;
+}
+function hpIsHolidayWeek_(label){return hpWeekHolidays_(label).length>0;}
+// Wider than hpIsHolidayWeek_: any week the baseline should not learn from.
+function hpUnrepresentativeWeek_(label){
+  var skip=hpSkipShape_(),bad=false;
+  hpWeekDates_(label).forEach(function(x){if(skip[x.iso])bad=true;});
+  return bad;
+}
+
+// ── DAY SHAPE ────────────────────────────────────────────────────────────────
+// Cori's rule: four weeks that aren't a holiday. A holiday week in the baseline
+// would flatten the very dip we are trying to plan around.
+//
+// Actuals are preferred over forecast because the forecast is modelled smooth —
+// it is Demand Planning's guess at the shape, and the whole point here is that
+// we tell THEM the shape. Falls back to forecast when there aren't four actual
+// weeks yet, and says which it used rather than quietly mixing them.
+function hpWeekTotal_(label){
+  var w=STATE.demand[label];if(!w)return null;
+  var tot=0,n=0;
+  DAYS_ORDER.forEach(function(d){
+    var dd=w[d];if(!dd||!dd.skus)return;
+    var s=0;Object.keys(dd.skus).forEach(function(k){s+=Number(dd.skus[k])||0;});
+    if(s>0){tot+=s;n++;}
+  });
+  return n===7?tot:null;
+}
+function hpWeekMode_(label){
+  var w=STATE.demand[label];if(!w)return '';
+  var modes={};
+  DAYS_ORDER.forEach(function(d){if(w[d])modes[w[d].mode||'forecast']=true;});
+  var k=Object.keys(modes);
+  return k.length===1?k[0]:(k.length?'mixed':'');
+}
+function hpWeekRank_(label){
+  var m=/Wk\s*(\d+)\s*·\s*(\d+)/.exec(label||'');
+  return m?(parseInt(m[2],10)*100+parseInt(m[1],10)):0;
+}
+function hpShapeWeeks_(target){
+  var rank=hpWeekRank_(target),all=[];
+  Object.keys(STATE.demand||{}).forEach(function(l){
+    if(hpWeekRank_(l)>=rank)return;                 // strictly before the planned week
+    if(hpUnrepresentativeWeek_(l))return;           // Cori's rule, plus school closures
+    if(hpWeekTotal_(l)===null)return;               // all seven days or it is not a week
+    all.push(l);
+  });
+  all.sort(function(a,b){return hpWeekRank_(a)-hpWeekRank_(b);});
+  var act=all.filter(function(l){return hpWeekMode_(l)==='actual';});
+  if(act.length>=4)return{weeks:act.slice(-4),basis:'actual'};
+  if(all.length>=4) return{weeks:all.slice(-4),basis:act.length?'mixed':'forecast'};
+  return{weeks:all,basis:all.length?(act.length?'mixed':'forecast'):'none'};
+}
+// Share of the week per day, pulled toward flat by `even` (0 = as it runs,
+// 1 = perfectly flat). Pick Tock's lever, same idea.
+function hpDayShape_(target,even){
+  var pick=hpShapeWeeks_(target),sum={},tot=0,out={shares:{},weeks:pick.weeks,basis:pick.basis};
+  if(!pick.weeks.length){
+    DAYS_ORDER.forEach(function(d){out.shares[d]=1/7;});
+    out.basis='none';
+    return out;
+  }
+  DAYS_ORDER.forEach(function(d){
+    var s=0;
+    pick.weeks.forEach(function(l){
+      var dd=STATE.demand[l][d];
+      if(dd&&dd.skus)Object.keys(dd.skus).forEach(function(k){s+=Number(dd.skus[k])||0;});
+    });
+    sum[d]=s/pick.weeks.length;tot+=sum[d];
+  });
+  var e=Math.max(0,Math.min(1,Number(even)||0));
+  DAYS_ORDER.forEach(function(d){
+    var p=tot>0?sum[d]/tot:1/7;
+    out.shares[d]=p+((1/7)-p)*e;
+  });
+  return out;
+}
+// Spread a week total over the open days, each keeping its share of the shape.
+// A closed day's volume lands on the days that stay open in proportion to how
+// busy they already are, which falls straight out of renormalising.
+function hpDistribute_(total,shares,isOpen){
+  var open=DAYS_ORDER.filter(function(d){return isOpen(d);}),sum=0,out={};
+  open.forEach(function(d){sum+=shares[d]||0;});
+  DAYS_ORDER.forEach(function(d){out[d]=0;});
+  if(!open.length||sum<=0)return out;
+  open.forEach(function(d){out[d]=total*(shares[d]||0)/sum;});
+  return out;
+}
+
+// ── ONE DAY THROUGH THE REAL ENGINE ──────────────────────────────────────────
+// Scale the day's SKU mix to the target units and sequence it for real, rather
+// than asserting that N units take M hours. Everything the floor would hit —
+// slot cap, capabilities, allergen chain, USDA pairing, breaks — is only
+// visible if the engine actually runs.
+function hpScaleSkus_(label,day,targetUnits){
+  var dd=(STATE.demand[label]||{})[day];
+  if(!dd||!dd.skus)return null;
+  var base=0;Object.keys(dd.skus).forEach(function(k){base+=Number(dd.skus[k])||0;});
+  if(!(base>0))return null;
+  var f=targetUnits/base,out={};
+  Object.keys(dd.skus).forEach(function(k){out[k]=Math.round((Number(dd.skus[k])||0)*f);});
+  return out;
+}
+// A late start shifts every line's start time; an early finish is a curfew the
+// engine already knows how to solve for.
+function hpLineConfig_(lateStartMin){
+  var base=STATE.lineConfig||DEFAULT_LINE_CONFIG;
+  if(!(lateStartMin>0))return base;
+  return base.map(function(l){
+    var c={};for(var k in l)if(Object.prototype.hasOwnProperty.call(l,k))c[k]=l[k];
+    var cur=curfewToMin_(l.startTime||'06:00')||0;
+    c.startTime=minToTimeStr_(Math.max(cur,lateStartMin));
+    return c;
+  });
+}
+function hpRunDay_(label,day,units,state){
+  var skus=hpScaleSkus_(label,day,units);
+  if(!skus)return{day:day,ok:false,why:'no demand stored for this day'};
+  var dem={};dem[label]={};dem[label][day]={skus:skus};
+  var res=runSequencer({
+    week:label,day:day,demand:dem,
+    lineConfig:hpLineConfig_(state.lateStart),
+    overrides:{},                       // a holiday plan is not somebody's pinned move
+    excludedLines:[],
+    finishBy:state.earlyFinish||''
+  });
+  if(!res)return{day:day,ok:false,why:'engine returned nothing'};
+  var sum=sbSummarise(res);
+  var lab=planLaborHours_(res.lineState,res.lines);
+  var ot=sbOvertime_(sum,getRules());
+  var chain=sbChainCheck(res);
+  var cap=curfewToMin_(state.earlyFinish||'');
+  var late=[];
+  Object.keys(sum.byLine).forEach(function(id){
+    var x=sum.byLine[id];
+    if(cap!==null&&x.end>cap)late.push(x.label||id);
+  });
+  return{day:day,ok:true,units:units,res:res,sum:sum,
+    end:sum.latestEnd,crew:planHeadcount_(res.lineState,res.lines),
+    labor:lab.sim,target:lab.target,
+    unplaced:sum.unplaced.length,chain:chain.length,late:late,ot:ot};
+}
+
+// ── COST ─────────────────────────────────────────────────────────────────────
+// Holiday pay is the whole reason the options differ. Two regimes:
+//
+//  * Through 2026 a shift that touches the holiday AT ALL is paid as a full
+//    shift at the holiday rate. Working an hour costs the same as working all
+//    day, which is exactly why being dark on the holiday wins.
+//  * From 2027 that rule lapses (Cori, 2026-10-01) and it is the multiplier on
+//    hours actually worked. 1/1/2027 is the first holiday on the far side.
+//
+// A day line that runs past midnight has touched the next day, so a shift
+// ending after 24:00 on the eve of a holiday is a holiday shift too.
+function hpFullShiftApplies_(iso){
+  var until=hpRuleStr_('holidayFullShiftUntil',DEFAULT_RULES.holidayFullShiftUntil);
+  return !!(iso&&until&&iso<=until);
+}
+function hpHolidayCost_(dayRun,iso,touched){
+  var rules=getRules(),rate=ruleNum_(rules,'hourlyRate'),mult=ruleNum_(rules,'holidayPayMultiplier');
+  if(!dayRun||!dayRun.ok)return{cost:0,why:''};
+  if(hpFullShiftApplies_(iso)){
+    var shift=(ruleNum_(rules,'targetRuntimeMin')||510)/60;
+    var heads=(dayRun.crew&&dayRun.crew.total)||0;
+    return{cost:heads*shift*rate*mult,
+      why:heads+' people × a full '+shift.toFixed(1)+'h shift at '+mult+'×'+
+          (touched?' — the shift before runs past midnight into it':'')};
+  }
+  return{cost:dayRun.labor*rate*(mult-1),
+    why:'hours worked at '+mult+'× (the full-shift rule has lapsed by then)'};
+}
+
+// ── OPTIONS ──────────────────────────────────────────────────────────────────
+// A day state is: open, closed, or open with an early finish and/or late start.
+function hpState_(o){
+  return{open:o.open!==false,earlyFinish:o.earlyFinish||'',lateStart:o.lateStart||0};
+}
+// Her three standing preferences, by the holiday the week contains.
+function hpPreference_(label){
+  var hols=hpWeekHolidays_(label);if(!hols.length)return null;
+  var iso=hols[0].iso,dayOf=hols[0].day,i=DAYS_ORDER.indexOf(dayOf);
+  var eve=i>0?DAYS_ORDER[i-1]:null,st={};
+  if(/-11-/.test(iso)){                       // Thanksgiving: dark on the day
+    st[dayOf]={open:false};
+    return{name:'the Cori Special — dark Thanksgiving',states:st};
+  }
+  if(/-12-25$/.test(iso)){                    // Christmas: early finish the eve, dark the day
+    st[dayOf]={open:false};
+    if(eve)st[eve]={open:true,earlyFinish:'22:00'};
+    return{name:'the Cori Special — eve out by 22:00, dark Christmas',states:st};
+  }
+  if(/-01-01$/.test(iso)){                    // New Year: half day the eve, late start the day
+    st[dayOf]={open:true,lateStart:curfewToMin_('12:00')};
+    if(eve)st[eve]={open:true,earlyFinish:'14:00'};
+    return{name:'the Cori Special — half day NYE, late start New Year’s Day',states:st};
+  }
+  return null;
+}
+function hpBuildOptions_(label){
+  var hols=hpWeekHolidays_(label);
+  if(!hols.length)return [];
+  var dayOf=hols[0].day,i=DAYS_ORDER.indexOf(dayOf);
+  var before=i>0?DAYS_ORDER[i-1]:null,after=i<6?DAYS_ORDER[i+1]:null;
+  var opts=[{name:'BASELINE — run all 7 days',states:{},baseline:true}];
+  var a={};a[dayOf]={open:false};
+  opts.push({name:'close '+dayOf,states:a});
+  var pref=hpPreference_(label);
+  if(pref)opts.push(pref);
+  if(before){var b={};b[dayOf]={open:false};b[before]={open:false};opts.push({name:'close '+dayOf+' + '+before,states:b});}
+  if(after){var c={};c[dayOf]={open:false};c[after]={open:false};opts.push({name:'close '+dayOf+' + '+after,states:c});}
+  return opts;
+}
+function hpRunOption_(label,opt,total,even){
+  var shape=hpDayShape_(label,even);
+  var st={};
+  DAYS_ORDER.forEach(function(d){st[d]=hpState_(opt.states[d]||{});});
+  var split=hpDistribute_(total,shape.shares,function(d){return st[d].open;});
+  var dates={};hpWeekDates_(label).forEach(function(x){dates[x.day]=x.iso;});
+  var hol=hpHolidays_();
+  var rules=getRules(),rate=ruleNum_(rules,'hourlyRate');
+  var days=[],labor=0,holiday=0,ot=0,lost=0,risks=0;
+  DAYS_ORDER.forEach(function(d){
+    if(!st[d].open){
+      // Nobody is offered work on a dark day. Crewing follows the line config,
+      // which is what the day WOULD have run.
+      var heads=0;
+      (STATE.lineConfig||DEFAULT_LINE_CONFIG).forEach(function(l){
+        if(l.days&&l.days[DAY_SHORT[d]])heads+=(Number(l.hc)||0)+(Number(l.lineLead)||0);
+      });
+      lost+=heads;
+      days.push({day:d,closed:true,heads:heads});
+      return;
+    }
+    var r=hpRunDay_(label,d,Math.round(split[d]),st[d]);
+    days.push(r);
+    if(!r.ok)return;
+    labor+=r.labor*rate;
+    ot+=r.ot.cost;
+    risks+=r.unplaced+r.chain+r.late.length;
+    if(hol[dates[d]]){
+      var touched=false;
+      var hc=hpHolidayCost_(r,dates[d],touched);
+      holiday+=hc.cost;r.holidayWhy=hc.why;
+    }
+  });
+  // A shift the night before that runs past midnight has touched the holiday.
+  DAYS_ORDER.forEach(function(d,i){
+    var nxt=DAYS_ORDER[i+1];if(!nxt||!hol[dates[nxt]])return;
+    var r=days[i];if(!r||r.closed||!r.ok||!(r.end>1440))return;
+    if(st[nxt].open)return;                 // already charged as an open holiday
+    var hc=hpHolidayCost_(r,dates[nxt],true);
+    holiday+=hc.cost;r.crossesInto=nxt;r.holidayWhy=hc.why;
+  });
+  return{name:opt.name,baseline:!!opt.baseline,days:days,split:split,shape:shape,
+    labor:labor,holiday:holiday,ot:ot,total:labor+holiday+ot,lost:lost,risks:risks};
+}
+
+
+// ── VIEW ─────────────────────────────────────────────────────────────────────
+// Weeks we can actually plan: ones that are loaded AND contain a paid holiday.
+function hpPlannableWeeks_(){
+  var out=[];
+  Object.keys(STATE.demand||{}).forEach(function(l){if(hpIsHolidayWeek_(l))out.push(l);});
+  return out.sort(function(a,b){return hpWeekRank_(a)-hpWeekRank_(b);});
+}
+function hpWeekTitle_(label){
+  var h=hpWeekHolidays_(label);
+  if(!h.length)return label;
+  return h.map(function(x){return hpHolidayName_(x.iso);}).join(' + ')+'  —  '+label;
+}
+// Names are for reading, not for logic. Anything unrecognised still plans fine.
+function hpHolidayName_(iso){
+  if(/-11-2[2-8]$/.test(iso))return 'Thanksgiving';
+  if(/-12-25$/.test(iso))return 'Christmas';
+  if(/-01-01$/.test(iso))return 'New Year’s Day';
+  if(/-07-04$/.test(iso))return 'Independence Day';
+  if(/-05-2[5-9]$|-05-3[01]$/.test(iso))return 'Memorial Day';
+  if(/-09-0[1-7]$/.test(iso))return 'Labor Day';
+  return iso;
+}
+function hpRenderControls(){
+  var el=document.getElementById('hpControls');if(!el)return;
+  var weeks=hpPlannableWeeks_();
+  if(!weeks.length){
+    el.innerHTML='<div class="status status-warn">No loaded week contains a paid holiday. '+
+      'Load the week in <b>Load Demand</b> first — and check the holiday list in Line Config if you expected one here.</div>';
+    document.getElementById('hpOut').innerHTML='';
+    return;
+  }
+  if(!HP_WEEK||weeks.indexOf(HP_WEEK)===-1)HP_WEEK=weeks[0];
+  var cur=hpWeekTotal_(HP_WEEK),def=cur?Math.round(cur):200000;
+  var opts=weeks.map(function(l){
+    return '<option value="'+escHtml(l)+'"'+(l===HP_WEEK?' selected':'')+'>'+escHtml(hpWeekTitle_(l))+'</option>';
+  }).join('');
+  el.innerHTML=
+    '<div style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap">'+
+      '<div><div class="sb-label">Which holiday</div>'+
+        '<select class="sb-input" id="hpWeek" style="min-width:260px" onchange="hpWeekChanged(this.value)">'+opts+'</select></div>'+
+      '<div><div class="sb-label">Week total units</div>'+
+        '<input class="sb-input" id="hpTotal" type="number" min="0" step="1000" value="'+def+'" style="width:130px"></div>'+
+      '<div><div class="sb-label">Even out the week</div>'+
+        '<select class="sb-input" id="hpEven" style="width:150px">'+
+          '<option value="0">as it runs</option>'+
+          '<option value="0.5">somewhat even</option>'+
+          '<option value="0.75" selected>mostly even</option>'+
+          '<option value="1">perfectly flat</option>'+
+        '</select></div>'+
+      '<button class="btn btn-teal btn-sm" id="hpGo" onclick="hpRun()">Show options</button>'+
+    '</div>'+
+    '<div class="sb-note" style="margin-top:8px">Demand Planning gives the week total; this works out which days are worth closing. '+
+      'A closed day’s volume spreads across the days that stay open, in proportion to how busy they already are. '+
+      'It schedules nothing — this is the daily split to send back to them.</div>';
+}
+function hpWeekChanged(v){HP_WEEK=v;HP_RESULT=null;document.getElementById('hpOut').innerHTML='';hpRenderControls();}
+
+function hpRun(){
+  if(HP_BUSY)return;
+  var total=parseFloat((document.getElementById('hpTotal')||{}).value);
+  var even=parseFloat((document.getElementById('hpEven')||{}).value);
+  var out=document.getElementById('hpOut');
+  if(!(total>0)){out.innerHTML='<div class="status status-warn">Enter the week total Demand Planning gave you.</div>';return;}
+  HP_BUSY=true;
+  var btn=document.getElementById('hpGo');if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Running';}
+  out.innerHTML='<div class="status status-info"><span class="spinner"></span>Sequencing every option, day by day…</div>';
+  // Yield once so the spinner paints — each option runs the whole engine seven
+  // times and that is not instant on a full week.
+  setTimeout(function(){
+    try{
+      var opts=hpBuildOptions_(HP_WEEK);
+      HP_RESULT=opts.map(function(o){return hpRunOption_(HP_WEEK,o,total,even);});
+      hpRenderResult();
+    }catch(e){
+      out.innerHTML='<div class="status status-err">'+escHtml(e.message||String(e))+'</div>';
+    }
+    HP_BUSY=false;
+    if(btn){btn.disabled=false;btn.textContent='Show options';}
+  },30);
+}
+function hpCell_(R,d,isHol){
+  var i=DAYS_ORDER.indexOf(d),r=R.days[i];
+  var TD='padding:6px 8px;border:1px solid var(--border);vertical-align:top;font-size:11px';
+  if(!r)return '<td style="'+TD+'">—</td>';
+  if(r.closed)
+    return '<td style="'+TD+';text-align:center;color:var(--muted)">closed'+
+      (isHol?'<div style="font-size:9px;color:var(--green)">no holiday pay</div>':'')+'</td>';
+  if(!r.ok)
+    return '<td style="'+TD+';color:var(--red)">'+escHtml(r.why||'did not run')+'</td>';
+  var risk=[];
+  if(r.unplaced)risk.push(r.unplaced+' unplaced');
+  if(r.late.length)risk.push(r.late.length+' past the finish');
+  if(r.chain)risk.push(r.chain+' chain break'+(r.chain>1?'s':''));
+  return '<td style="'+TD+';text-align:right">'+
+    '<div style="font-family:var(--mono);font-size:13px">'+fmtUnits(Math.round(r.units))+'</div>'+
+    '<div style="font-size:9px;color:var(--muted)">'+fmtClock(r.end)+' · '+((r.crew&&r.crew.total)||0)+' people</div>'+
+    (risk.length?'<div style="font-size:9px;color:var(--red)">'+escHtml(risk.join(' · '))+'</div>':'')+
+    (r.crossesInto?'<div style="font-size:9px;color:var(--amber)">runs into '+escHtml(r.crossesInto)+'</div>':'')+
+    '</td>';
+}
+function hpRenderResult(){
+  var out=document.getElementById('hpOut');if(!out||!HP_RESULT)return;
+  var base=HP_RESULT[0],shape=base.shape;
+  var hol={};hpWeekHolidays_(HP_WEEK).forEach(function(h){hol[h.day]=h.iso;});
+  var ranked=HP_RESULT.slice().sort(function(a,b){return a.total-b.total;});
+  var TH='padding:6px 8px;border:1px solid var(--border);background:var(--surface2);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)';
+  var TD='padding:6px 8px;border:1px solid var(--border);font-size:11px';
+  var h='';
+  h+='<div class="sb-note" style="margin-bottom:8px">Day shape: average of '+shape.weeks.length+' week'+
+     (shape.weeks.length===1?'':'s')+' — '+escHtml(shape.weeks.join(', '))+
+     ' — '+(shape.basis==='actual'?'what actually ran':shape.basis==='none'?'nothing to average, assuming a flat week':'forecast, no actuals that far back yet')+
+     ', holiday weeks skipped.</div>';
+  h+='<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%">';
+  h+='<tr><th style="'+TH+';text-align:left">Option</th>';
+  DAYS_ORDER.forEach(function(d){
+    h+='<th style="'+TH+';text-align:right">'+DAY_SHORT[d]+
+       (hol[d]?'<div style="font-size:9px;color:var(--amber);text-transform:none">'+escHtml(hpHolidayName_(hol[d]))+'</div>':'')+'</th>';
+  });
+  h+='<th style="'+TH+';text-align:right">Shifts lost</th><th style="'+TH+';text-align:right">Labor</th>'+
+     '<th style="'+TH+';text-align:right">Holiday pay</th><th style="'+TH+';text-align:right">Total</th></tr>';
+  ranked.forEach(function(R){
+    var d=R.total-base.total;
+    var delta=R.baseline?'':'<div style="font-size:9px;color:var('+(d<0?'--green':'--red')+')">'+
+      (d<0?'saves ':'costs ')+sbMoney_(Math.abs(d))+(d<0?'':' more')+'</div>';
+    h+='<tr'+(R.baseline?' style="color:var(--teal)"':'')+'>'+
+       '<td style="'+TD+'"><b>'+escHtml(R.name)+'</b>'+
+       (R.risks?'<div style="font-size:9px;color:var(--red)">'+R.risks+' thing'+(R.risks>1?'s':'')+' to look at</div>':'')+'</td>';
+    DAYS_ORDER.forEach(function(x){h+=hpCell_(R,x,!!hol[x]);});
+    h+='<td style="'+TD+';text-align:right">'+(R.lost?'<span style="color:var(--amber)">'+R.lost+'</span>':'—')+'</td>'+
+       '<td style="'+TD+';text-align:right">'+sbMoney_(R.labor)+'</td>'+
+       '<td style="'+TD+';text-align:right">'+(R.holiday?'<span style="color:var(--amber)">'+sbMoney_(R.holiday)+'</span>':'—')+'</td>'+
+       '<td style="'+TD+';text-align:right"><b>'+sbMoney_(R.total)+'</b>'+delta+'</td></tr>';
+  });
+  h+='</table></div>';
+  // The reasons, stated once rather than per cell.
+  var notes=[];
+  hpWeekHolidays_(HP_WEEK).forEach(function(x){
+    notes.push(hpHolidayName_(x.iso)+' ('+x.iso+'): '+
+      (hpFullShiftApplies_(x.iso)
+        ? 'working it at all pays everyone a full shift at '+ruleNum_(getRules(),'holidayPayMultiplier')+'× — an hour costs the same as the whole day, including a shift the night before that runs past midnight.'
+        : 'the full-shift rule has lapsed by then, so it is '+ruleNum_(getRules(),'holidayPayMultiplier')+'× on the hours actually worked.'));
+  });
+  notes.push('Shifts lost is how many people are not offered work on a closed day. If a closed day is not made up elsewhere in the week, that is pay they do not get.');
+  notes.push('Ranked by labor plus holiday pay. Every option still builds the whole week total — closing a day moves its volume, it does not delete it.');
+  notes.push('Each day here is sequenced for real, so the flags are the engine’s: unplaced SKUs, lines past the finish time, broken allergen chains.');
+  h+='<div class="sb-note" style="margin-top:10px">'+notes.map(function(t){return '<div style="margin-bottom:3px">'+escHtml(t)+'</div>';}).join('')+'</div>';
+  out.innerHTML=h;
+}
+function renderHolidayPlanner(){hpRenderControls();if(HP_RESULT)hpRenderResult();}
+
 function viewAllowed_(name){
   var u=CURRENT_USER||{};
   switch(name){
     case 'workbench': return !!(u.isAdmin||u.isPlanner||u.canEditRules);
     case 'sandbox':   return !!(u.isAdmin||u.canEditRules);
     case 'lineplanner': return !!(u.isAdmin||u.canEditRules);
+    case 'holiday':   return !!(u.isAdmin||u.canEditRules);
     case 'myline':    return !!(u.isAdmin||u.isFloorViewer);
     case 'demand': case 'skus': case 'lines': case 'users':
                       return !!(u.isAdmin||u.isPlanner||u.canEditRules);
@@ -5969,6 +6479,7 @@ function switchView(name,btn){
   if(name==='myline')initMyLine();
   if(name==='sandbox')loadSandboxes();
   if(name==='lineplanner')renderLinePlanner();
+  if(name==='holiday')renderHolidayPlanner();
 }
 
 function renderDayStrip(containerId){
@@ -7472,6 +7983,7 @@ function setPreviewRole(role){
   document.getElementById('adminNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.isPlanner||CURRENT_USER.canEditRules)?'':'none';
   document.getElementById('workbenchNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.isPlanner||CURRENT_USER.canEditRules)?'':'none';
   document.getElementById('sandboxNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.canEditRules)?'':'none';
+  document.getElementById('holidayNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.canEditRules)?'':'none';
   document.getElementById('linePlannerNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.canEditRules)?'':'none';
   document.getElementById('linePlannerNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.canEditRules)?'':'none';
   document.getElementById('myLineNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.isFloorViewer)?'':'none';
@@ -7491,6 +8003,7 @@ function exitPreviewRole(){
   document.getElementById('adminNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.isPlanner||CURRENT_USER.canEditRules)?'':'none';
   document.getElementById('workbenchNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.isPlanner||CURRENT_USER.canEditRules)?'':'none';
   document.getElementById('sandboxNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.canEditRules)?'':'none';
+  document.getElementById('holidayNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.canEditRules)?'':'none';
   document.getElementById('myLineNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.isFloorViewer)?'':'none';
   var sel=document.getElementById('previewRoleSel');if(sel)sel.value='';
   renderRulesAccess();
@@ -7514,7 +8027,8 @@ window.onload=function(){
     document.getElementById('userDisplay').textContent=user.name;
     if(user.isAdmin||user.isPlanner||user.canEditRules)document.getElementById('adminNav').style.display='';
     if(user.isAdmin||user.isPlanner||user.canEditRules)document.getElementById('workbenchNav').style.display='';
-    if(user.isAdmin||user.canEditRules)document.getElementById('sandboxNav').style.display='';
+    if(user.isAdmin||user.canEditRules)document.getElementById('sandboxNav').style.display='';
+    if(user.isAdmin||user.canEditRules)document.getElementById('holidayNav').style.display='';
     if(user.isAdmin||user.canEditRules)document.getElementById('linePlannerNav').style.display='';
     // v0.5.181: the throughput-data flag, once per load, admins only.
     checkUpmHealth();
