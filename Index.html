@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.213 — 2026-10-01    (pairs with Code.js v0.4.145)
+  Sequins ✨ — Index.html    v0.5.214 — 2026-10-01    (pairs with Code.js v0.4.146)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.213 A SKU with no allergen data still runs, so it no longer counts against
-           an option. It is said once above the table instead, which leaves the
-           per-option count showing only what actually blocks a plan.
+  v0.5.214 'Locally authored' can be turned ON. It only rendered when already set,
+           so hand-entered allergens could not be protected and the nightly sync
+           wiped them. Rows with no allergen data say so.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -3837,9 +3837,16 @@ function skuMissing_(m){
 }
 function stagingCell_(key,m){
   if(!m.pending){
-    // Non-pending rows: only say something when it's worth saying.
-    if(m.locallyAuthored)return '<span style="font-family:var(--mono);font-size:10px;color:var(--amber)" title="Entered in Sequins, not yet in Menu Library. Exempt from the daily allergen sync until Menu Library catches up — untick to hand ownership back.">locally authored <input type="checkbox" checked style="accent-color:var(--amber)" onchange="updateSkuField(\''+key+'\',\'locallyAuthored\',this.checked)"></span>';
-    return '<span style="color:var(--muted);font-size:11px">\u2014</span>';
+    var on=!!m.locallyAuthored;
+    var tip=on
+      ? 'Held in Sequins and exempt from the daily allergen sync. Untick to hand ownership back to Menu Library.'
+      : 'Tick to hold this row&#39;s allergens in Sequins. Without it the daily sync overwrites them with whatever Menu Library says — including NO ALLERGEN DATA.';
+    var warn=(!on&&isAllergenUnknown_(m.allergens))
+      ? '<div style="font-size:9px;color:var(--amber)">tick this before typing allergens, or the sync wipes them tonight</div>'
+      : '';
+    return '<span style="font-family:var(--mono);font-size:10px;color:var('+(on?'--amber':'--muted')+')" title="'+tip+'">'+
+      'locally authored <input type="checkbox" '+(on?'checked ':'')+'style="accent-color:var(--amber)" '+
+      'onchange="updateSkuField(\''+key+'\',\'locallyAuthored\',this.checked)"></span>'+warn;
   }
   var mm=skuMissing_(Object.assign({__key:key},m));
   if(mm.length){
@@ -4123,7 +4130,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.213';
+var APP_VERSION='v0.5.214';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;

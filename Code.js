@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.145 — 2026-10-01    (pairs with Index.html v0.5.213)
+ * Sequins ✨ — Code.js    v0.4.146 — 2026-10-01    (pairs with Index.html v0.5.214)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.145 No server change — paired with Index.html v0.5.213, which stops a
- *          missing-allergen SKU counting as a blocked plan.
+ * v0.4.146 No server change — paired with Index.html v0.5.214, which lets someone
+ *          protect a hand-entered allergen set from the nightly sync.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
