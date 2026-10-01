@@ -1,10 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.139 — 2026-10-01    (pairs with Index.html v0.5.207)
+ * Sequins ✨ — Code.js    v0.4.140 — 2026-10-01    (pairs with Index.html v0.5.208)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.139 No server change — paired with Index.html v0.5.207, which adds the
- *          Holiday Planning view. It runs entirely client-side off the engine
- *          and stored demand, and writes nothing.
+ * v0.4.140 No server change — paired with Index.html v0.5.208, which takes the
+ *          holiday SKU mix from the clean baseline weeks too.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────

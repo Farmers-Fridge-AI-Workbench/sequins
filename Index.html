@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.207 — 2026-10-01    (pairs with Code.js v0.4.139)
+  Sequins ✨ — Index.html    v0.5.208 — 2026-10-01    (pairs with Code.js v0.4.140)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.207 Holiday Planning. Give the week total, it ranks which days are worth
-           closing — every option sequenced for real, priced on labor plus
-           holiday pay. Read-only; it produces an ask for Demand Planning.
+  v0.5.208 Holiday Planning takes the SKU mix from the same four clean weeks as
+           the day split, instead of from the holiday week’s own forecast — which
+           was the distortion it is meant to plan around.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4114,7 +4114,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.207';
+var APP_VERSION='v0.5.208';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -6135,13 +6135,58 @@ function hpDistribute_(total,shares,isOpen){
 // than asserting that N units take M hours. Everything the floor would hit —
 // slot cap, capabilities, allergen chain, USDA pairing, breaks — is only
 // visible if the engine actually runs.
+// The same four clean weeks that set the day split also set the SKU mix
+// (Cori, 2026-10-01: "should not be included in how we distribute the demand
+// amongst skus or days"). Taking the mix from the holiday week’s own forecast
+// would be learning the distortion we are trying to plan around — Columbus Day
+// is the plain case: nobody closes, nobody acknowledges it, the orders are just
+// smaller, and that shape should not propagate.
+//
+// Per WEEKDAY, not per week: a Saturday mix is not a Monday mix.
+//
+// A SKU the baseline has never seen — new, or seasonal — would otherwise be
+// silently dropped, so it is carried at its share in the week’s own forecast and
+// everything renormalised. hpMixNote_ reports how many, because a holiday week
+// quietly losing a SKU is exactly the sort of thing nobody notices until the
+// floor asks where it went.
+function hpSkuMix_(label,day){
+  var weeks=hpShapeWeeks_(label).weeks,sum={},tot=0;
+  weeks.forEach(function(l){
+    var dd=(STATE.demand[l]||{})[day];if(!dd||!dd.skus)return;
+    Object.keys(dd.skus).forEach(function(k){
+      var q=Number(dd.skus[k])||0;if(q<=0)return;
+      sum[k]=(sum[k]||0)+q;tot+=q;
+    });
+  });
+  var own=((STATE.demand[label]||{})[day]||{}).skus||{},ownTot=0,novel=[];
+  Object.keys(own).forEach(function(k){ownTot+=Number(own[k])||0;});
+  if(tot<=0){                                  // no baseline for this weekday at all
+    if(!(ownTot>0))return null;
+    var o={};Object.keys(own).forEach(function(k){o[k]=(Number(own[k])||0)/ownTot;});
+    return{shares:o,novel:[],absent:[],basis:'week'};
+  }
+  var shares={};Object.keys(sum).forEach(function(k){shares[k]=sum[k]/tot;});
+  var absent=[];
+  if(ownTot>0)Object.keys(shares).forEach(function(k){
+    if(!(Number(own[k])>0))absent.push(k);
+  });
+  if(ownTot>0)Object.keys(own).forEach(function(k){
+    if(shares[k]!==undefined)return;
+    var q=Number(own[k])||0;if(q<=0)return;
+    shares[k]=q/ownTot;novel.push(k);
+  });
+  var t2=0;Object.keys(shares).forEach(function(k){t2+=shares[k];});
+  if(t2>0)Object.keys(shares).forEach(function(k){shares[k]=shares[k]/t2;});
+  return{shares:shares,novel:novel,absent:absent,basis:'baseline'};
+}
 function hpScaleSkus_(label,day,targetUnits){
-  var dd=(STATE.demand[label]||{})[day];
-  if(!dd||!dd.skus)return null;
-  var base=0;Object.keys(dd.skus).forEach(function(k){base+=Number(dd.skus[k])||0;});
-  if(!(base>0))return null;
-  var f=targetUnits/base,out={};
-  Object.keys(dd.skus).forEach(function(k){out[k]=Math.round((Number(dd.skus[k])||0)*f);});
+  var mix=hpSkuMix_(label,day);
+  if(!mix)return null;
+  var out={};
+  Object.keys(mix.shares).forEach(function(k){
+    var q=Math.round(targetUnits*mix.shares[k]);
+    if(q>0)out[k]=q;
+  });
   return out;
 }
 // A late start shifts every line's start time; an early finish is a curfew the
@@ -6157,7 +6202,8 @@ function hpLineConfig_(lateStartMin){
   });
 }
 function hpRunDay_(label,day,units,state){
-  var skus=hpScaleSkus_(label,day,units);
+  var mix=hpSkuMix_(label,day);
+  var skus=mix?hpScaleSkus_(label,day,units):null;
   if(!skus)return{day:day,ok:false,why:'no demand stored for this day'};
   var dem={};dem[label]={};dem[label][day]={skus:skus};
   var res=runSequencer({
@@ -6181,7 +6227,8 @@ function hpRunDay_(label,day,units,state){
   return{day:day,ok:true,units:units,res:res,sum:sum,
     end:sum.latestEnd,crew:planHeadcount_(res.lineState,res.lines),
     labor:lab.sim,target:lab.target,
-    unplaced:sum.unplaced.length,chain:chain.length,late:late,ot:ot};
+    unplaced:sum.unplaced.length,chain:chain.length,late:late,ot:ot,
+    mixBasis:mix.basis,novel:mix.novel,absent:mix.absent};
 }
 
 // ── COST ─────────────────────────────────────────────────────────────────────
@@ -6410,7 +6457,21 @@ function hpRenderResult(){
   h+='<div class="sb-note" style="margin-bottom:8px">Day shape: average of '+shape.weeks.length+' week'+
      (shape.weeks.length===1?'':'s')+' — '+escHtml(shape.weeks.join(', '))+
      ' — '+(shape.basis==='actual'?'what actually ran':shape.basis==='none'?'nothing to average, assuming a flat week':'forecast, no actuals that far back yet')+
-     ', holiday weeks skipped.</div>';
+     ', holiday weeks skipped. The same weeks set the SKU mix for each weekday, not just the day split.</div>';
+  var novel={},absent={};
+  HP_RESULT.forEach(function(R){R.days.forEach(function(r){
+    if(!r||!r.ok)return;
+    (r.novel||[]).forEach(function(k){novel[k]=true;});
+    (r.absent||[]).forEach(function(k){absent[k]=true;});});});
+  function hpList_(o){return Object.keys(o).sort();}
+  var nk=hpList_(novel),ak=hpList_(absent);
+  if(nk.length)h+='<div class="sb-note" style="margin-bottom:6px;color:var(--amber)">'+
+    nk.length+' SKU'+(nk.length>1?'s are':' is')+' not in those weeks, so '+(nk.length>1?'they keep their':'it keeps its')+
+    ' share of this week\u2019s own forecast: '+escHtml(nk.slice(0,8).join(', '))+(nk.length>8?'\u2026':'')+'</div>';
+  if(ak.length)h+='<div class="sb-note" style="margin-bottom:8px;color:var(--amber)">'+
+    ak.length+' SKU'+(ak.length>1?'s are':' is')+' in those weeks but carr'+(ak.length>1?'y':'ies')+
+    ' nothing in this week\u2019s forecast, and '+(ak.length>1?'are':'is')+' still being given volume here: '+
+    escHtml(ak.slice(0,8).join(', '))+(ak.length>8?'\u2026':'')+'. Check whether they came off the menu.</div>';
   h+='<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%">';
   h+='<tr><th style="'+TH+';text-align:left">Option</th>';
   DAYS_ORDER.forEach(function(d){
