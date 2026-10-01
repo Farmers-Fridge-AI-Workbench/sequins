@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.214 — 2026-10-01    (pairs with Code.js v0.4.146)
+  Sequins ✨ — Index.html    v0.5.215 — 2026-10-01    (pairs with Code.js v0.4.147)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.214 'Locally authored' can be turned ON. It only rendered when already set,
-           so hand-entered allergens could not be protected and the nightly sync
-           wiped them. Rows with no allergen data say so.
+  v0.5.215 The lock that protects hand-entered allergens sits beside the allergen
+           field instead of in the far-right column, and only on rows where it
+           changes anything.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -3809,7 +3809,7 @@ function filterSkuTable(){var search=(document.getElementById('skuSearch').value
       if(warn)sel+='<div style="font-family:var(--mono);font-size:10px;color:var(--amber);margin-top:3px;max-width:210px;line-height:1.3">\u26A0 '+warn+'</div>';
       return sel;
     })();
-    var fc=s.fcClass||'';var fcCell='<select class="inline-input" onchange="updateSkuField(\''+key+'\',\'fcClass\',this.value)" style="width:78px"><option value=""'+(fc===''?' selected':'')+'>—</option><option value="FC-W"'+(fc==='FC-W'?' selected':'')+'>FC-W</option><option value="FC-S"'+(fc==='FC-S'?' selected':'')+'>FC-S</option></select>';return'<tr><td><span class="sku-active-dot '+(s.active!==false?'dot-active':'dot-inactive')+'"></span>'+key+'</td><td>'+fcCell+'</td><td><input class="inline-input" value="'+(s.packageType||'')+'" onchange="updateSkuField(\''+key+'\',\'packageType\',this.value)" style="width:100px"></td><td><input class="inline-input" type="number" min="1" value="'+(s.unitsPerTote||'')+'" onchange="updateSkuField(\''+key+'\',\'unitsPerTote\',parseFloat(this.value))" style="width:82px"></td><td><input class="inline-input" type="number" value="'+(s.upm||'')+'" onchange="updateSkuField(\''+key+'\',\'upm\',parseFloat(this.value))" style="width:120px"></td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--muted)">'+(s.optimalHC||'\u2014')+'</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--muted)">'+skuAvgHc_(key,s)+'</td><td>'+(isAllergenUnknown_(s.allergens)?'<span style="background:var(--red-dim);color:var(--red);border:1px solid rgba(239,68,68,.25);border-radius:4px;padding:2px 6px;font-size:10px;white-space:nowrap" title="No allergen data — sequenced as worst case (all six allergens) so it can never seed a food-contact chain">\u26A0 NO ALLERGEN DATA</span>':'')+'<input class="inline-input" value="'+((s.allergens&&!isAllergenUnknown_(s.allergens))?s.allergens:'')+'" onchange="updateSkuField(\''+key+'\',\'allergens\',this.value)" style="width:140px'+(isAllergenUnknown_(s.allergens)?';margin-top:3px':'')+'"></td><td>'+labelCell+'</td><td>'+linesCell+'</td><td>'+linesLateCell+'</td><td>'+pairCell+'</td><td style="text-align:center">'+chk('capper')+'</td><td style="text-align:center">'+chk('nightShift')+'</td><td style="text-align:center">'+chk('preProcessed')+'</td><td style="text-align:center">'+chk('active')+'</td><td>'+stagingCell_(key,s)+'</td></tr>';}).join('');}
+    var fc=s.fcClass||'';var fcCell='<select class="inline-input" onchange="updateSkuField(\''+key+'\',\'fcClass\',this.value)" style="width:78px"><option value=""'+(fc===''?' selected':'')+'>—</option><option value="FC-W"'+(fc==='FC-W'?' selected':'')+'>FC-W</option><option value="FC-S"'+(fc==='FC-S'?' selected':'')+'>FC-S</option></select>';return'<tr><td><span class="sku-active-dot '+(s.active!==false?'dot-active':'dot-inactive')+'"></span>'+key+'</td><td>'+fcCell+'</td><td><input class="inline-input" value="'+(s.packageType||'')+'" onchange="updateSkuField(\''+key+'\',\'packageType\',this.value)" style="width:100px"></td><td><input class="inline-input" type="number" min="1" value="'+(s.unitsPerTote||'')+'" onchange="updateSkuField(\''+key+'\',\'unitsPerTote\',parseFloat(this.value))" style="width:82px"></td><td><input class="inline-input" type="number" value="'+(s.upm||'')+'" onchange="updateSkuField(\''+key+'\',\'upm\',parseFloat(this.value))" style="width:120px"></td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--muted)">'+(s.optimalHC||'\u2014')+'</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--muted)">'+skuAvgHc_(key,s)+'</td><td>'+allergenCell_(key,s)+'</td><td>'+labelCell+'</td><td>'+linesCell+'</td><td>'+linesLateCell+'</td><td>'+pairCell+'</td><td style="text-align:center">'+chk('capper')+'</td><td style="text-align:center">'+chk('nightShift')+'</td><td style="text-align:center">'+chk('preProcessed')+'</td><td style="text-align:center">'+chk('active')+'</td><td>'+stagingCell_(key,s)+'</td></tr>';}).join('');}
 var _skuTimer=null;
 // ─── STAGING / PENDING SKUS (v0.5.72) ────────────────────────────────────────
 // A pending SKU is one entered in Sequins before Menu Library knows it exists —
@@ -3835,18 +3835,30 @@ function skuMissing_(m){
   if(isUsdaSku_(m.__key||'')&&m.usdaPairDecided!==true&&!String(m.usdaPairedSku||'').trim())miss.push('USDA pair decision');
   return miss;
 }
+// The allergen field and the lock that protects it belong together. The lock is
+// only ever shown where it changes something: a row with no allergen data (tick
+// it before typing or tonight's sync wipes the entry), or a row already held.
+// Every other row shows nothing, because 58 empty checkboxes is not information.
+function allergenCell_(key,m){
+  var unknown=isAllergenUnknown_(m.allergens),held=!!m.locallyAuthored;
+  var h='';
+  if(unknown)h+='<div style="background:var(--red-dim);color:var(--red);border:1px solid rgba(239,68,68,.25);border-radius:4px;padding:2px 6px;font-size:10px;white-space:nowrap;display:inline-block" title="No allergen data — sequenced as worst case (all six allergens), so it can only ever go last on a food-contact line">\u26A0 NO ALLERGEN DATA</div>';
+  h+='<input class="inline-input" value="'+escHtml((m.allergens&&!unknown)?m.allergens:'')+'" onchange="updateSkuField(\''+key+'\',\'allergens\',this.value)" style="width:140px'+(unknown?';margin-top:3px':'')+'">';
+  if(held||unknown){
+    var tip=held?'Held in Sequins. The nightly allergen sync leaves this row alone. Untick once Menu Library carries it.'
+      :'Tick before typing. Otherwise tonight&#39;s sync asks Menu Library, gets nothing, and overwrites what you entered.';
+    h+='<label style="display:flex;align-items:center;gap:4px;margin-top:3px;font-size:9px;color:var('+(held?'--amber':'--muted')+');cursor:pointer" title="'+tip+'">'+
+      '<input type="checkbox" '+(held?'checked ':'')+'style="accent-color:var(--amber)" onchange="updateSkuField(\''+key+'\',\'locallyAuthored\',this.checked)">'+
+      (held?'held \u2014 sync won\u2019t touch it':'hold this \u2014 tick before typing')+'</label>';
+  }
+  return h;
+}
 function stagingCell_(key,m){
   if(!m.pending){
-    var on=!!m.locallyAuthored;
-    var tip=on
-      ? 'Held in Sequins and exempt from the daily allergen sync. Untick to hand ownership back to Menu Library.'
-      : 'Tick to hold this row&#39;s allergens in Sequins. Without it the daily sync overwrites them with whatever Menu Library says — including NO ALLERGEN DATA.';
-    var warn=(!on&&isAllergenUnknown_(m.allergens))
-      ? '<div style="font-size:9px;color:var(--amber)">tick this before typing allergens, or the sync wipes them tonight</div>'
-      : '';
-    return '<span style="font-family:var(--mono);font-size:10px;color:var('+(on?'--amber':'--muted')+')" title="'+tip+'">'+
-      'locally authored <input type="checkbox" '+(on?'checked ':'')+'style="accent-color:var(--amber)" '+
-      'onchange="updateSkuField(\''+key+'\',\'locallyAuthored\',this.checked)"></span>'+warn;
+    // The lock lives beside the allergen field now — see allergenCell_. This
+    // column only reports, so a row with nothing to report stays quiet.
+    if(m.locallyAuthored)return '<span style="font-family:var(--mono);font-size:10px;color:var(--amber)" title="Allergens held in Sequins, exempt from the nightly sync. The tick is next to the allergen field.">locally authored</span>';
+    return '<span style="color:var(--muted);font-size:11px">\u2014</span>';
   }
   var mm=skuMissing_(Object.assign({__key:key},m));
   if(mm.length){
@@ -4130,7 +4142,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.214';
+var APP_VERSION='v0.5.215';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
