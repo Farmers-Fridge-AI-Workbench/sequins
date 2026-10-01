@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.208 — 2026-10-01    (pairs with Code.js v0.4.140)
+  Sequins ✨ — Index.html    v0.5.210 — 2026-10-01    (pairs with Code.js v0.4.142)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.208 Holiday Planning takes the SKU mix from the same four clean weeks as
-           the day split, instead of from the holiday week’s own forecast — which
-           was the distortion it is meant to plan around.
+  v0.5.210 A two-day holiday closure is Thursday + Friday, because that is where
+           crews A and B split — pairing the holiday with the day before gave one
+           crew both days off and the other none.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4114,7 +4114,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.208';
+var APP_VERSION='v0.5.210';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -6217,7 +6217,7 @@ function hpRunDay_(label,day,units,state){
   var sum=sbSummarise(res);
   var lab=planLaborHours_(res.lineState,res.lines);
   var ot=sbOvertime_(sum,getRules());
-  var chain=sbChainCheck(res);
+  var chainList=sbChainCheck(res);
   var cap=curfewToMin_(state.earlyFinish||'');
   var late=[];
   Object.keys(sum.byLine).forEach(function(id){
@@ -6227,7 +6227,8 @@ function hpRunDay_(label,day,units,state){
   return{day:day,ok:true,units:units,res:res,sum:sum,
     end:sum.latestEnd,crew:planHeadcount_(res.lineState,res.lines),
     labor:lab.sim,target:lab.target,
-    unplaced:sum.unplaced.length,chain:chain.length,late:late,ot:ot,
+    unplaced:sum.unplaced.length,chain:chainList.length,late:late,ot:ot,
+    unplacedList:sum.unplaced,chainList:chainList,
     mixBasis:mix.basis,novel:mix.novel,absent:mix.absent};
 }
 
@@ -6286,18 +6287,32 @@ function hpPreference_(label){
   }
   return null;
 }
+// Crews A and B split on Thursday/Friday, so a TWO-day closure has to be those
+// two days — that way each crew loses one day instead of one crew losing both
+// and the other losing none (Cori, 2026-10-01). It costs about the same and
+// nobody gives up two days’ pay. Pairing the holiday with the day BEFORE, which
+// this used to offer, lands both days on the same crew and is simply wrong here.
+//
+// Options stay short on purpose. Four readable rows beat nine that nobody reads:
+// run everything, close the day, Cori’s preference, and the two-day version.
 function hpBuildOptions_(label){
   var hols=hpWeekHolidays_(label);
   if(!hols.length)return [];
-  var dayOf=hols[0].day,i=DAYS_ORDER.indexOf(dayOf);
-  var before=i>0?DAYS_ORDER[i-1]:null,after=i<6?DAYS_ORDER[i+1]:null;
-  var opts=[{name:'BASELINE — run all 7 days',states:{},baseline:true}];
-  var a={};a[dayOf]={open:false};
-  opts.push({name:'close '+dayOf,states:a});
+  var dayOf=hols[0].day;
+  var opts=[{name:"BASELINE \u2014 run all 7 days",states:{},baseline:true}];
+  var one={};one[dayOf]={open:false};
+  opts.push({name:"close "+dayOf+" only",states:one});
   var pref=hpPreference_(label);
   if(pref)opts.push(pref);
-  if(before){var b={};b[dayOf]={open:false};b[before]={open:false};opts.push({name:'close '+dayOf+' + '+before,states:b});}
-  if(after){var c={};c[dayOf]={open:false};c[after]={open:false};opts.push({name:'close '+dayOf+' + '+after,states:c});}
+  // The crew-split pair. Only meaningful when the holiday is one of the two.
+  if(dayOf==="Thursday"||dayOf==="Friday"){
+    var two={};two.Thursday={open:false};two.Friday={open:false};
+    opts.push({name:"close Thursday + Friday \u2014 a day off for each crew",states:two});
+  }else{
+    var i=DAYS_ORDER.indexOf(dayOf),nxt=i<6?DAYS_ORDER[i+1]:null;
+    if(nxt){var t2={};t2[dayOf]={open:false};t2[nxt]={open:false};
+      opts.push({name:"close "+dayOf+" + "+nxt,states:t2});}
+  }
   return opts;
 }
 function hpRunOption_(label,opt,total,even){
@@ -6426,86 +6441,132 @@ function hpRun(){
     if(btn){btn.disabled=false;btn.textContent='Show options';}
   },30);
 }
+// Flags are named the way someone reading the table would say them out loud.
+// "chain break" meant nothing to anyone who had not read the engine.
+function hpFlags_(r){
+  var out=[];
+  if(!r||!r.ok)return out;
+  (r.unplacedList||[]).forEach(function(u){
+    out.push({kind:"nowhere to run",sku:u.sku,why:u.reason});
+  });
+  (r.late||[]).forEach(function(l){
+    out.push({kind:"finishes late",sku:l,why:"this line is still running after the finish time set for the day"});
+  });
+  (r.chainList||[]).forEach(function(c){
+    out.push({kind:"allergen order broken",sku:c.cur,
+      why:"on "+c.line+", "+c.cur+" follows "+c.prev+" but drops "+c.lost.join(", ")+
+          " \u2014 a food-contact line can add allergens through the day, never lose one"});
+  });
+  return out;
+}
 function hpCell_(R,d,isHol){
   var i=DAYS_ORDER.indexOf(d),r=R.days[i];
-  var TD='padding:6px 8px;border:1px solid var(--border);vertical-align:top;font-size:11px';
-  if(!r)return '<td style="'+TD+'">—</td>';
+  var TD="padding:6px 8px;border:1px solid var(--border);vertical-align:top;font-size:11px";
+  if(!r)return "<td style=\""+TD+"\">\u2014</td>";
   if(r.closed)
-    return '<td style="'+TD+';text-align:center;color:var(--muted)">closed'+
-      (isHol?'<div style="font-size:9px;color:var(--green)">no holiday pay</div>':'')+'</td>';
+    return "<td style=\""+TD+";text-align:center;color:var(--muted)\">closed"+
+      (isHol?"<div style=\"font-size:9px;color:var(--green)\">no holiday pay</div>":"")+"</td>";
   if(!r.ok)
-    return '<td style="'+TD+';color:var(--red)">'+escHtml(r.why||'did not run')+'</td>';
-  var risk=[];
-  if(r.unplaced)risk.push(r.unplaced+' unplaced');
-  if(r.late.length)risk.push(r.late.length+' past the finish');
-  if(r.chain)risk.push(r.chain+' chain break'+(r.chain>1?'s':''));
-  return '<td style="'+TD+';text-align:right">'+
-    '<div style="font-family:var(--mono);font-size:13px">'+fmtUnits(Math.round(r.units))+'</div>'+
-    '<div style="font-size:9px;color:var(--muted)">'+fmtClock(r.end)+' · '+((r.crew&&r.crew.total)||0)+' people</div>'+
-    (risk.length?'<div style="font-size:9px;color:var(--red)">'+escHtml(risk.join(' · '))+'</div>':'')+
-    (r.crossesInto?'<div style="font-size:9px;color:var(--amber)">runs into '+escHtml(r.crossesInto)+'</div>':'')+
-    '</td>';
+    return "<td style=\""+TD+";color:var(--red)\">"+escHtml(r.why||"did not run")+"</td>";
+  var f=hpFlags_(r),kinds={};
+  f.forEach(function(x){kinds[x.kind]=(kinds[x.kind]||0)+1;});
+  var tags=Object.keys(kinds).map(function(k){return kinds[k]+" "+k;}).join(" \u00b7 ");
+  return "<td style=\""+TD+";text-align:right\">"+
+    "<div style=\"font-family:var(--mono);font-size:13px\">"+fmtUnits(Math.round(r.units))+"</div>"+
+    "<div style=\"font-size:9px;color:var(--muted)\">out by "+fmtClock(r.end)+" \u00b7 "+((r.crew&&r.crew.total)||0)+" people</div>"+
+    (tags?"<div style=\"font-size:9px;color:var(--red)\">"+escHtml(tags)+"</div>":"")+
+    (r.crossesInto?"<div style=\"font-size:9px;color:var(--amber)\">runs past midnight into "+escHtml(r.crossesInto)+"</div>":"")+
+    "</td>";
+}
+function hpToggleDetail(i){
+  var el=document.getElementById("hpDetail"+i),a=document.getElementById("hpArrow"+i);
+  if(!el)return;
+  var open=el.style.display!=="none";
+  el.style.display=open?"none":"";
+  if(a)a.textContent=open?"\u25b8":"\u25be";
+}
+function hpDetailHtml_(R,idx){
+  var rows=[];
+  DAYS_ORDER.forEach(function(d,i){
+    var r=R.days[i];if(!r||r.closed||!r.ok)return;
+    hpFlags_(r).forEach(function(f){
+      rows.push("<div style=\"margin-bottom:6px\">"+
+        "<span style=\"font-family:var(--mono);color:var(--muted)\">"+DAY_SHORT[d]+"</span> "+
+        "<b style=\"color:var(--red)\">"+escHtml(f.kind)+"</b> \u2014 "+
+        "<span style=\"font-family:var(--mono)\">"+escHtml(f.sku)+"</span>"+
+        "<div style=\"font-size:10px;color:var(--muted);padding-left:14px\">"+escHtml(f.why)+"</div></div>");
+    });
+  });
+  if(!rows.length)return "";
+  return "<tr id=\"hpDetail"+idx+"\" style=\"display:none\"><td colspan=\"12\" style=\"padding:10px 14px;border:1px solid var(--border);background:var(--surface2)\">"+
+    rows.join("")+"</td></tr>";
 }
 function hpRenderResult(){
-  var out=document.getElementById('hpOut');if(!out||!HP_RESULT)return;
-  var base=HP_RESULT[0],shape=base.shape;
+  var out=document.getElementById("hpOut");if(!out||!HP_RESULT)return;
+  var base=null;HP_RESULT.forEach(function(R){if(R.baseline)base=R;});
+  if(!base)base=HP_RESULT[0];
+  var shape=base.shape;
   var hol={};hpWeekHolidays_(HP_WEEK).forEach(function(h){hol[h.day]=h.iso;});
-  var ranked=HP_RESULT.slice().sort(function(a,b){return a.total-b.total;});
-  var TH='padding:6px 8px;border:1px solid var(--border);background:var(--surface2);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)';
-  var TD='padding:6px 8px;border:1px solid var(--border);font-size:11px';
-  var h='';
-  h+='<div class="sb-note" style="margin-bottom:8px">Day shape: average of '+shape.weeks.length+' week'+
-     (shape.weeks.length===1?'':'s')+' — '+escHtml(shape.weeks.join(', '))+
-     ' — '+(shape.basis==='actual'?'what actually ran':shape.basis==='none'?'nothing to average, assuming a flat week':'forecast, no actuals that far back yet')+
-     ', holiday weeks skipped. The same weeks set the SKU mix for each weekday, not just the day split.</div>';
+  // Baseline first, always \u2014 it is the thing everything else is measured against,
+  // so burying it at the bottom of a cost sort made the savings column unreadable.
+  var rest=HP_RESULT.filter(function(R){return R!==base;}).sort(function(a,b){return a.total-b.total;});
+  var order=[base].concat(rest);
+  var TH="padding:6px 8px;border:1px solid var(--border);background:var(--surface2);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)";
+  var TD="padding:6px 8px;border:1px solid var(--border);font-size:11px";
+  var h="";
+  h+="<div class=\"sb-note\" style=\"margin-bottom:8px\">Day split and SKU mix both come from "+shape.weeks.length+
+     " week"+(shape.weeks.length===1?"":"s")+" that had no holiday in "+(shape.weeks.length===1?"it":"them")+": "+
+     escHtml(shape.weeks.join(", "))+" \u2014 "+
+     (shape.basis==="actual"?"what actually ran":shape.basis==="none"?"nothing to average, assuming a flat week":"forecast, no actuals that far back yet")+".</div>";
   var novel={},absent={};
   HP_RESULT.forEach(function(R){R.days.forEach(function(r){
     if(!r||!r.ok)return;
     (r.novel||[]).forEach(function(k){novel[k]=true;});
     (r.absent||[]).forEach(function(k){absent[k]=true;});});});
-  function hpList_(o){return Object.keys(o).sort();}
-  var nk=hpList_(novel),ak=hpList_(absent);
-  if(nk.length)h+='<div class="sb-note" style="margin-bottom:6px;color:var(--amber)">'+
-    nk.length+' SKU'+(nk.length>1?'s are':' is')+' not in those weeks, so '+(nk.length>1?'they keep their':'it keeps its')+
-    ' share of this week\u2019s own forecast: '+escHtml(nk.slice(0,8).join(', '))+(nk.length>8?'\u2026':'')+'</div>';
-  if(ak.length)h+='<div class="sb-note" style="margin-bottom:8px;color:var(--amber)">'+
-    ak.length+' SKU'+(ak.length>1?'s are':' is')+' in those weeks but carr'+(ak.length>1?'y':'ies')+
-    ' nothing in this week\u2019s forecast, and '+(ak.length>1?'are':'is')+' still being given volume here: '+
-    escHtml(ak.slice(0,8).join(', '))+(ak.length>8?'\u2026':'')+'. Check whether they came off the menu.</div>';
-  h+='<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%">';
-  h+='<tr><th style="'+TH+';text-align:left">Option</th>';
+  var nk=Object.keys(novel).sort(),ak=Object.keys(absent).sort();
+  if(nk.length)h+="<div class=\"sb-note\" style=\"margin-bottom:6px;color:var(--amber)\">"+
+    nk.length+" SKU"+(nk.length>1?"s are":" is")+" not in those weeks, so "+(nk.length>1?"they keep their":"it keeps its")+
+    " share of this week\u2019s own forecast: "+escHtml(nk.slice(0,8).join(", "))+(nk.length>8?"\u2026":"")+"</div>";
+  if(ak.length)h+="<div class=\"sb-note\" style=\"margin-bottom:8px;color:var(--amber)\">"+
+    ak.length+" SKU"+(ak.length>1?"s are":" is")+" in those weeks but ordered nothing this week, and "+
+    (ak.length>1?"are":"is")+" still being given volume here: "+
+    escHtml(ak.slice(0,8).join(", "))+(ak.length>8?"\u2026":"")+". Check whether they came off the menu.</div>";
+  h+="<div style=\"overflow-x:auto\"><table style=\"border-collapse:collapse;width:100%\">";
+  h+="<tr><th style=\""+TH+";text-align:left\">Option</th>";
   DAYS_ORDER.forEach(function(d){
-    h+='<th style="'+TH+';text-align:right">'+DAY_SHORT[d]+
-       (hol[d]?'<div style="font-size:9px;color:var(--amber);text-transform:none">'+escHtml(hpHolidayName_(hol[d]))+'</div>':'')+'</th>';
+    h+="<th style=\""+TH+";text-align:right\">"+DAY_SHORT[d]+
+       (hol[d]?"<div style=\"font-size:9px;color:var(--amber);text-transform:none\">"+escHtml(hpHolidayName_(hol[d]))+"</div>":"")+"</th>";
   });
-  h+='<th style="'+TH+';text-align:right">Shifts lost</th><th style="'+TH+';text-align:right">Labor</th>'+
-     '<th style="'+TH+';text-align:right">Holiday pay</th><th style="'+TH+';text-align:right">Total</th></tr>';
-  ranked.forEach(function(R){
+  h+="<th style=\""+TH+";text-align:right\">People<br>not working</th><th style=\""+TH+";text-align:right\">Labor</th>"+
+     "<th style=\""+TH+";text-align:right\">Holiday pay</th><th style=\""+TH+";text-align:right\">Total</th></tr>";
+  order.forEach(function(R,idx){
     var d=R.total-base.total;
-    var delta=R.baseline?'':'<div style="font-size:9px;color:var('+(d<0?'--green':'--red')+')">'+
-      (d<0?'saves ':'costs ')+sbMoney_(Math.abs(d))+(d<0?'':' more')+'</div>';
-    h+='<tr'+(R.baseline?' style="color:var(--teal)"':'')+'>'+
-       '<td style="'+TD+'"><b>'+escHtml(R.name)+'</b>'+
-       (R.risks?'<div style="font-size:9px;color:var(--red)">'+R.risks+' thing'+(R.risks>1?'s':'')+' to look at</div>':'')+'</td>';
+    var delta=R.baseline?"<div style=\"font-size:9px;color:var(--muted)\">everything else is measured against this</div>"
+      :"<div style=\"font-size:9px;color:var("+(d<0?"--green":"--red")+")\">"+
+      (d<0?"saves ":"costs ")+sbMoney_(Math.abs(d))+(d<0?"":" more")+"</div>";
+    var nf=0;R.days.forEach(function(r){nf+=hpFlags_(r).length;});
+    var look=nf?"<div style=\"font-size:9px;color:var(--red);cursor:pointer\" onclick=\"hpToggleDetail("+idx+")\">"+
+      "<span id=\"hpArrow"+idx+"\">\u25b8</span> "+nf+" thing"+(nf>1?"s":"")+" to look at</div>":"";
+    h+="<tr"+(R.baseline?" style=\"color:var(--teal)\"":"")+">"+
+       "<td style=\""+TD+"\"><b>"+escHtml(R.name)+"</b>"+look+"</td>";
     DAYS_ORDER.forEach(function(x){h+=hpCell_(R,x,!!hol[x]);});
-    h+='<td style="'+TD+';text-align:right">'+(R.lost?'<span style="color:var(--amber)">'+R.lost+'</span>':'—')+'</td>'+
-       '<td style="'+TD+';text-align:right">'+sbMoney_(R.labor)+'</td>'+
-       '<td style="'+TD+';text-align:right">'+(R.holiday?'<span style="color:var(--amber)">'+sbMoney_(R.holiday)+'</span>':'—')+'</td>'+
-       '<td style="'+TD+';text-align:right"><b>'+sbMoney_(R.total)+'</b>'+delta+'</td></tr>';
+    h+="<td style=\""+TD+";text-align:right\">"+(R.lost?"<span style=\"color:var(--amber)\">"+R.lost+"</span>"+
+         "<div style=\"font-size:9px;color:var(--muted)\">not offered a shift</div>":"\u2014")+"</td>"+
+       "<td style=\""+TD+";text-align:right\">"+sbMoney_(R.labor)+"</td>"+
+       "<td style=\""+TD+";text-align:right\">"+(R.holiday?"<span style=\"color:var(--amber)\">"+sbMoney_(R.holiday)+"</span>":"\u2014")+"</td>"+
+       "<td style=\""+TD+";text-align:right\"><b>"+sbMoney_(R.total)+"</b>"+delta+"</td></tr>";
+    h+=hpDetailHtml_(R,idx);
   });
-  h+='</table></div>';
-  // The reasons, stated once rather than per cell.
-  var notes=[];
+  h+="</table></div>";
+  // One line, not a wall. The rest is said where it happens.
+  var hp=[];
   hpWeekHolidays_(HP_WEEK).forEach(function(x){
-    notes.push(hpHolidayName_(x.iso)+' ('+x.iso+'): '+
-      (hpFullShiftApplies_(x.iso)
-        ? 'working it at all pays everyone a full shift at '+ruleNum_(getRules(),'holidayPayMultiplier')+'× — an hour costs the same as the whole day, including a shift the night before that runs past midnight.'
-        : 'the full-shift rule has lapsed by then, so it is '+ruleNum_(getRules(),'holidayPayMultiplier')+'× on the hours actually worked.'));
+    hp.push(hpHolidayName_(x.iso)+": "+(hpFullShiftApplies_(x.iso)
+      ?"working it at all pays everyone a full shift at "+ruleNum_(getRules(),"holidayPayMultiplier")+"\u00d7, even an hour"
+      :ruleNum_(getRules(),"holidayPayMultiplier")+"\u00d7 on hours actually worked"));
   });
-  notes.push('Shifts lost is how many people are not offered work on a closed day. If a closed day is not made up elsewhere in the week, that is pay they do not get.');
-  notes.push('Ranked by labor plus holiday pay. Every option still builds the whole week total — closing a day moves its volume, it does not delete it.');
-  notes.push('Each day here is sequenced for real, so the flags are the engine’s: unplaced SKUs, lines past the finish time, broken allergen chains.');
-  h+='<div class="sb-note" style="margin-top:10px">'+notes.map(function(t){return '<div style="margin-bottom:3px">'+escHtml(t)+'</div>';}).join('')+'</div>';
+  h+="<div class=\"sb-note\" style=\"margin-top:10px\">"+escHtml(hp.join("  \u00b7  "))+
+     "  \u00b7  Every option still builds the whole week total.</div>";
   out.innerHTML=h;
 }
 function renderHolidayPlanner(){hpRenderControls();if(HP_RESULT)hpRenderResult();}
