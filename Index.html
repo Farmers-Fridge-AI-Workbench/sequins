@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.210 — 2026-10-01    (pairs with Code.js v0.4.142)
+  Sequins ✨ — Index.html    v0.5.212 — 2026-10-01    (pairs with Code.js v0.4.144)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.210 A two-day holiday closure is Thursday + Friday, because that is where
-           crews A and B split — pairing the holiday with the day before gave one
-           crew both days off and the other none.
+  v0.5.212 A SKU with no allergen data reports as its own thing, once, pointing at
+           the SKU Library — it was being reported as an allergen order break,
+           seven times a week, as though the holiday plan had caused it.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -623,6 +623,15 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
       </div>
       <div class="card" id="hpControls"></div>
       <div class="card" id="hpOut" style="margin-top:12px"></div>
+      <div class="card" id="hpCuts" style="margin-top:12px">
+        <div class="card-title">Worth cutting for the week?</div>
+        <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
+          <div><div class="sb-label">Only SKUs under (units/week)</div>
+            <input class="sb-input" id="hpCutMax" type="number" min="1" step="100" value="1000" style="width:120px"></div>
+          <button class="btn btn-sm" onclick="hpShowCuts()">What would we save?</button>
+        </div>
+        <div id="hpCutsOut" style="margin-top:10px"></div>
+      </div>
     </div>
 
     <div class="view" id="view-sandbox">
@@ -4114,7 +4123,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.210';
+var APP_VERSION='v0.5.212';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -6179,11 +6188,16 @@ function hpSkuMix_(label,day){
   if(t2>0)Object.keys(shares).forEach(function(k){shares[k]=shares[k]/t2;});
   return{shares:shares,novel:novel,absent:absent,basis:'baseline'};
 }
-function hpScaleSkus_(label,day,targetUnits){
+// `cut` drops SKUs AFTER the split, so everything else keeps the quantity it
+// would have had. Cutting before would just hand the units to other SKUs and
+// the week would cost exactly the same — which is not what cutting a SKU means.
+// The week total goes down by what was cut: those units do not get made.
+function hpScaleSkus_(label,day,targetUnits,cut){
   var mix=hpSkuMix_(label,day);
   if(!mix)return null;
   var out={};
   Object.keys(mix.shares).forEach(function(k){
+    if(cut&&cut[k])return;
     var q=Math.round(targetUnits*mix.shares[k]);
     if(q>0)out[k]=q;
   });
@@ -6201,9 +6215,9 @@ function hpLineConfig_(lateStartMin){
     return c;
   });
 }
-function hpRunDay_(label,day,units,state){
+function hpRunDay_(label,day,units,state,cut){
   var mix=hpSkuMix_(label,day);
-  var skus=mix?hpScaleSkus_(label,day,units):null;
+  var skus=mix?hpScaleSkus_(label,day,units,cut):null;
   if(!skus)return{day:day,ok:false,why:'no demand stored for this day'};
   var dem={};dem[label]={};dem[label][day]={skus:skus};
   var res=runSequencer({
@@ -6315,7 +6329,7 @@ function hpBuildOptions_(label){
   }
   return opts;
 }
-function hpRunOption_(label,opt,total,even){
+function hpRunOption_(label,opt,total,even,cut){
   var shape=hpDayShape_(label,even);
   var st={};
   DAYS_ORDER.forEach(function(d){st[d]=hpState_(opt.states[d]||{});});
@@ -6323,20 +6337,20 @@ function hpRunOption_(label,opt,total,even){
   var dates={};hpWeekDates_(label).forEach(function(x){dates[x.day]=x.iso;});
   var hol=hpHolidays_();
   var rules=getRules(),rate=ruleNum_(rules,'hourlyRate');
-  var days=[],labor=0,holiday=0,ot=0,lost=0,risks=0;
+  var days=[],labor=0,holiday=0,ot=0,lost=0,risks=0,capacity=0;
   DAYS_ORDER.forEach(function(d){
+    var dayHeads=0;
+    (STATE.lineConfig||DEFAULT_LINE_CONFIG).forEach(function(l){
+      if(l.days&&l.days[DAY_SHORT[d]])dayHeads+=(Number(l.hc)||0)+(Number(l.lineLead)||0);
+    });
+    capacity+=dayHeads;
     if(!st[d].open){
-      // Nobody is offered work on a dark day. Crewing follows the line config,
-      // which is what the day WOULD have run.
-      var heads=0;
-      (STATE.lineConfig||DEFAULT_LINE_CONFIG).forEach(function(l){
-        if(l.days&&l.days[DAY_SHORT[d]])heads+=(Number(l.hc)||0)+(Number(l.lineLead)||0);
-      });
-      lost+=heads;
-      days.push({day:d,closed:true,heads:heads});
+      // Nobody is offered work on a dark day.
+      lost+=dayHeads;
+      days.push({day:d,closed:true,heads:dayHeads});
       return;
     }
-    var r=hpRunDay_(label,d,Math.round(split[d]),st[d]);
+    var r=hpRunDay_(label,d,Math.round(split[d]),st[d],cut);
     days.push(r);
     if(!r.ok)return;
     labor+=r.labor*rate;
@@ -6356,8 +6370,9 @@ function hpRunOption_(label,opt,total,even){
     var hc=hpHolidayCost_(r,dates[nxt],true);
     holiday+=hc.cost;r.crossesInto=nxt;r.holidayWhy=hc.why;
   });
-  return{name:opt.name,baseline:!!opt.baseline,days:days,split:split,shape:shape,
-    labor:labor,holiday:holiday,ot:ot,total:labor+holiday+ot,lost:lost,risks:risks};
+  return{name:opt.name,baseline:!!opt.baseline,_states:opt.states||{},days:days,split:split,shape:shape,
+    labor:labor,holiday:holiday,ot:ot,total:labor+holiday+ot,
+    lost:lost,offered:capacity-lost,capacity:capacity,risks:risks};
 }
 
 
@@ -6433,6 +6448,8 @@ function hpRun(){
     try{
       var opts=hpBuildOptions_(HP_WEEK);
       HP_RESULT=opts.map(function(o){return hpRunOption_(HP_WEEK,o,total,even);});
+      HP_CUTS=null;
+      var ce=document.getElementById('hpCutsOut');if(ce)ce.innerHTML='';
       hpRenderResult();
     }catch(e){
       out.innerHTML='<div class="status status-err">'+escHtml(e.message||String(e))+'</div>';
@@ -6452,7 +6469,18 @@ function hpFlags_(r){
   (r.late||[]).forEach(function(l){
     out.push({kind:"finishes late",sku:l,why:"this line is still running after the finish time set for the day"});
   });
+  var seenUnknown={};
   (r.chainList||[]).forEach(function(c){
+    var unknown=(c.lost||[]).length===1&&c.lost[0]==="UNKNOWN ALLERGENS";
+    if(unknown){
+      // Once per SKU, not once per day per line — the same missing row otherwise
+      // reports seven times and buries everything else.
+      if(seenUnknown[c.cur])return;
+      seenUnknown[c.cur]=true;
+      out.push({kind:"no allergen data",sku:c.cur,
+        why:c.cur+" has no allergen data in the SKU Library, so the engine sequences it as if it carried all six allergens \u2014 which is why it can never start a line. This is a SKU Library gap, not a holiday one: fix it there and it goes away everywhere."});
+      return;
+    }
     out.push({kind:"allergen order broken",sku:c.cur,
       why:"on "+c.line+", "+c.cur+" follows "+c.prev+" but drops "+c.lost.join(", ")+
           " \u2014 a food-contact line can add allergens through the day, never lose one"});
@@ -6474,7 +6502,7 @@ function hpCell_(R,d,isHol){
   return "<td style=\""+TD+";text-align:right\">"+
     "<div style=\"font-family:var(--mono);font-size:13px\">"+fmtUnits(Math.round(r.units))+"</div>"+
     "<div style=\"font-size:9px;color:var(--muted)\">out by "+fmtClock(r.end)+" \u00b7 "+((r.crew&&r.crew.total)||0)+" people</div>"+
-    (tags?"<div style=\"font-size:9px;color:var(--red)\">"+escHtml(tags)+"</div>":"")+
+    (tags?"<div style=\"font-size:9px;color:var("+(/no allergen data/.test(tags)?"--amber":"--red")+")\">"+escHtml(tags)+"</div>":"")+
     (r.crossesInto?"<div style=\"font-size:9px;color:var(--amber)\">runs past midnight into "+escHtml(r.crossesInto)+"</div>":"")+
     "</td>";
 }
@@ -6537,7 +6565,7 @@ function hpRenderResult(){
     h+="<th style=\""+TH+";text-align:right\">"+DAY_SHORT[d]+
        (hol[d]?"<div style=\"font-size:9px;color:var(--amber);text-transform:none\">"+escHtml(hpHolidayName_(hol[d]))+"</div>":"")+"</th>";
   });
-  h+="<th style=\""+TH+";text-align:right\">People<br>not working</th><th style=\""+TH+";text-align:right\">Labor</th>"+
+  h+="<th style=\""+TH+";text-align:right\">Shifts<br>worked / lost</th><th style=\""+TH+";text-align:right\">Labor</th>"+
      "<th style=\""+TH+";text-align:right\">Holiday pay</th><th style=\""+TH+";text-align:right\">Total</th></tr>";
   order.forEach(function(R,idx){
     var d=R.total-base.total;
@@ -6550,8 +6578,10 @@ function hpRenderResult(){
     h+="<tr"+(R.baseline?" style=\"color:var(--teal)\"":"")+">"+
        "<td style=\""+TD+"\"><b>"+escHtml(R.name)+"</b>"+look+"</td>";
     DAYS_ORDER.forEach(function(x){h+=hpCell_(R,x,!!hol[x]);});
-    h+="<td style=\""+TD+";text-align:right\">"+(R.lost?"<span style=\"color:var(--amber)\">"+R.lost+"</span>"+
-         "<div style=\"font-size:9px;color:var(--muted)\">not offered a shift</div>":"\u2014")+"</td>"+
+    h+="<td style=\""+TD+";text-align:right\">"+
+         "<div style=\"font-family:var(--mono);font-size:13px\">"+R.offered+"</div>"+
+         "<div style=\"font-size:9px;color:var("+(R.lost?"--amber":"--muted")+")\">"+
+           (R.lost?R.lost+" not offered a shift":"nobody loses a shift")+"</div>"+"</td>"+
        "<td style=\""+TD+";text-align:right\">"+sbMoney_(R.labor)+"</td>"+
        "<td style=\""+TD+";text-align:right\">"+(R.holiday?"<span style=\"color:var(--amber)\">"+sbMoney_(R.holiday)+"</span>":"\u2014")+"</td>"+
        "<td style=\""+TD+";text-align:right\"><b>"+sbMoney_(R.total)+"</b>"+delta+"</td></tr>";
@@ -6568,6 +6598,91 @@ function hpRenderResult(){
   h+="<div class=\"sb-note\" style=\"margin-top:10px\">"+escHtml(hp.join("  \u00b7  "))+
      "  \u00b7  Every option still builds the whole week total.</div>";
   out.innerHTML=h;
+}
+// ── WHAT IS WORTH CUTTING ───────────────────────────────────────────────────
+// Which SKUs are small enough that not running them at all over a holiday week
+// is worth more than having them. Priced by RE-RUNNING the week without each
+// one and taking the difference, not by multiplying units by a rate — a SKU
+// also costs a changeover, and dropping the last one on a line can empty the
+// line entirely. Arithmetic cannot see either of those; the engine can.
+//
+// Labor only. Sequins has no material or packaging cost, so this is the floor
+// of the saving, never the whole of it.
+var HP_CUTS=null;
+function hpWeekSkuTotals_(R){
+  var tot={};
+  DAYS_ORDER.forEach(function(d,i){
+    var r=R.days[i];if(!r||r.closed||!r.ok)return;
+    var sk=hpScaleSkus_(HP_WEEK,d,Math.round(R.split[d]));
+    if(!sk)return;
+    Object.keys(sk).forEach(function(k){tot[k]=(tot[k]||0)+sk[k];});
+  });
+  return tot;
+}
+function hpRunCuts_(R,total,even,threshold){
+  var weekSku=hpWeekSkuTotals_(R),out=[];
+  var cands=Object.keys(weekSku).filter(function(k){return weekSku[k]<=threshold;});
+  cands.sort(function(a,b){return weekSku[a]-weekSku[b];});
+  // Cap the work: each candidate is another whole week through the engine.
+  cands.slice(0,12).forEach(function(k){
+    var cut={};cut[k]=true;
+    var alt=hpRunOption_(HP_WEEK,{name:R.name,states:R._states||{},baseline:false},total,even,cut);
+    out.push({sku:k,units:weekSku[k],saving:R.total-alt.total,
+      risksBefore:R.risks,risksAfter:alt.risks});
+  });
+  out.sort(function(a,b){return b.saving-a.saving;});
+  return{rows:out,considered:cands.length,threshold:threshold};
+}
+function hpCutThreshold_(){
+  var v=parseFloat((document.getElementById('hpCutMax')||{}).value);
+  return (v>0)?v:1000;
+}
+function hpShowCuts(){
+  if(!HP_RESULT)return;
+  var total=parseFloat((document.getElementById('hpTotal')||{}).value);
+  var even=parseFloat((document.getElementById('hpEven')||{}).value);
+  var best=null;
+  HP_RESULT.forEach(function(R){if(R.baseline)return;if(!best||R.total<best.total)best=R;});
+  if(!best)best=HP_RESULT[0];
+  var el=document.getElementById('hpCutsOut');
+  el.innerHTML='<div class="status status-info"><span class="spinner"></span>Re-running the week without each candidate…</div>';
+  setTimeout(function(){
+    try{
+      HP_CUTS=hpRunCuts_(best,total,even,hpCutThreshold_());
+      hpRenderCuts_(best);
+    }catch(e){el.innerHTML='<div class="status status-err">'+escHtml(e.message||String(e))+'</div>';}
+  },30);
+}
+function hpRenderCuts_(best){
+  var el=document.getElementById('hpCutsOut');if(!el||!HP_CUTS)return;
+  var C=HP_CUTS;
+  if(!C.rows.length){
+    el.innerHTML='<div class="sb-note">No SKU in this week comes in under '+fmtUnits(C.threshold)+' units. Raise the cut-off to see the smallest ones anyway.</div>';
+    return;
+  }
+  var TH='padding:6px 8px;border:1px solid var(--border);background:var(--surface2);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)';
+  var TD='padding:6px 8px;border:1px solid var(--border);font-size:11px';
+  var h='<div class="sb-note" style="margin-bottom:8px">Priced against <b>'+escHtml(best.name)+'</b>, '+
+    'the cheapest option above. Each row is the whole week re-sequenced without that SKU — so it counts the changeover it saves, '+
+    'not just its run time. Labor only: Sequins holds no material cost, so the real saving is larger.</div>';
+  h+='<table style="border-collapse:collapse;width:100%">';
+  h+='<tr><th style="'+TH+';text-align:left">SKU</th><th style="'+TH+';text-align:right">Units that week</th>'+
+     '<th style="'+TH+';text-align:right">Saved by cutting</th><th style="'+TH+';text-align:left">Knock-on</th></tr>';
+  C.rows.forEach(function(r){
+    var dr=r.risksAfter-r.risksBefore;
+    var note=dr<0?'<span style="color:var(--green)">clears '+(-dr)+' problem'+(dr<-1?'s':'')+'</span>'
+      :dr>0?'<span style="color:var(--amber)">creates '+dr+' more</span>':'<span style="color:var(--muted)">no change</span>';
+    h+='<tr><td style="'+TD+';font-family:var(--mono)">'+escHtml(r.sku)+'</td>'+
+       '<td style="'+TD+';text-align:right">'+fmtUnits(Math.round(r.units))+'</td>'+
+       '<td style="'+TD+';text-align:right"><b style="color:var(--green)">'+sbMoney_(r.saving)+'</b></td>'+
+       '<td style="'+TD+'">'+note+'</td></tr>';
+  });
+  var tot=0;C.rows.forEach(function(r){tot+=r.saving;});
+  h+='<tr style="border-top:2px solid var(--border)"><td style="'+TD+'"><b>All '+C.rows.length+' together</b></td>'+
+     '<td style="'+TD+'"></td><td style="'+TD+';text-align:right"><b style="color:var(--green)">'+sbMoney_(tot)+'</b>'+
+     '<div style="font-size:9px;color:var(--muted)">roughly — each was priced on its own</div></td><td style="'+TD+'"></td></tr>';
+  h+='</table>';
+  el.innerHTML=h;
 }
 function renderHolidayPlanner(){hpRenderControls();if(HP_RESULT)hpRenderResult();}
 
