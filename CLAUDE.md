@@ -239,6 +239,15 @@ Samad's rules, which are hypotheses to validate, not ground truth. If the
 archive contradicts a stated rule, surface the contradiction rather than
 picking a side.
 
+**The archives test a stated rule. They never originate one.** How the
+operation behaves — holidays, shutdowns, shift patterns, staffing norms,
+what the floor actually does — is Cori's and Samad's to state. If nobody
+has stated it, ask and wait; do not open an archive to form the premise.
+Both archives are planning records: a tab or a published plan existing
+means someone built a plan, not that the plant ran. And they start in May
+2026, so they say nothing at all about the winter holidays. Arriving with
+a question is not a worse answer than arriving with a finding.
+
 Reading either: `read_file_content` on Google Sheets truncates around row
 50 and is not reliable. Use `download_file_content` with xlsx export →
 `json.loads(d[0]['text'])` → base64-decode `['content']` → write `.xlsx`
