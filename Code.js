@@ -1,10 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.151 — 2026-10-02    (pairs with Index.html v0.5.219)
+ * Sequins ✨ — Code.js    v0.4.153 — 2026-10-02    (pairs with Index.html v0.5.221)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.151 The weekly UPM update no longer depends on the trigger firing. If the
- *          last run is a week old, the next admin to open Sequins runs it, under
- *          a lock. It had not run since 2026-09-03.
+ * v0.4.153 No server change — paired with Index.html v0.5.221, which stops the
+ *          holiday mix reviving SKUs the forecast dropped.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
