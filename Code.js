@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.163 — 2026-10-02    (pairs with Index.html v0.5.231)
+ * Sequins ✨ — Code.js    v0.4.164 — 2026-10-02    (pairs with Index.html v0.5.232)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.163 No server change — paired with Index.html v0.5.231, which stops the
- *          UPM catch-up clobbering a SKU someone just added.
+ * v0.4.164 No server change — paired with Index.html v0.5.232. An attribute pull
+ *          no longer reverts measured UPMs to the Master Document standard.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
