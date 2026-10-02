@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.167 — 2026-10-02    (pairs with Index.html v0.5.235)
+ * Sequins ✨ — Code.js    v0.4.168 — 2026-10-02    (pairs with Index.html v0.5.236)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.167 No server change — paired with Index.html v0.5.235, which stops a
- *          sandbox swap-in forcing a missing UPM to 15.
+ * v0.4.168 No server change — paired with Index.html v0.5.236, which charges a
+ *          shorter changeover between a USDA pair.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
