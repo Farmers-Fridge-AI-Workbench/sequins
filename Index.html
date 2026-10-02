@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.216 — 2026-10-02    (pairs with Code.js v0.4.148)
+  Sequins ✨ — Index.html    v0.5.217 — 2026-10-02    (pairs with Code.js v0.4.149)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.216 Resync allergens says which rows it SKIPPED. A held row blocks the sync
-           by design, and the result read '✓ updated' either way — so a value
-           that never arrived looked like one that had.
+  v0.5.217 The throughput banner flags a weekly UPM update that is scheduled but
+           has never run, or has gone quiet. It only caught 'not scheduled' and
+           'last run failed' — a job that just stopped looked healthy.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -3554,6 +3554,16 @@ function checkUpmHealth(){
     // that would ever say so.
     if(!bad&&st.weeklyOn===false)bad="The weekly UPM update is not scheduled"+(st.triggerError?(" \u2014 "+st.triggerError):"")+". UPMs will not refresh on their own.";
     if(!bad&&st.last&&st.last.ok===false)bad=st.last.message;
+    // Scheduled, no error, and nothing to show for it. 10 days leaves room for
+    // one missed Sunday before it counts as stopped.
+    if(!bad&&st.weeklyOn!==false){
+      var lastAt=(st.last&&st.last.at)?new Date(st.last.at):null;
+      var ageD=(lastAt&&!isNaN(lastAt.getTime()))?((new Date()-lastAt)/86400000):null;
+      if(ageD===null)
+        bad="The weekly UPM update is scheduled but has never run. UPMs are not refreshing \u2014 open SKU Library and use Throughput trend (90d) to apply them by hand in the meantime.";
+      else if(ageD>10)
+        bad="The weekly UPM update last ran "+Math.round(ageD)+" days ago. It runs Sundays, so it has missed at least one.";
+    }
     if(!bad){el.className="preview-banner";el.innerHTML="";return;}
     el.innerHTML='<span>\u26a0 <b>Throughput data problem</b> \u2014 '+escHtml(bad)+'</span>';
     el.className="preview-banner active";
@@ -4149,7 +4159,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.216';
+var APP_VERSION='v0.5.217';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;

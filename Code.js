@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.148 — 2026-10-02    (pairs with Index.html v0.5.216)
+ * Sequins ✨ — Code.js    v0.4.149 — 2026-10-02    (pairs with Index.html v0.5.217)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.148 No server change — paired with Index.html v0.5.216. syncAllergens_
- *          already returned skipped/skippedList; the client now shows them.
+ * v0.4.149 No server change — paired with Index.html v0.5.217. getUpmAutoStatus
+ *          already returned `last`; the banner now notices when it is stale.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
