@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.234 — 2026-10-02    (pairs with Code.js v0.4.166)
+  Sequins ✨ — Index.html    v0.5.235 — 2026-10-02    (pairs with Code.js v0.4.167)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.234 A SKU with no UPM runs at the average of its package type rather than a
-           flat 15 — which understated small jars by a quarter. The field stays
-           blank and says what is being assumed.
+  v0.5.235 A sandbox swap-in no longer forces a missing UPM to 15. Since v0.5.234
+           the baseline used the package average and the overlay did not, so the
+           report showed a gap that is not on the floor.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4277,7 +4277,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.234';
+var APP_VERSION='v0.5.235';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -5648,8 +5648,10 @@ function sbBuildCtx(c,day,withOverlay,volPlan){
       out.preProcessed=!!st.preProcessed;
       out.capper=!!st.capper;
       out.nightShift=!!st.nightShift;
+      // A stub UPM is a deliberate what-if and wins. Otherwise leave it as the
+      // library has it — blank included — and upmFor_ decides it, the same way
+      // the baseline pass does.
       if(parseFloat(st.upm))out.upm=parseFloat(st.upm);
-      else if(!parseFloat(out.upm))out.upm=15;
       if(st.usdaPairedSku)out.usdaPairedSku=st.usdaPairedSku;
       lib[key]=out;
     });
