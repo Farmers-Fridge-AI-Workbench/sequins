@@ -1,9 +1,10 @@
 /**
- * Sequins ✨ — Code.js    v0.4.156 — 2026-10-02    (pairs with Index.html v0.5.224)
+ * Sequins ✨ — Code.js    v0.4.157 — 2026-10-02    (pairs with Index.html v0.5.225)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.156 The exported holiday Sheet formats its cost columns as currency and
- *          its unit columns with thousands separators.
+ * v0.4.157 The Dec 28 – Jan 3 week loads as Wk 53 · 2026. The forecast still calls
+ *          it Week 1, which by Cori's convention (W1 2027 starts 1/4) is a
+ *          mislabel; it lands on the same label once the source catches up.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -895,16 +896,36 @@ function getLastModified() {
 // calling it Week 53 (-> Wk 53 · 2026). Both sort after Wk 52 · 2026 and both
 // resolve to the same seven days, which is what actually matters downstream.
 // Cori confirmed the convention 2026-10-01.
-function forecastWeekYear_(wkNum, anyDate) {
+// Returns the week number AND the year, because the number itself can be wrong
+// at the turn of the year.
+//
+// Cori, 2026-10-02: "W1 2027 begins 1/4/2027." The Compiled Forecast currently
+// labels the Dec 28 – Jan 3 week as "Week 1", which by that rule is week 53 of
+// 2026. Finance already call it W53 and the forecast is expected to catch up.
+// A week numbered 1 whose MONDAY is still in December is that mislabel, and is
+// renumbered here so Sequins is right before the source is — and so it does not
+// change label once the source is fixed. When the forecast does say Week 53,
+// the ordinary high-number branch lands on exactly the same Wk 53 · 2026.
+//
+// Only this one week is corrected. The forecast’s January weeks look shifted by
+// one for the same reason, but nobody has stated that as a rule and guessing at
+// it would silently renumber weeks people are already planning against.
+function forecastWeekParts_(wkNum, anyDate) {
   const d = (anyDate instanceof Date) ? anyDate : new Date(anyDate);
-  if (!d || isNaN(d.getTime())) return new Date().getFullYear();
+  if (!d || isNaN(d.getTime())) return { wk: parseInt(wkNum, 10), yr: new Date().getFullYear() };
   const dow = d.getDay();                                   // 0 = Sunday
   const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() - (dow === 0 ? 6 : dow - 1));
   const sun = new Date(mon.getFullYear(), mon.getMonth(), mon.getDate() + 6);
-  return (Number(wkNum) <= 4) ? sun.getFullYear() : mon.getFullYear();
+  let wk = parseInt(wkNum, 10);
+  if (wk <= 1 && mon.getMonth() === 11) return { wk: 53, yr: mon.getFullYear() };
+  return { wk: wk, yr: (wk <= 4) ? sun.getFullYear() : mon.getFullYear() };
+}
+function forecastWeekYear_(wkNum, anyDate) {
+  return forecastWeekParts_(wkNum, anyDate).yr;
 }
 function forecastWeekLabel_(wkNum, anyDate) {
-  return 'Wk ' + parseInt(wkNum, 10) + ' · ' + forecastWeekYear_(wkNum, anyDate);
+  const x = forecastWeekParts_(wkNum, anyDate);
+  return 'Wk ' + x.wk + ' · ' + x.yr;
 }
 
 function fetchForecastWeeks() {
@@ -937,12 +958,13 @@ function fetchForecastWeeks() {
   const thisYear = new Date().getFullYear();
   const out = Object.keys(weeks).map(k => {
     const w = weeks[k];
-    const year = w.last ? forecastWeekYear_(w.wkNum, w.last) : thisYear;
+    const parts = w.last ? forecastWeekParts_(w.wkNum, w.last) : { wk: w.wkNum, yr: thisYear };
+    const year = parts.yr;
     if (w.days.length > 7) {
       Logger.log('fetchForecastWeeks: week ' + w.wkNum + ' has ' + w.days.length +
         ' day columns - the same week number may appear twice and they have been merged under ' + year);
     }
-    return { label: 'Wk ' + w.wkNum + ' · ' + year, wkNum: w.wkNum, year, days: w.days };
+    return { label: 'Wk ' + parts.wk + ' · ' + year, wkNum: parts.wk, year, days: w.days };
   });
   return out.sort((a, b) => a.year - b.year || a.wkNum - b.wkNum);
 }
