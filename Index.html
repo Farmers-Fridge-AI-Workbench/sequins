@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.226 — 2026-10-02    (pairs with Code.js v0.4.158)
+  Sequins ✨ — Index.html    v0.5.227 — 2026-10-02    (pairs with Code.js v0.4.159)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.226 A week the forecast has not detailed yet can still be planned — the
-           baseline weeks supply the menu as well as the proportions.
+  v0.5.227 Volume a short day cannot fit moves to the days with room instead of
+           vanishing. What genuinely fits nowhere is stated, not rounded away.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4171,7 +4171,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.226';
+var APP_VERSION='v0.5.227';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -6243,6 +6243,22 @@ function hpDistribute_(total,shares,isOpen){
 // to defer to, the baseline weeks supply the menu as well as the proportions.
 //
 // Per WEEKDAY, not per week: a Saturday mix is not a Monday mix.
+// The engine builds jobs only from SKUs the library knows, that are active, not
+// staged, and not CPG or beverage. The mix was handing units to everything the
+// demand carried, so volume allocated to a SKU that can never be sequenced just
+// evaporated between the split and the plan — CAESAR_PASTA_BOWL alone, absent
+// from the library entirely, was taking 1.92% of every Christmas-week day and
+// building none of it.
+//
+// It also made every day look short, so no day qualified as having room and the
+// rebalance could never fire.
+function hpSequenceable_(k){
+  var m=(STATE.skuLibrary||{})[String(k||'').toUpperCase()];
+  if(!m)return false;
+  if(m.active===false||m.pending)return false;
+  if(isNonAssemblyPkg_(m.packageType||''))return false;
+  return true;
+}
 function hpSkuMix_(label,day){
   var own=((STATE.demand[label]||{})[day]||{}).skus||{},ownTot=0;
   Object.keys(own).forEach(function(k){ownTot+=Number(own[k])||0;});
@@ -6251,6 +6267,7 @@ function hpSkuMix_(label,day){
   weeks.forEach(function(l){
     var dd=(STATE.demand[l]||{})[day];if(!dd||!dd.skus)return;
     Object.keys(dd.skus).forEach(function(k){
+      if(!hpSequenceable_(k))return;              // the engine would drop it anyway
       if(detailed&&!(Number(own[k])>0))return;   // on the menu this week? forecast decides
       var q=Number(dd.skus[k])||0;if(q<=0)return;
       sum[k]=(sum[k]||0)+q;tot+=q;
@@ -6260,6 +6277,7 @@ function hpSkuMix_(label,day){
   if(tot>0)Object.keys(sum).forEach(function(k){shares[k]=sum[k]/tot;});
   if(detailed)Object.keys(own).forEach(function(k){
     if(shares[k]!==undefined)return;             // ordered this week, baseline silent
+    if(!hpSequenceable_(k))return;
     var q=Number(own[k])||0;if(q<=0)return;
     shares[k]=q/ownTot;
   });
@@ -6321,6 +6339,10 @@ function hpRunDay_(label,day,units,state,cut){
   return{day:day,ok:true,units:units,res:res,sum:sum,
     end:sum.latestEnd,crew:planHeadcount_(res.lineState,res.lines),
     labor:lab.sim,target:lab.target,
+    unplacedBySku:(function(){
+      var m={};(res.unplaced||[]).forEach(function(j){m[j.sku]=(m[j.sku]||0)+(Number(j.qty)||0);});
+      return m;
+    })(),
     unplaced:sum.unplaced.length,chain:chainList.length,late:late,ot:ot,
     unplacedList:sum.unplaced,chainList:chainList,
     mixBasis:mix.basis};
@@ -6438,11 +6460,72 @@ function hpBuildOptions_(label){
   }
   return opts;
 }
+// Run an option, then REBALANCE. A day that finishes early still gets its full
+// share of the week on the first pass, cannot fit it, and hands back SKUs the
+// engine could not place — and that volume used to simply vanish from the plan
+// (Cori, 2026-10-02: "why isn’t it re-distributing that volume to a different
+// day?"). It should move, the same way a closed day’s volume moves.
+//
+// So: run every open day, see how much each actually sequenced, hold the short
+// days down to what they managed, push the remainder onto the days with room in
+// proportion to how busy they already are, and run again. Up to five passes,
+// stopping as soon as everything fits — the loop always ends on a run that
+// matches the split being reported, never on an adjustment nobody re-ran.
+//
+// Some volume genuinely cannot be placed anywhere: a SKU blocked by its allergen
+// chain or a capability does not become placeable by being made smaller. That is
+// reported as `unfit` rather than quietly rounded away, because a plan that does
+// not build the whole week total is the one thing this view must not hide.
 function hpRunOption_(label,opt,total,even,cut){
   var shape=hpDayShape_(label,even);
   var st={};
   DAYS_ORDER.forEach(function(d){st[d]=hpState_(opt.states[d]||{});});
+  var open=DAYS_ORDER.filter(function(d){return st[d].open;});
   var split=hpDistribute_(total,shape.shares,function(d){return st[d].open;});
+  var runs={},moved=0,unfit=0,passes=0;
+  for(var pass=0;pass<5;pass++){
+    passes=pass+1;
+    open.forEach(function(d){runs[d]=hpRunDay_(label,d,Math.round(split[d]),st[d],cut);});
+    // A SKU unplaced on EVERY open day is structurally unplaceable — blocked by
+    // its allergen chain or a line capability — and making it smaller will not
+    // help, nor will moving it. Its units are unfit wherever they sit.
+    //
+    // Without this one such SKU makes every day look short, so no day ever
+    // qualifies as having room and nothing rebalances at all. That is what the
+    // shawarma wrap was doing: 426 units a day, every day, for a reason volume
+    // cannot fix.
+    var seen={},everywhere={};
+    open.forEach(function(d){
+      var r=runs[d];if(!r||!r.ok)return;
+      Object.keys(r.unplacedBySku||{}).forEach(function(k){seen[k]=(seen[k]||0)+1;});
+    });
+    var nOpen=0;open.forEach(function(d){var r=runs[d];if(r&&r.ok)nOpen++;});
+    Object.keys(seen).forEach(function(k){if(seen[k]>=nOpen&&nOpen>0)everywhere[k]=true;});
+    var structural=0;
+    open.forEach(function(d){
+      var r=runs[d];if(!r||!r.ok)return;
+      Object.keys(r.unplacedBySku||{}).forEach(function(k){
+        if(everywhere[k])structural+=r.unplacedBySku[k];
+      });
+    });
+    var short=0,held={},room=[];
+    open.forEach(function(d){
+      var r=runs[d];
+      if(!r||!r.ok){room.push(d);return;}
+      var stuck=0;
+      Object.keys(r.unplacedBySku||{}).forEach(function(k){if(everywhere[k])stuck+=r.unplacedBySku[k];});
+      var miss=Math.round(split[d])-Math.round(r.sum.units)-Math.round(stuck);
+      // a day already past its finish time has no room whatever its shortfall
+      if(miss>5){short+=miss;held[d]=Math.round(r.sum.units)+Math.round(stuck);}
+      else if(!r.late.length)room.push(d);
+    });
+    if(!short){unfit=structural;break;}
+    if(!room.length||pass===4){unfit=short+structural;break;}
+    Object.keys(held).forEach(function(d){split[d]=held[d];});
+    var w=0;room.forEach(function(d){w+=shape.shares[d]||0;});
+    room.forEach(function(d){split[d]+=short*((shape.shares[d]||0)/(w||room.length));});
+    moved+=short;
+  }
   var dates={};hpWeekDates_(label).forEach(function(x){dates[x.day]=x.iso;});
   var hol=hpHolidays_();
   var rules=getRules(),rate=ruleNum_(rules,'hourlyRate');
@@ -6454,34 +6537,32 @@ function hpRunOption_(label,opt,total,even,cut){
     });
     capacity+=dayHeads;
     if(!st[d].open){
-      // Nobody is offered work on a dark day.
       lost+=dayHeads;
       days.push({day:d,closed:true,heads:dayHeads});
       return;
     }
-    var r=hpRunDay_(label,d,Math.round(split[d]),st[d],cut);
+    var r=runs[d];
     days.push(r);
-    if(!r.ok)return;
+    if(!r||!r.ok)return;
     labor+=r.labor*rate;
     ot+=r.ot.cost;
     risks+=r.unplaced+r.chain+r.late.length;
     if(hol[dates[d]]){
-      var touched=false;
-      var hc=hpHolidayCost_(r,dates[d],touched);
+      var hc=hpHolidayCost_(r,dates[d],false);
       holiday+=hc.cost;r.holidayWhy=hc.why;
     }
   });
-  // A shift the night before that runs past midnight has touched the holiday.
   DAYS_ORDER.forEach(function(d,i){
     var nxt=DAYS_ORDER[i+1];if(!nxt||!hol[dates[nxt]])return;
     var r=days[i];if(!r||r.closed||!r.ok||!(r.end>1440))return;
-    if(st[nxt].open)return;                 // already charged as an open holiday
+    if(st[nxt].open)return;
     var hc=hpHolidayCost_(r,dates[nxt],true);
     holiday+=hc.cost;r.crossesInto=nxt;r.holidayWhy=hc.why;
   });
   return{name:opt.name,baseline:!!opt.baseline,_states:opt.states||{},days:days,split:split,shape:shape,
     labor:labor,holiday:holiday,ot:ot,total:labor+holiday+ot,
-    lost:lost,offered:capacity-lost,capacity:capacity,risks:risks};
+    lost:lost,offered:capacity-lost,capacity:capacity,risks:risks,
+    moved:moved,unfit:unfit,passes:passes};
 }
 
 
@@ -6690,6 +6771,8 @@ function hpRenderResult(){
     var delta=R.baseline?"<div style=\"font-size:9px;color:var(--muted)\">everything else is measured against this</div>"
       :"<div style=\"font-size:9px;color:var("+(d<0?"--green":"--red")+")\">"+
       (d<0?"saves ":"costs ")+sbMoney_(Math.abs(d))+(d<0?"":" more")+"</div>";
+    var reb=R.moved?('<div style="font-size:9px;color:var(--muted)">'+fmtUnits(Math.round(R.moved))+' units moved to days with room</div>'):"";
+    if(R.unfit)reb+='<div style="font-size:9px;color:var(--red)">'+fmtUnits(Math.round(R.unfit))+' units do not fit anywhere</div>';
     var nf=0;R.days.forEach(function(r){
       hpFlags_(r).forEach(function(f){if(f.kind!=='no allergen data')nf++;});
     });
@@ -6697,7 +6780,7 @@ function hpRenderResult(){
       "<span id=\"hpArrow"+idx+"\">\u25b8</span> "+nf+" thing"+(nf>1?"s":"")+" to look at</div>"
       :"<div style=\"font-size:9px;color:var(--green)\">nothing in the way</div>";
     h+="<tr"+(R.baseline?" style=\"color:var(--teal)\"":"")+">"+
-       "<td style=\""+TD+"\"><b>"+escHtml(R.name)+"</b>"+look+"</td>";
+       "<td style=\""+TD+"\"><b>"+escHtml(R.name)+"</b>"+look+reb+"</td>";
     DAYS_ORDER.forEach(function(x){h+=hpCell_(R,x,!!hol[x]);});
     h+="<td style=\""+TD+";text-align:right\">"+
          "<div style=\"font-family:var(--mono);font-size:13px\">"+R.offered+"</div>"+
