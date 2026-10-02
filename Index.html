@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.215 — 2026-10-01    (pairs with Code.js v0.4.147)
+  Sequins ✨ — Index.html    v0.5.216 — 2026-10-02    (pairs with Code.js v0.4.148)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.215 The lock that protects hand-entered allergens sits beside the allergen
-           field instead of in the far-right column, and only on rows where it
-           changes anything.
+  v0.5.216 Resync allergens says which rows it SKIPPED. A held row blocks the sync
+           by design, and the result read '✓ updated' either way — so a value
+           that never arrived looked like one that had.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -3430,6 +3430,13 @@ function resyncAllergens(){
       var flagged=(r.unknown||0)+(r.notFound||0);
       var msg='\u2713 '+(r.matched||0)+' SKU(s) updated from Menu Library';
       if(flagged)msg='\u26A0 '+(r.matched||0)+' updated, '+flagged+' flagged NO ALLERGEN DATA';
+      // Say what was left untouched, and say why, because 'updated' reads as
+      // 'all of them' otherwise.
+      if(r.skipped){
+        var sl=(r.skippedList||[]);
+        msg+='<br><span style="color:var(--amber)">'+r.skipped+' row(s) held or staged and left untouched'+
+          (sl.length?': '+sl.join(', '):'')+'. The Menu Library value did NOT reach them \u2014 untick <b>held<\/b> beside the allergen field, save, then resync.</span>';
+      }
       if(r.deactivated)msg+='<br><span style="color:var(--muted)">deactivated '+r.deactivated+' SKU(s) no longer on Menu Library\u2019s Active list: '+(r.deactivatedList||[]).join(', ')+'</span>';
       if(r.reactivated)msg+='<br><span style="color:var(--muted)">re-activated '+r.reactivated+' SKU(s) Menu Library still lists as Active</span>';
       // v0.5.151: allergens taken from a non-Active Menu Library row. Reported
@@ -4142,7 +4149,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.215';
+var APP_VERSION='v0.5.216';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;

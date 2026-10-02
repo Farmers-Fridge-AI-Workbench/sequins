@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.147 — 2026-10-01    (pairs with Index.html v0.5.215)
+ * Sequins ✨ — Code.js    v0.4.148 — 2026-10-02    (pairs with Index.html v0.5.216)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.147 No server change — paired with Index.html v0.5.215, which moves that
- *          control next to the field it protects.
+ * v0.4.148 No server change — paired with Index.html v0.5.216. syncAllergens_
+ *          already returned skipped/skippedList; the client now shows them.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
