@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.225 — 2026-10-02    (pairs with Code.js v0.4.157)
+  Sequins ✨ — Index.html    v0.5.226 — 2026-10-02    (pairs with Code.js v0.4.158)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.225 No client change — paired with Code.js v0.4.157, which loads the New
-           Year week as Wk 53 · 2026.
+  v0.5.226 A week the forecast has not detailed yet can still be planned — the
+           baseline weeks supply the menu as well as the proportions.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -628,7 +628,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
           <div><div class="sb-label">Only SKUs under (units/week)</div>
             <input class="sb-input" id="hpCutMax" type="number" min="1" step="100" value="1000" style="width:120px"></div>
-          <button class="btn btn-sm" onclick="hpShowCuts()">What would we save?</button>
+          <button class="btn btn-sm" onclick="hpShowCuts()">What should we ask to cut?</button>
         </div>
         <div id="hpCutsOut" style="margin-top:10px"></div>
       </div></div>
@@ -4171,7 +4171,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.225';
+var APP_VERSION='v0.5.226';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -6227,30 +6227,46 @@ function hpDistribute_(total,shares,isOpen){
 // Per WEEKDAY, not per week: a Saturday mix is not a Monday mix. A SKU the
 // baseline has never seen keeps its share of this week’s forecast, which is the
 // only number there is for it.
+// Two authorities, and a fallback for when the first one is silent.
+//
+//   WHAT runs this week  — the week’s own forecast, when it has SKU detail. Menu
+//                          churn is constant and the Compiled Forecast carries
+//                          it, so a SKU ordered at zero is off the menu.
+//   HOW MUCH of each     — the four non-holiday weeks, so the mix is not learned
+//                          from a distorted week.
+//
+// The holiday weeks furthest out have a week-level placeholder and no SKU rows
+// at all — Compiled has seven filled cells for Dec 28 against 427 for Wk 48. We
+// do not need them (Cori, 2026-10-02: "we’re making up our own in a way, right?").
+// The whole point is that WE hand Demand Planning the split, so a week they have
+// not detailed yet is the normal case this early, not an error. With no forecast
+// to defer to, the baseline weeks supply the menu as well as the proportions.
+//
+// Per WEEKDAY, not per week: a Saturday mix is not a Monday mix.
 function hpSkuMix_(label,day){
   var own=((STATE.demand[label]||{})[day]||{}).skus||{},ownTot=0;
   Object.keys(own).forEach(function(k){ownTot+=Number(own[k])||0;});
-  if(!(ownTot>0))return null;
+  var detailed=ownTot>0&&Object.keys(own).length>1;
   var weeks=hpShapeWeeks_(label).weeks,sum={},tot=0;
   weeks.forEach(function(l){
     var dd=(STATE.demand[l]||{})[day];if(!dd||!dd.skus)return;
     Object.keys(dd.skus).forEach(function(k){
-      if(!(Number(own[k])>0))return;          // not on the menu this week
+      if(detailed&&!(Number(own[k])>0))return;   // on the menu this week? forecast decides
       var q=Number(dd.skus[k])||0;if(q<=0)return;
       sum[k]=(sum[k]||0)+q;tot+=q;
     });
   });
   var shares={};
   if(tot>0)Object.keys(sum).forEach(function(k){shares[k]=sum[k]/tot;});
-  // anything ordered this week the baseline cannot speak for keeps its own share
-  Object.keys(own).forEach(function(k){
-    if(shares[k]!==undefined)return;
+  if(detailed)Object.keys(own).forEach(function(k){
+    if(shares[k]!==undefined)return;             // ordered this week, baseline silent
     var q=Number(own[k])||0;if(q<=0)return;
     shares[k]=q/ownTot;
   });
+  if(!Object.keys(shares).length)return null;
   var t2=0;Object.keys(shares).forEach(function(k){t2+=shares[k];});
   if(t2>0)Object.keys(shares).forEach(function(k){shares[k]=shares[k]/t2;});
-  return{shares:shares,basis:tot>0?"baseline":"week"};
+  return{shares:shares,basis:detailed?"forecast+baseline":"baseline only"};
 }
 // `cut` drops SKUs AFTER the split, so everything else keeps the quantity it
 // would have had. Cutting before would just hand the units to other SKUs and
@@ -6657,6 +6673,10 @@ function hpRenderResult(){
     escHtml(nak.join(", "))+". "+(nak.length>1?"They":"It")+" still run"+(nak.length>1?"":"s")+
     " \u2014 the engine gives "+(nak.length>1?"them":"it")+" the worst case, all six allergens, so "+
     (nak.length>1?"they can":"it can")+" only go last on a line. Same whichever days you close, so it is not counted against any option below.</div>";
+  var noFc=false;
+  HP_RESULT.forEach(function(R){R.days.forEach(function(r){
+    if(r&&r.ok&&r.mixBasis==="baseline only")noFc=true;});});
+  if(noFc)h+="<div class=\"sb-note\" style=\"margin-bottom:8px\">The forecast has no SKU detail for this week yet, so the mix as well as the day split comes from those weeks. Enter the total you want and it will build the rest.</div>";
   h+="<div style=\"overflow-x:auto\"><table style=\"border-collapse:collapse;width:100%\">";
   h+="<tr><th style=\""+TH+";text-align:left\">Option</th>";
   DAYS_ORDER.forEach(function(d){

@@ -1,10 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.157 — 2026-10-02    (pairs with Index.html v0.5.225)
+ * Sequins ✨ — Code.js    v0.4.158 — 2026-10-02    (pairs with Index.html v0.5.226)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.157 The Dec 28 – Jan 3 week loads as Wk 53 · 2026. The forecast still calls
- *          it Week 1, which by Cori's convention (W1 2027 starts 1/4) is a
- *          mislabel; it lands on the same label once the source catches up.
+ * v0.4.158 No server change — paired with Index.html v0.5.226, which plans a week
+ *          the forecast has not detailed yet.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
