@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.236 — 2026-10-02    (pairs with Code.js v0.4.168)
+  Sequins ✨ — Index.html    v0.5.237 — 2026-10-02    (pairs with Code.js v0.4.169)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.236 A USDA pair running back to back is charged 5 minutes of changeover,
-           not 11. Measured across 348 real turns; Samad signed it off.
+  v0.5.237 Slack webhook setup lives in Users. Write-only — the URL is a
+           credential and is never shown back.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -921,6 +921,17 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
     <!-- USERS -->
     <div class="view" id="view-users">
       <div class="page-header"><div><div class="page-title">Users</div><div class="page-sub">Admin and planner access</div></div></div>
+      <div class="card" id="slackCard" style="display:none;margin-bottom:14px">
+        <div class="card-title">Slack notice when demand lands</div>
+        <div class="sb-note" style="margin-bottom:10px">Posts once, to whichever channel the webhook belongs to, as soon as pushed demand is imported and ready to publish. Nothing is sent on a run that imports nothing.</div>
+        <div id="slackStatus" style="margin-bottom:10px"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input type="password" class="form-input" id="slackHookInput" placeholder="https://hooks.slack.com/services/..." style="flex:1;min-width:280px" autocomplete="off">
+          <button class="btn btn-teal btn-sm" onclick="saveSlackHook()">Save</button>
+          <button class="btn btn-ghost btn-sm" onclick="testSlackHook()">Send a test</button>
+          <button class="btn btn-ghost btn-sm" onclick="removeSlackHook()">Remove</button>
+        </div>
+      </div>
       <div class="card-grid">
         <div class="card">
           <div class="card-title">Admins <span style="color:var(--teal)">(full access)</span></div>
@@ -4308,7 +4319,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.236';
+var APP_VERSION='v0.5.237';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4360,6 +4371,57 @@ function updateRule(key,val){if(!STATE.sequencingRules)STATE.sequencingRules=JSO
 function updateRuleList(key,val){if(!STATE.sequencingRules)STATE.sequencingRules=JSON.parse(JSON.stringify(DEFAULT_RULES));STATE.sequencingRules[key]=val.split(',').map(function(s){return s.trim();}).filter(function(s){return!!s;});}
 function saveSequencingRules(){var el=document.getElementById('saveRulesBtn');if(el){el.disabled=true;el.innerHTML='<span class="spinner"></span>Saving…';}google.script.run.withSuccessHandler(function(){if(el){el.disabled=false;el.textContent='Save rules';}renderSequence();}).withFailureHandler(function(){if(el){el.disabled=false;el.textContent='Save rules';}}).saveSequencingRules(getRules());}
 
+// The webhook is a credential and this repo is public, so it is write-only from
+// here: typed in, stored in Script Properties, and never sent back. The status
+// line shows the last six characters so someone can tell WHICH hook is set
+// without being shown it.
+function renderSlackCard(){
+  var card=document.getElementById('slackCard'),el=document.getElementById('slackStatus');
+  if(!card||!el)return;
+  google.script.run.withSuccessHandler(function(st){
+    if(!st||!st.admin){card.style.display='none';return;}
+    card.style.display='';
+    var h='';
+    if(!st.set){
+      h='<div class="status status-warn">No webhook set \u2014 nobody is being told when demand lands.</div>';
+    }else{
+      h='<div class="status status-ok">\u2713 Webhook set (ending \u2026'+escHtml(st.tail)+')</div>';
+      if(st.last){
+        var when=new Date(st.last.at);
+        var ago=isNaN(when.getTime())?'':when.toLocaleString();
+        h+='<div class="sb-note" style="margin-top:6px;color:var('+(st.last.ok?'--muted':'--red')+')">last post: '+
+           escHtml(st.last.message||'')+(ago?(' \u2014 '+escHtml(ago)):'')+'</div>';
+      }
+    }
+    el.innerHTML=h;
+  }).withFailureHandler(function(){card.style.display='none';}).getSlackStatus();
+}
+function saveSlackHook(){
+  var inp=document.getElementById('slackHookInput'),el=document.getElementById('slackStatus');
+  var v=(inp.value||'').trim();
+  if(!v){el.innerHTML='<div class="status status-warn">Paste the webhook URL first.</div>';return;}
+  el.innerHTML='<div class="status status-info"><span class="spinner"></span>Saving\u2026</div>';
+  google.script.run.withSuccessHandler(function(){
+    inp.value='';renderSlackCard();
+  }).withFailureHandler(function(err){
+    el.innerHTML='<div class="status status-err">'+escHtml(err.message||String(err))+'</div>';
+  }).setSlackWebhook(v);
+}
+function testSlackHook(){
+  var el=document.getElementById('slackStatus');
+  el.innerHTML='<div class="status status-info"><span class="spinner"></span>Posting a test\u2026</div>';
+  google.script.run.withSuccessHandler(function(r){
+    if(r&&r.ok)el.innerHTML='<div class="status status-ok">\u2713 Sent \u2014 check the channel.</div>';
+    else el.innerHTML='<div class="status status-err">'+escHtml((r&&r.message)||'failed')+'</div>';
+    setTimeout(renderSlackCard,2500);
+  }).withFailureHandler(function(err){
+    el.innerHTML='<div class="status status-err">'+escHtml(err.message||String(err))+'</div>';
+  }).testSlackWebhook();
+}
+function removeSlackHook(){
+  if(!confirm('Remove the webhook? Nobody will be told when demand lands.'))return;
+  google.script.run.withSuccessHandler(renderSlackCard).withFailureHandler(function(){}).clearSlackWebhook();
+}
 function renderUsers(){google.script.run.withSuccessHandler(function(list){document.getElementById('adminList').innerHTML=list.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removeAdmin(\''+email+'\')">✕</button></div>';}).join('');}).withFailureHandler(function(){}).getAdminListForClient();var planners=STATE.planners||[];document.getElementById('plannerList').innerHTML=planners.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removePlanner(\''+email+'\')">✕</button></div>';}).join('');var floorViewers=STATE.floorViewers||[];document.getElementById('floorViewerList').innerHTML=floorViewers.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removeFloorViewer(\''+email+'\')">✕</button></div>';}).join('');renderExternalViewers();renderPlanEmailSettings();}
 function addAdmin(){var email=document.getElementById('newAdminEmail').value.trim().toLowerCase(),el=document.getElementById('adminStatus');if(email.indexOf('@')===-1)return;google.script.run.withSuccessHandler(function(){document.getElementById('newAdminEmail').value='';renderUsers();el.innerHTML='<div class="status status-ok">✓ Added '+email+'</div>';setTimeout(function(){el.innerHTML='';},3000);}).withFailureHandler(function(err){el.innerHTML='<div class="status status-err">'+err.message+'</div>';}).addAdmin(email);}
 function removeAdmin(email){google.script.run.withSuccessHandler(renderUsers).withFailureHandler(function(){}).removeAdmin(email);}
@@ -7187,7 +7249,7 @@ function switchView(name,btn){
   if(name==='demand'){loadForecastWeeks();renderLoadedDemand();}
   if(name==='skus'){renderSkuLibrary();loadObservedHc_();checkUpmHealth();}
   if(name==='lines'){renderLineConfig();renderRules();renderRulesAccess();renderLegend();}
-  if(name==='users')renderUsers();
+  if(name==='users'){renderUsers();renderSlackCard();}
   if(name==='sequence'){document.querySelector('.main').classList.remove('wb-active');renderSequence();}
   if(name==='workbench'){document.querySelector('.main').classList.add('wb-active');renderWorkbench();}
   if(name==='myline')initMyLine();

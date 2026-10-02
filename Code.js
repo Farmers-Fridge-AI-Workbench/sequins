@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.168 — 2026-10-02    (pairs with Index.html v0.5.236)
+ * Sequins ✨ — Code.js    v0.4.169 — 2026-10-02    (pairs with Index.html v0.5.237)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.168 No server change — paired with Index.html v0.5.236, which charges a
- *          shorter changeover between a USDA pair.
+ * v0.4.169 Slack notice when pushed demand lands, so nobody has to message Samad
+ *          and Matt by hand. Webhook lives in Script Properties, never the repo.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -1516,6 +1516,8 @@ function importPushedDemand() {
 
   if (imported) {
     writeAuditLog_(user.email, 'import_pushed_demand', '', '', imported + ' days from Assembly Summary');
+    // Courtesy, not the job — postSlack_ swallows its own failures.
+    try { notifyPushedDemand_(plan.items); } catch (e) { Logger.log('notifyPushedDemand_: ' + e.message); }
   }
   Logger.log('importPushedDemand: ' + imported + ' day(s) imported; ' +
              plan.items.filter(function(i) { return i.action === 'skip'; }).length + ' skipped');
@@ -4168,6 +4170,92 @@ function exportHolidayPlan(payload) {
 
   try { writeAuditLog_(user.email, 'export_holiday_plan', p.week, '', ss.getId()); } catch (e) {}
   return { url: ss.getUrl(), name: ss.getName() };
+}
+
+// ─── SLACK NOTIFY (v0.4.169) ─────────────────────────────────────────────────
+// Cori messages Samad and Matt by hand whenever pushed demand lands and is ready
+// to publish. She is away from 2026-10-09, so it has to happen without her.
+//
+// Hung on importPushedDemand rather than on a timer or on the Planner side. The
+// Planner pushes and never learns whether the import succeeded, so anything sent
+// from there would be announcing a hope. This fires on the one event that means
+// the data is actually in: a day written into the demand store.
+//
+// The webhook URL is a CREDENTIAL and this repo is public, so it lives in Script
+// Properties and is never returned to the client — getSlackStatus says whether
+// one is set and how the last post went, never what it is.
+const SLACK_WEBHOOK_KEY = 'slackWebhookUrl';
+const SLACK_LAST_KEY    = 'slackLastResult';
+
+function setSlackWebhook(url) {
+  if (!getCurrentUser().isAdmin) throw new Error('Not authorized');
+  const u = String(url || '').trim();
+  if (!u) throw new Error('Paste the webhook URL first.');
+  if (!/^https:\/\/hooks\.slack\.com\//.test(u)) {
+    throw new Error('That is not a Slack webhook. It should start https://hooks.slack.com/');
+  }
+  PropertiesService.getScriptProperties().setProperty(SLACK_WEBHOOK_KEY, u);
+  writeAuditLog_(getCurrentUser().email, 'slack_webhook_set', '', '', '');
+  return { ok: true };
+}
+function clearSlackWebhook() {
+  if (!getCurrentUser().isAdmin) throw new Error('Not authorized');
+  PropertiesService.getScriptProperties().deleteProperty(SLACK_WEBHOOK_KEY);
+  writeAuditLog_(getCurrentUser().email, 'slack_webhook_cleared', '', '', '');
+  return { ok: true };
+}
+function getSlackStatus() {
+  if (!getCurrentUser().isAdmin) return { admin: false };
+  const sp = PropertiesService.getScriptProperties();
+  const url = sp.getProperty(SLACK_WEBHOOK_KEY) || '';
+  let last = null;
+  try { last = JSON.parse(sp.getProperty(SLACK_LAST_KEY) || 'null'); } catch (e) {}
+  // Only ever the tail, so someone can confirm WHICH hook without reading it.
+  return { admin: true, set: !!url, tail: url ? url.slice(-6) : '', last: last };
+}
+
+// Posts, records how it went, and NEVER throws into the caller. A notification
+// failing must not take down the import that triggered it — the demand landing
+// is the job, telling people is the courtesy.
+function postSlack_(text) {
+  const sp = PropertiesService.getScriptProperties();
+  const url = sp.getProperty(SLACK_WEBHOOK_KEY);
+  const stamp = { at: new Date().toISOString(), ok: false, message: '' };
+  if (!url) { stamp.message = 'no webhook set'; sp.setProperty(SLACK_LAST_KEY, JSON.stringify(stamp)); return stamp; }
+  try {
+    const res = UrlFetchApp.fetch(url, {
+      method: 'post', contentType: 'application/json',
+      payload: JSON.stringify({ text: text }), muteHttpExceptions: true
+    });
+    const code = res.getResponseCode();
+    stamp.ok = (code === 200);
+    stamp.message = stamp.ok ? 'sent' : ('Slack returned ' + code + ': ' + res.getContentText().slice(0, 120));
+  } catch (e) {
+    stamp.message = e.message;
+  }
+  sp.setProperty(SLACK_LAST_KEY, JSON.stringify(stamp));
+  Logger.log('postSlack_: ' + stamp.message);
+  return stamp;
+}
+function testSlackWebhook() {
+  const user = getCurrentUser();
+  if (!user.isAdmin) throw new Error('Not authorized');
+  return postSlack_(':white_check_mark: Test from Sequins — sent by ' + user.email + '. This is what the demand notice will look like.');
+}
+
+// One message per import, never one per day: the trigger runs every 15 minutes
+// and a backfill can land several days at once. A run that imported nothing says
+// nothing at all.
+function notifyPushedDemand_(items) {
+  const done = (items || []).filter(function(i) { return i.action !== 'skip'; });
+  if (!done.length) return;
+  const lines = done.map(function(i) {
+    const units = i.units ? ('  —  ' + Math.round(i.units).toLocaleString('en-US') + ' units') : '';
+    return '  •  ' + i.day + ' ' + i.date + '  (' + i.weekLabel + ')' + units;
+  });
+  const url = getWebAppUrl();
+  postSlack_('*Demand is in Sequins and ready to publish*\n' + lines.join('\n') +
+             (url ? ('\n<' + url + '|Open Sequins>') : ''));
 }
 
 function getWebAppUrl() {
