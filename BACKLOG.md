@@ -4,11 +4,38 @@ Open items only. Delete an entry when it's done — git history is the record,
 this file is the "what's still hanging" list. Each entry should stand alone:
 enough context to act on without the conversation that created it.
 
-Opened 2026-08-19. Last refreshed 2026-09-03.
+Opened 2026-08-19. Last refreshed 2026-10-02.
 
 ---
 
 ## Ready to build
+
+### Pick Pack labor share — the last hole in Holiday Planning
+
+Every other lever in Holiday Planning is real. The early-finish times are not:
+they are whatever hour someone types, with no idea whether Pick Pack needs the
+people that day. Cori, 2026-10-01: "this ‘end early’ for assembly will end up
+being predicated on whether Pick Pack needs our labor share (which I haven’t
+discussed with you much yet — it’s related to curfew)."
+
+Needs her to say what sharing actually does to assembly on a shared day — heads
+off the lines, or a hard finish time — and whether it is a fixed weekday or set
+per plan. The seam is `hpState_`: a day already carries `earlyFinish` and
+`lateStart`, so a labor-share rule would set those rather than add a new lever.
+
+### A forecast week that is dated but not filled in
+
+Written, tested, NOT shipped — Cori, 2026-10-02: "we can just wait a few days."
+
+`fetchForecastWeekData` only creates a day when it finds a positive quantity, so
+a week the forecast has dated and not yet filled comes back empty: nothing to
+preview, nothing stored, and it never reaches the Holiday picker. That is the
+New Year week today — Compiled carries seven placeholder cells for Dec 28 – Jan 3
+against 427 for Wk 48.
+
+One line seeds the day from the date columns instead. Worth shipping only if
+Compiled still has not filled that week in when she wants to plan it; if it has,
+this is unnecessary. The patch is in the 2026-10-02 session if it is wanted.
 
 ### Finish the tablet pass on My Line
 
@@ -37,13 +64,38 @@ real device or a decision:
 
 ## Small, mine to do
 
-_Nothing queued._
+### WRAP_SHAWARMA_CHICKPEA cannot be placed on any day
+
+Declares [soy, wheat, sesame] and cannot extend the compounding chain on LINE-2
+or LINE-3 — every eligible line already carries an allergen it lacks. About 426
+units a day, every day, in every week checked. Its allergen data is complete, so
+this is a genuine chain problem rather than a data gap.
+
+Note it published fine for 59 days across 87 archived rows, always LINE-2, never
+marked overridden — so something about the current mix changed, not the SKU.
+Worth a look before November. Cori’s 10-minute-clean argument (see CLAUDE.md,
+allergen compounding) would dissolve it if Samad reopened that rule.
 
 ---
 
 ## Blocked on Cori
 
-_Nothing queued._
+### CAESAR_PASTA_BOWL has no UPM
+
+Launches 2026-10-12 taking part of CRUNCHY_THAI_BOWL’s volume — 49,412 units from
+Wk 42 on. Nothing has a rate for it: not the Master Document, and no runs in the
+Data Drop. The engine falls back to the 16oz jar average, currently about 19,
+and the SKU Library row says so in amber.
+
+Comparable 16oz jars measured over 90 days: PESTO_PASTA_BOWL 23.1 (the other
+pasta bowl, closest build), CRUNCHY_THAI_BOWL 14.0 (the one it replaces). Nine
+units a minute apart is about 32 hours of line time on that volume. Samad or
+Menu to call it.
+
+BUFFALO_CHICKEN_WRAP is the same question with a worse sample: 7.8 measured from
+two days and 359 units, against 91,066 units from Wk 42. The weekly job will
+replace it with a real average once it has run; Cori accepted that rather than a
+minimum sample size — "we’re okay keeping up with ourselves."
 
 Dropped 2026-08-31: the **go-live date for sandbox-only lines**. Cori: "for now
 we will just turn it on when it's time." The manual `sandboxOnly` checkbox is

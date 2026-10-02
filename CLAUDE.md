@@ -120,6 +120,37 @@ Sequins web app UI — those are fine for error surfacing.
 - Night shift runs the restricted SKU list only
 - No night shift Fridays or Saturdays
 
+**Holidays — settled 2026-10-02 by Cori:**
+
+- **We close.** Thanksgiving, Christmas and New Year are real closures, not
+  reduced days. Do not infer otherwise from the archives — see "The archives
+  test a stated rule" below.
+- Demand Planning gives a **week total**; Sequins decides the day split and
+  which days go dark. That inverts every other view, which takes demand as
+  given. Shelf life is not a constraint on this model.
+- **Holiday pay is 2x.** Through 2026 a shift that touches a holiday at all pays
+  everyone a full shift at that rate, which is why being dark on the day wins.
+  That rule LAPSES for 2027, so 1/1/2027 is 2x on hours actually worked — which
+  is why staying open that day is reasonable and closing Thanksgiving is not.
+- **A two-day closure is Thursday + Friday.** Crews A and B split on those days,
+  so closing the holiday plus the day before gives one crew both days off and
+  the other none.
+- Closing a day closes **every** line on it, night shift included. Night Shift 1
+  runs Sun–Thu, so Christmas and New Year (both Fridays) are already night-free
+  and only Thanksgiving is affected.
+- Cori’s standing preferences: Thanksgiving dark; Christmas Eve early finish and
+  Christmas dark; New Year’s Eve half day and New Year’s Day open with a late
+  start. Early finish and late start are **inputs**, not baked into the presets.
+
+**Changeover — settled 2026-10-02:**
+
+- 11 minutes, charged between **every** consecutive SKU. That is the measured
+  median across 7,837 real turns in the Data Drop, so it is right.
+- **A USDA pair back-to-back costs 5 minutes**, measured across 348 turns and
+  signed off by Samad. Applied through `changeoverFor_`, which every site that
+  charges changeover must use — placement and the reported clock disagreeing is
+  how phantom gaps appear in the Sandbox.
+
 **Home lines are config, not code — settled 2026-08-31:**
 
 - Wraps and sandwiches have **soft home-line preferences**, stored in
@@ -152,6 +183,12 @@ do not parse.
 - **SKU Library is the source of truth for assembly.** SKUs not in the
   library don't get sequenced. The library governs sequencing behavior,
   not data ingestion.
+- **An assumption must never look like entered data.** A SKU with no UPM runs at
+  its package-type average, but the field stays blank and the row says what is
+  being assumed. Same shape as "No import" vs "no allergens": the moment a
+  derived value sits in the box, the gap stops being visible and nobody fills it
+  in. Measured UPMs are the standard — an attribute pull FILLS a blank UPM and
+  never replaces one.
 - **Historical actuals are frozen evidentiary records.** Never overwrite.
   The freeze is date-aware: past days are frozen, today and future are
   re-fetchable. No manual unfreeze for historical days.
