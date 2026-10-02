@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.153 — 2026-10-02    (pairs with Index.html v0.5.221)
+ * Sequins ✨ — Code.js    v0.4.155 — 2026-10-02    (pairs with Index.html v0.5.223)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.153 No server change — paired with Index.html v0.5.221, which stops the
- *          holiday mix reviving SKUs the forecast dropped.
+ * v0.4.155 No server change — paired with Index.html v0.5.223, which folds the
+ *          Holiday view into Sandbox as a tab.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -4072,6 +4072,59 @@ function _wrColName_(n) {
 // it describes.
 // The deployed web-app URL, for the "open the plan" link in the email. Only
 // the server can resolve it; the client caches it after load.
+// Holiday Planning produces an ask for Demand Planning, and an ask has to leave
+// the app. A Sheet rather than Slides because the useful half is a column of
+// numbers somebody will paste into a plan — Slides would make it a picture of
+// numbers. Cori, 2026-10-02.
+//
+// A NEW file each time, named for the week and the moment. These are proposals;
+// overwriting last week’s would destroy the record of what was proposed when,
+// and nothing here is the system of record anyway.
+//
+// The client does the modelling — the engine lives there — so this takes the
+// finished rows and only writes them. It invents no numbers of its own.
+function exportHolidayPlan(payload) {
+  const user = getCurrentUser();
+  if (!user.isAdmin && !user.canEditRules) throw new Error('Not authorized');
+  const p = (typeof payload === 'string') ? JSON.parse(payload) : (payload || {});
+  if (!p.week || !p.options || !p.options.length) throw new Error('Nothing to export — run the options first.');
+
+  const stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm');
+  const ss = SpreadsheetApp.create('Holiday Plan — ' + p.week + ' — ' + stamp);
+  const sh = ss.getSheets()[0];
+  sh.setName('Options');
+
+  const rows = [];
+  rows.push(['Holiday plan', p.week, '', '', '', '', '', '', '', '', '']);
+  rows.push(['Holiday', p.holiday || '', '', 'Week total', p.total || '', '', 'Evenness', p.even == null ? '' : p.even, '', 'Built', stamp]);
+  rows.push(['Day split and mix from', (p.shapeWeeks || []).join(', '), '', p.shapeBasis || '', '', '', '', '', '', 'By', user.email || '']);
+  rows.push([]);
+
+  const DAYS = p.days || [];
+  rows.push(['Option'].concat(DAYS).concat(['Shifts worked', 'Shifts lost', 'Labor', 'Holiday pay', 'Total', 'vs baseline']));
+  p.options.forEach(function(o) {
+    rows.push([o.name].concat((o.split || []).map(function(v) { return v === null ? 'closed' : v; }))
+      .concat([o.offered, o.lost, o.labor, o.holiday, o.total, o.baseline ? '' : o.delta]));
+  });
+  rows.push([]);
+
+  // The whole point of the export: the daily numbers to hand back.
+  rows.push(['TO SEND DEMAND PLANNING', p.pick ? p.pick.name : '']);
+  rows.push(['Day', 'Date', 'Units']);
+  if (p.pick && p.pick.rows) p.pick.rows.forEach(function(r) { rows.push([r.day, r.date, r.units]); });
+
+  const width = rows.reduce(function(m, r) { return Math.max(m, r.length); }, 0);
+  const padded = rows.map(function(r) { while (r.length < width) r.push(''); return r; });
+  sh.getRange(1, 1, padded.length, width).setValues(padded);   // one write
+  sh.getRange(1, 1, 1, width).setFontWeight('bold');
+  sh.getRange(5, 1, 1, width).setFontWeight('bold');
+  sh.setFrozenRows(5);
+  for (let i = 1; i <= width; i++) sh.autoResizeColumn(i);
+
+  try { writeAuditLog_(user.email, 'export_holiday_plan', p.week, '', ss.getId()); } catch (e) {}
+  return { url: ss.getUrl(), name: ss.getName() };
+}
+
 function getWebAppUrl() {
   try { return ScriptApp.getService().getUrl() || ''; }
   catch (e) { return ''; }

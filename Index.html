@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.221 — 2026-10-02    (pairs with Code.js v0.4.153)
+  Sequins ✨ — Index.html    v0.5.223 — 2026-10-02    (pairs with Code.js v0.4.155)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.221 The week's forecast decides WHAT runs; the four clean weeks only decide
-           the proportions. The baseline could revive a SKU ordered at zero and
-           build it. An option is never listed twice.
+  v0.5.223 Holiday is a tab inside Sandbox, not its own sidebar item — same kind
+           of thing, and the sidebar was getting a row per idea. Export to a
+           Sheet added.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -401,7 +401,6 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
       <div id="workbenchNav" style="display:none"><button class="nav-item" onclick="switchView('workbench',this)"><span class="icon">🔧</span>Workbench</button></div>
       <div id="sandboxNav" style="display:none"><button class="nav-item" onclick="switchView('sandbox',this)"><span class="icon">🧪</span>Sandbox</button></div>
       <div id="linePlannerNav" style="display:none"><button class="nav-item" onclick="switchView('lineplanner',this)"><span class="icon">📐</span>Line Planner</button></div>
-      <div id="holidayNav" style="display:none"><button class="nav-item" onclick="switchView('holiday',this)"><span class="icon">🎄</span>Holiday</button></div>
     </div>
     <div class="nav-spacer"></div>
     <div class="sidebar-section" id="myLineNav" style="display:none">
@@ -615,12 +614,15 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
     </div>
 
     <!-- LOAD DEMAND -->
-    <div class="view" id="view-holiday">
-      <div class="sb-banner">HOLIDAY PLANNING — nothing here publishes, and nothing here changes demand. It produces the daily split to send Demand Planning.</div>
-      <div class="page-header" style="margin-bottom:14px">
-        <div><div class="page-title">Holiday Planning</div><div class="page-sub">Give the week’s total and it works out which days are worth closing.</div></div>
+    <div class="view" id="view-sandbox">
+      <div class="sb-banner">SANDBOX — nothing here publishes. Nothing here changes SKU Library, Line Config or demand.</div>
+      <div style="display:flex;gap:6px;margin-bottom:12px">
+        <button class="btn btn-sm" id="sbTabWhatIf" onclick="sbTab('whatif')">🧪 What-if</button>
+        <button class="btn btn-ghost btn-sm" id="sbTabHoliday" onclick="sbTab('holiday')">🎄 Holiday</button>
       </div>
+      <div id="sbHolidayPanel" style="display:none">
       <div class="card" id="hpControls"></div>
+      <div id="hpExportOut" style="margin-top:10px"></div>
       <div class="card" id="hpOut" style="margin-top:12px"></div>
       <div class="card" id="hpCuts" style="margin-top:12px">
         <div class="card-title">Worth cutting for the week?</div>
@@ -630,11 +632,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           <button class="btn btn-sm" onclick="hpShowCuts()">What would we save?</button>
         </div>
         <div id="hpCutsOut" style="margin-top:10px"></div>
-      </div>
-    </div>
-
-    <div class="view" id="view-sandbox">
-      <div class="sb-banner">SANDBOX — nothing here publishes. Nothing here changes SKU Library, Line Config or demand.</div>
+      </div></div>
+      <div id="sbWhatIfPanel">
       <div class="page-header" style="margin-bottom:14px">
         <div><div class="page-title">Sandbox</div><div class="page-sub">Model a what-if against a real day — swap SKUs in and out, then read the constraint report.</div></div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
@@ -723,6 +722,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           <span id="sbRunNote" class="sb-note"></span>
         </div>
         <div id="sbReport" style="display:flex;flex-direction:column;gap:12px"></div>
+      </div>
       </div>
     </div>
     <!-- LINE PLANNER -->
@@ -4172,7 +4172,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.221';
+var APP_VERSION='v0.5.223';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -6510,6 +6510,7 @@ function hpRenderControls(){
           '<option value="1">perfectly flat</option>'+
         '</select></div>'+
       '<button class="btn btn-teal btn-sm" id="hpGo" onclick="hpRun()">Show options</button>'+
+      '<button class="btn btn-sm" onclick="hpExport()" title="Writes the comparison and the daily split to a new Google Sheet">Export to a Sheet</button>'+
     '</div>'+
     '<div class="sb-note" style="margin-top:8px">Demand Planning gives the week total; this works out which days are worth closing. '+
       'A closed day’s volume spreads across the days that stay open, in proportion to how busy they already are. '+
@@ -6534,6 +6535,7 @@ function hpRun(){
       HP_RESULT=opts.map(function(o){return hpRunOption_(HP_WEEK,o,total,even);});
       HP_CUTS=null;
       var ce=document.getElementById('hpCutsOut');if(ce)ce.innerHTML='';
+      var xe=document.getElementById('hpExportOut');if(xe)xe.innerHTML='';
       hpRenderResult();
     }catch(e){
       out.innerHTML='<div class="status status-err">'+escHtml(e.message||String(e))+'</div>';
@@ -6768,6 +6770,75 @@ function hpRenderCuts_(best){
   h+='</table>';
   el.innerHTML=h;
 }
+// Export. The ask that leaves the app — the comparison, and underneath it the
+// daily numbers to hand Demand Planning. The server only writes what is passed;
+// the engine runs here, so the Sheet can never disagree with the screen.
+//
+// Exports the CHEAPEST option as the recommendation, which is the row the table
+// already sorts to the top under baseline. Nothing is picked that she has not
+// already seen ranked.
+function hpExportPayload_(){
+  if(!HP_RESULT||!HP_RESULT.length)return null;
+  var base=null;HP_RESULT.forEach(function(R){if(R.baseline)base=R;});
+  if(!base)base=HP_RESULT[0];
+  var rest=HP_RESULT.filter(function(R){return R!==base;}).sort(function(a,b){return a.total-b.total;});
+  var pick=rest.length?rest[0]:base;
+  var dates={};hpWeekDates_(HP_WEEK).forEach(function(x){dates[x.day]=x.iso;});
+  function split(R){
+    return DAYS_ORDER.map(function(d,i){
+      var r=R.days[i];
+      return (r&&r.closed)?null:Math.round(R.split[d]||0);
+    });
+  }
+  var hols=hpWeekHolidays_(HP_WEEK);
+  return{
+    week:HP_WEEK,
+    holiday:hols.map(function(x){return hpHolidayName_(x.iso)+' '+x.iso;}).join(', '),
+    total:Math.round(parseFloat((document.getElementById('hpTotal')||{}).value)||0),
+    even:(document.getElementById('hpEven')||{}).value,
+    shapeWeeks:base.shape.weeks,
+    shapeBasis:base.shape.basis==='actual'?'what actually ran':base.shape.basis,
+    days:DAYS_ORDER.map(function(d){return DAY_SHORT[d];}),
+    options:[base].concat(rest).map(function(R){
+      return{name:R.name,baseline:!!R.baseline,split:split(R),
+        offered:R.offered,lost:R.lost,
+        labor:Math.round(R.labor),holiday:Math.round(R.holiday),total:Math.round(R.total),
+        delta:Math.round(R.total-base.total)};
+    }),
+    pick:{name:pick.name,rows:DAYS_ORDER.map(function(d,i){
+      var r=pick.days[i];
+      return{day:d,date:dates[d]||'',units:(r&&r.closed)?'closed':Math.round(pick.split[d]||0)};
+    })}
+  };
+}
+function hpExport(){
+  var el=document.getElementById('hpExportOut');
+  var pl=hpExportPayload_();
+  if(!pl){if(el)el.innerHTML='<div class="status status-warn">Run the options first.</div>';return;}
+  if(el)el.innerHTML='<div class="status status-info"><span class="spinner"></span>Building the Sheet…</div>';
+  google.script.run.withSuccessHandler(function(r){
+    if(!el)return;
+    el.innerHTML='<div class="status status-ok">\u2713 <a href="'+escHtml(r.url)+'" target="_blank" style="color:var(--teal)">'+escHtml(r.name)+'</a> — opens in Drive</div>';
+  }).withFailureHandler(function(err){
+    if(el)el.innerHTML='<div class="status status-err">'+escHtml(err.message||String(err))+'</div>';
+  }).exportHolidayPlan(JSON.stringify(pl));
+}
+// Holiday lives inside Sandbox rather than as its own sidebar item (Cori,
+// 2026-10-02). They are the same kind of thing — model something that is not
+// happening, read what it would cost, publish nothing — and the sidebar was
+// getting a row per idea.
+var SB_TAB='whatif';
+function sbTab(which){
+  SB_TAB=which;
+  var wi=document.getElementById('sbWhatIfPanel'),ho=document.getElementById('sbHolidayPanel');
+  var bw=document.getElementById('sbTabWhatIf'),bh=document.getElementById('sbTabHoliday');
+  var on=which==='holiday';
+  if(wi)wi.style.display=on?'none':'';
+  if(ho)ho.style.display=on?'':'none';
+  if(bw)bw.className=on?'btn btn-ghost btn-sm':'btn btn-sm';
+  if(bh)bh.className=on?'btn btn-sm':'btn btn-ghost btn-sm';
+  if(on)renderHolidayPlanner();
+}
 function renderHolidayPlanner(){hpRenderControls();if(HP_RESULT)hpRenderResult();}
 
 function viewAllowed_(name){
@@ -6776,7 +6847,6 @@ function viewAllowed_(name){
     case 'workbench': return !!(u.isAdmin||u.isPlanner||u.canEditRules);
     case 'sandbox':   return !!(u.isAdmin||u.canEditRules);
     case 'lineplanner': return !!(u.isAdmin||u.canEditRules);
-    case 'holiday':   return !!(u.isAdmin||u.canEditRules);
     case 'myline':    return !!(u.isAdmin||u.isFloorViewer);
     case 'demand': case 'skus': case 'lines': case 'users':
                       return !!(u.isAdmin||u.isPlanner||u.canEditRules);
@@ -6800,7 +6870,6 @@ function switchView(name,btn){
   if(name==='myline')initMyLine();
   if(name==='sandbox')loadSandboxes();
   if(name==='lineplanner')renderLinePlanner();
-  if(name==='holiday')renderHolidayPlanner();
 }
 
 function renderDayStrip(containerId){
@@ -8304,7 +8373,6 @@ function setPreviewRole(role){
   document.getElementById('adminNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.isPlanner||CURRENT_USER.canEditRules)?'':'none';
   document.getElementById('workbenchNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.isPlanner||CURRENT_USER.canEditRules)?'':'none';
   document.getElementById('sandboxNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.canEditRules)?'':'none';
-  document.getElementById('holidayNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.canEditRules)?'':'none';
   document.getElementById('linePlannerNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.canEditRules)?'':'none';
   document.getElementById('linePlannerNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.canEditRules)?'':'none';
   document.getElementById('myLineNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.isFloorViewer)?'':'none';
@@ -8324,7 +8392,6 @@ function exitPreviewRole(){
   document.getElementById('adminNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.isPlanner||CURRENT_USER.canEditRules)?'':'none';
   document.getElementById('workbenchNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.isPlanner||CURRENT_USER.canEditRules)?'':'none';
   document.getElementById('sandboxNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.canEditRules)?'':'none';
-  document.getElementById('holidayNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.canEditRules)?'':'none';
   document.getElementById('myLineNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.isFloorViewer)?'':'none';
   var sel=document.getElementById('previewRoleSel');if(sel)sel.value='';
   renderRulesAccess();
@@ -8348,8 +8415,7 @@ window.onload=function(){
     document.getElementById('userDisplay').textContent=user.name;
     if(user.isAdmin||user.isPlanner||user.canEditRules)document.getElementById('adminNav').style.display='';
     if(user.isAdmin||user.isPlanner||user.canEditRules)document.getElementById('workbenchNav').style.display='';
-    if(user.isAdmin||user.canEditRules)document.getElementById('sandboxNav').style.display='';
-    if(user.isAdmin||user.canEditRules)document.getElementById('holidayNav').style.display='';
+    if(user.isAdmin||user.canEditRules)document.getElementById('sandboxNav').style.display='';
     if(user.isAdmin||user.canEditRules)document.getElementById('linePlannerNav').style.display='';
     if(user.isAdmin||user.isFloorViewer)document.getElementById('myLineNav').style.display='';
     applyFloorOnlyChrome_();
