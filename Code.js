@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.169 — 2026-10-02    (pairs with Index.html v0.5.237)
+ * Sequins ✨ — Code.js    v0.4.170 — 2026-10-02    (pairs with Index.html v0.5.238)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.169 Slack notice when pushed demand lands, so nobody has to message Samad
- *          and Matt by hand. Webhook lives in Script Properties, never the repo.
+ * v0.4.170 The demand notice uses Cori's own wording — just the date and that it
+ *          is available. No units, week label or link.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -4246,15 +4246,36 @@ function testSlackWebhook() {
 // One message per import, never one per day: the trigger runs every 15 minutes
 // and a backfill can land several days at once. A run that imported nothing says
 // nothing at all.
+// Cori’s own wording, which she has been sending by hand for months:
+//
+//     9/30 is available in Sequins ✨
+//
+// No units, no week label, no finish times. She asked for the date and the fact,
+// and a notice people actually read beats one that carries everything it could.
+// v0.4.169 shipped my version of this; this is hers, plus the link she liked —
+// on its own line so the sentence stays intact.
+//
+// One message per import, never one per day. Three pushes land on a Friday at
+// different times, so three messages is expected and correct — what would be
+// wrong is three messages for one import. A run that imports nothing says
+// nothing.
 function notifyPushedDemand_(items) {
-  const done = (items || []).filter(function(i) { return i.action !== 'skip'; });
+  const done = (items || []).filter(function(i) { return i.action !== 'skip' && i.date; });
   if (!done.length) return;
-  const lines = done.map(function(i) {
-    const units = i.units ? ('  —  ' + Math.round(i.units).toLocaleString('en-US') + ' units') : '';
-    return '  •  ' + i.day + ' ' + i.date + '  (' + i.weekLabel + ')' + units;
+  const seen = {}, dates = [];
+  done.forEach(function(i) {
+    // yyyy-mm-dd -> m/d, the way she writes it
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(i.date));
+    const label = m ? (parseInt(m[2], 10) + '/' + parseInt(m[3], 10)) : String(i.date);
+    if (seen[label]) return;
+    seen[label] = true; dates.push(label);
   });
+  let list;
+  if (dates.length === 1) list = dates[0] + ' is';
+  else if (dates.length === 2) list = dates[0] + ' and ' + dates[1] + ' are';
+  else list = dates.slice(0, -1).join(', ') + ' and ' + dates[dates.length - 1] + ' are';
   const url = getWebAppUrl();
-  postSlack_('*Demand is in Sequins and ready to publish*\n' + lines.join('\n') +
+  postSlack_(list + ' available in Sequins :sparkles:' +
              (url ? ('\n<' + url + '|Open Sequins>') : ''));
 }
 
