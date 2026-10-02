@@ -1,9 +1,10 @@
 /**
- * Sequins ✨ — Code.js    v0.4.164 — 2026-10-02    (pairs with Index.html v0.5.232)
+ * Sequins ✨ — Code.js    v0.4.165 — 2026-10-02    (pairs with Index.html v0.5.233)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.164 No server change — paired with Index.html v0.5.232. An attribute pull
- *          no longer reverts measured UPMs to the Master Document standard.
+ * v0.4.165 Applying measured UPMs stores them to a tenth and compares against
+ *          that. It compared rounded but stored raw, so a value already within
+ *          a tenth kept its eleven decimal places forever.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -1935,9 +1936,18 @@ function applyObservedUpm_(days, actor) {
     const m = lib[key];
     if (!m || m.active === false || m.pending) return;
     if (NON_ASSEMBLY_PACKAGE_RE.test(String(m.packageType || '').trim())) return;
-    const before = parseFloat(m.upm), after = obs.skus[k].upm;
-    if (!isFinite(after) || after <= 0) return;
-    if (isFinite(before) && Math.round(before * 10) === Math.round(after * 10)) return;
+    const before = parseFloat(m.upm), raw = obs.skus[k].upm;
+    if (!isFinite(raw) || raw <= 0) return;
+    // Store the figure to a tenth, and compare against THAT.
+    //
+    // This used to compare Math.round(before*10) with Math.round(after*10) and
+    // then store `after` raw. So a library value of 16.31309524 against a
+    // measured 16.3 looked identical, the row was skipped, and the eleven
+    // decimal places stayed. Only SKUs whose measurement had moved by a tenth
+    // or more were ever tidied, which is why re-applying appeared to do nothing
+    // to the long values.
+    const after = Math.round(raw * 10) / 10;
+    if (isFinite(before) && before === after) return;
     m.upm = after;
     changes.push([new Date().toISOString(), actor, key, isFinite(before) ? before : '', after,
                   obs.skus[k].runs, obs.skus[k].dayCount, obs.window]);

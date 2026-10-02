@@ -1,10 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.232 — 2026-10-02    (pairs with Code.js v0.4.164)
+  Sequins ✨ — Index.html    v0.5.233 — 2026-10-02    (pairs with Code.js v0.4.165)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.232 Pull attributes FILLS a blank UPM instead of replacing a measured one.
-           It was reverting the whole observed-UPM adoption to Master Document
-           standards. A button puts the measured figures back.
+  v0.5.233 No client change — paired with Code.js v0.4.165, which stores measured
+           UPMs to a tenth instead of leaving long values in place.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4233,7 +4232,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.232';
+var APP_VERSION='v0.5.233';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
