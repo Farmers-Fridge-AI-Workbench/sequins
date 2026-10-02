@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.162 — 2026-10-02    (pairs with Index.html v0.5.230)
+ * Sequins ✨ — Code.js    v0.4.163 — 2026-10-02    (pairs with Index.html v0.5.231)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.162 No server change — paired with Index.html v0.5.230, which lifts the
- *          missing-demand finding to the top of Workbench.
+ * v0.4.163 No server change — paired with Index.html v0.5.231, which stops the
+ *          UPM catch-up clobbering a SKU someone just added.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────

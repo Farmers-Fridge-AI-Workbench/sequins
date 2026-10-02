@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.230 — 2026-10-02    (pairs with Code.js v0.4.162)
+  Sequins ✨ — Index.html    v0.5.231 — 2026-10-02    (pairs with Code.js v0.4.163)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.230 Demand that never reaches the sequencer is said at the TOP of Workbench
-           with the SKUs named. It was only ever in a collapsed card at the
-           bottom, under the line cards.
+  v0.5.231 The weekly UPM catch-up merges its result instead of replacing the SKU
+           Library — it was overwriting a SKU added seconds earlier. An inactive,
+           empty row can be removed.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -3590,9 +3590,21 @@ function checkUpmHealth(){
     var cu=st.caughtUp||{};
     if(cu.ran&&cu.ok){
       el.innerHTML='<div class="status status-ok">\u2713 UPMs refreshed just now \u2014 '+escHtml(cu.message||"")+'</div>';
+      // MERGE the refreshed UPMs. v0.5.219 replaced STATE.skuLibrary with the
+      // server copy outright, which raced anything the user was doing in this
+      // view: pull attributes, add a SKU, edit a row. Cori added
+      // CAESAR_PASTA_BOWL, watched it save, and watched it disappear — the
+      // stale copy landed on top of it and the next save would have persisted
+      // the loss. A background refresh must never overwrite the thing in front
+      // of someone.
       if(typeof renderSkuLibrary==="function"){
         google.script.run.withSuccessHandler(function(state){
-          if(state&&state.skuLibrary){STATE.skuLibrary=state.skuLibrary;renderSkuLibrary();}
+          var fresh=state&&state.skuLibrary;if(!fresh)return;
+          Object.keys(fresh).forEach(function(k){
+            if(!STATE.skuLibrary[k])return;          // added here, not there — leave it
+            if(fresh[k]&&fresh[k].upm!==undefined)STATE.skuLibrary[k].upm=fresh[k].upm;
+          });
+          renderSkuLibrary();
         }).withFailureHandler(function(){}).getState();
       }
       return;
@@ -3904,11 +3916,38 @@ function allergenCell_(key,m){
   }
   return h;
 }
+function skuIsDeadRow_(m){
+  if(!m)return false;
+  if(m.active!==false)return false;                 // only ever an inactive row
+  if(m.pending)return false;
+  if(String(m.packageType||'').trim())return false;
+  if(parseFloat(m.upm)>0)return false;
+  if(!isAllergenUnknown_(m.allergens))return false;
+  return true;
+}
+function deleteSkuRow(key){
+  var m=STATE.skuLibrary[key];
+  if(!m)return;
+  if(!skuIsDeadRow_(m)){alert(key+' still carries data — not removing it.');return;}
+  if(!confirm('Remove '+key+' from the SKU Library?\n\nIt is inactive and has no package, UPM or allergens. This cannot be undone from here.'))return;
+  delete STATE.skuLibrary[key];
+  var el=document.getElementById('skuLibStatus');
+  if(el)el.innerHTML='<div class="status status-info"><span class="spinner"></span>Removing '+escHtml(key)+'…</div>';
+  google.script.run.withSuccessHandler(function(){
+    renderSkuLibrary();
+    if(el)el.innerHTML='<div class="status status-ok">✓ Removed '+escHtml(key)+'</div>';
+  }).withFailureHandler(function(err){
+    if(el)el.innerHTML='<div class="status status-err">⚠ Not removed: '+escHtml(err.message||String(err))+'</div>';
+  }).saveSkuLibrary(STATE.skuLibrary);
+}
 function stagingCell_(key,m){
   if(!m.pending){
     // The lock lives beside the allergen field now — see allergenCell_. This
     // column only reports, so a row with nothing to report stays quiet.
     if(m.locallyAuthored)return '<span style="font-family:var(--mono);font-size:10px;color:var(--amber)" title="Allergens held in Sequins, exempt from the nightly sync. The tick is next to the allergen field.">locally authored</span>';
+    if(skuIsDeadRow_(m))return '<span style="font-family:var(--mono);font-size:10px;color:var(--red);cursor:pointer;text-decoration:underline" '+
+      'title="Inactive, with no package, UPM or allergens. Nothing uses it; it only shows up in the not-found warning after an attribute pull." '+
+      'onclick="deleteSkuRow(\''+key+'\')">remove</span>';
     return '<span style="color:var(--muted);font-size:11px">\u2014</span>';
   }
   var mm=skuMissing_(Object.assign({__key:key},m));
@@ -4193,7 +4232,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.230';
+var APP_VERSION='v0.5.231';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
