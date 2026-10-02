@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.228 — 2026-10-02    (pairs with Code.js v0.4.160)
+  Sequins ✨ — Index.html    v0.5.229 — 2026-10-02    (pairs with Code.js v0.4.161)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.228 Demand on SKUs Sequins cannot sequence is named and counted rather
-           than quietly left out of every option.
+  v0.5.229 A SKU thin on any single day is a cut candidate too, not only one small
+           across the whole week.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -626,8 +626,10 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
       <div class="card" id="hpCuts" style="margin-top:12px">
         <div class="card-title">Worth cutting for the week?</div>
         <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap">
-          <div><div class="sb-label">Only SKUs under (units/week)</div>
-            <input class="sb-input" id="hpCutMax" type="number" min="1" step="100" value="1000" style="width:120px"></div>
+          <div><div class="sb-label">Under (units/week)</div>
+            <input class="sb-input" id="hpCutMax" type="number" min="0" step="100" value="1000" style="width:110px"></div>
+          <div><div class="sb-label">…or under (on any day)</div>
+            <input class="sb-input" id="hpCutDayMax" type="number" min="0" step="25" value="100" style="width:110px" title="A SKU can look fine across the week and still be barely worth a changeover on one day. Zero turns this off."></div>
           <button class="btn btn-sm" onclick="hpShowCuts()">What should we ask to cut?</button>
         </div>
         <div id="hpCutsOut" style="margin-top:10px"></div>
@@ -4171,7 +4173,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.228';
+var APP_VERSION='v0.5.229';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -6857,33 +6859,49 @@ function hpRenderResult(){
 // Labor only. Sequins has no material or packaging cost, so this is the floor
 // of the saving, never the whole of it.
 var HP_CUTS=null;
+// A SKU can look fine across the week and still be barely worth setting up on a
+// given day — a ham sandwich at 90 units costs the same changeover as one at
+// 900 (Cori, 2026-10-02). So the week total and the thinnest single day are both
+// kept, and either can put a SKU on the list.
 function hpWeekSkuTotals_(R){
-  var tot={};
+  var tot={},thin={};
   DAYS_ORDER.forEach(function(d,i){
     var r=R.days[i];if(!r||r.closed||!r.ok)return;
     var sk=hpScaleSkus_(HP_WEEK,d,Math.round(R.split[d]));
     if(!sk)return;
-    Object.keys(sk).forEach(function(k){tot[k]=(tot[k]||0)+sk[k];});
+    Object.keys(sk).forEach(function(k){
+      tot[k]=(tot[k]||0)+sk[k];
+      if(!thin[k]||sk[k]<thin[k].units)thin[k]={day:d,units:sk[k]};
+    });
   });
-  return tot;
+  return{tot:tot,thin:thin};
 }
-function hpRunCuts_(R,total,even,threshold){
-  var weekSku=hpWeekSkuTotals_(R),out=[];
-  var cands=Object.keys(weekSku).filter(function(k){return weekSku[k]<=threshold;});
+function hpRunCuts_(R,total,even,wkMax,dayMax){
+  var w=hpWeekSkuTotals_(R),weekSku=w.tot,thin=w.thin,out=[];
+  var cands=Object.keys(weekSku).filter(function(k){
+    if(wkMax>0&&weekSku[k]<=wkMax)return true;
+    if(dayMax>0&&thin[k]&&thin[k].units<dayMax)return true;
+    return false;
+  });
   cands.sort(function(a,b){return weekSku[a]-weekSku[b];});
-  // Cap the work: each candidate is another whole week through the engine.
+  // Each candidate is another whole week through the engine, so cap the work.
   cands.slice(0,12).forEach(function(k){
     var cut={};cut[k]=true;
     var alt=hpRunOption_(HP_WEEK,{name:R.name,states:R._states||{},baseline:false},total,even,cut);
-    out.push({sku:k,units:weekSku[k],saving:R.total-alt.total,
+    out.push({sku:k,units:weekSku[k],thin:thin[k]||null,saving:R.total-alt.total,
+      why:(wkMax>0&&weekSku[k]<=wkMax)?'small all week':'thin on a day',
       risksBefore:R.risks,risksAfter:alt.risks});
   });
   out.sort(function(a,b){return b.saving-a.saving;});
-  return{rows:out,considered:cands.length,threshold:threshold};
+  return{rows:out,considered:cands.length,wkMax:wkMax,dayMax:dayMax};
 }
 function hpCutThreshold_(){
   var v=parseFloat((document.getElementById('hpCutMax')||{}).value);
   return (v>0)?v:1000;
+}
+function hpCutDayThreshold_(){
+  var v=parseFloat((document.getElementById('hpCutDayMax')||{}).value);
+  return (v>0)?v:0;
 }
 function hpShowCuts(){
   if(!HP_RESULT)return;
@@ -6896,7 +6914,7 @@ function hpShowCuts(){
   el.innerHTML='<div class="status status-info"><span class="spinner"></span>Re-running the week without each candidate…</div>';
   setTimeout(function(){
     try{
-      HP_CUTS=hpRunCuts_(best,total,even,hpCutThreshold_());
+      HP_CUTS=hpRunCuts_(best,total,even,hpCutThreshold_(),hpCutDayThreshold_());
       hpRenderCuts_(best);
     }catch(e){el.innerHTML='<div class="status status-err">'+escHtml(e.message||String(e))+'</div>';}
   },30);
@@ -6914,7 +6932,7 @@ function hpRenderCuts_(best){
     'the cheapest option above. Each row is the whole week re-sequenced without that SKU — so it counts the changeover it saves, '+
     'not just its run time. Labor only: Sequins holds no material cost, so the real saving is larger.</div>';
   h+='<table style="border-collapse:collapse;width:100%">';
-  h+='<tr><th style="'+TH+';text-align:left">SKU</th><th style="'+TH+';text-align:right">Units that week</th>'+
+  h+='<tr><th style="'+TH+';text-align:left">SKU</th><th style="'+TH+';text-align:right">Units that week</th><th style="'+TH+';text-align:right" title="The smallest single day this SKU runs in the week. A changeover costs the same whatever the run is worth.">Thinnest day</th>'+
      '<th style="'+TH+';text-align:right">Saved by cutting</th><th style="'+TH+';text-align:left" title="Cutting a SKU re-sequences the whole week. This says whether that clears a problem elsewhere or causes one.">What else changes</th></tr>';
   C.rows.forEach(function(r){
     var dr=r.risksAfter-r.risksBefore;
@@ -6922,12 +6940,13 @@ function hpRenderCuts_(best){
       :dr>0?'<span style="color:var(--amber)">creates '+dr+' more</span>':'<span style="color:var(--muted)">nothing else moves</span>';
     h+='<tr><td style="'+TD+';font-family:var(--mono)">'+escHtml(r.sku)+'</td>'+
        '<td style="'+TD+';text-align:right">'+fmtUnits(Math.round(r.units))+'</td>'+
+       '<td style="'+TD+';text-align:right">'+(r.thin?(fmtUnits(Math.round(r.thin.units))+'<div style="font-size:9px;color:var(--muted)">'+DAY_SHORT[r.thin.day]+'</div>'):'\u2014')+'</td>'+
        '<td style="'+TD+';text-align:right"><b style="color:var(--green)">'+sbMoney_(r.saving)+'</b></td>'+
        '<td style="'+TD+'">'+note+'</td></tr>';
   });
   var tot=0;C.rows.forEach(function(r){tot+=r.saving;});
   h+='<tr style="border-top:2px solid var(--border)"><td style="'+TD+'"><b>All '+C.rows.length+' together</b></td>'+
-     '<td style="'+TD+'"></td><td style="'+TD+';text-align:right"><b style="color:var(--green)">'+sbMoney_(tot)+'</b>'+
+     '<td style="'+TD+'"></td><td style="'+TD+'"></td><td style="'+TD+';text-align:right"><b style="color:var(--green)">'+sbMoney_(tot)+'</b>'+
      '<div style="font-size:9px;color:var(--muted)">roughly — each was priced on its own</div></td><td style="'+TD+'"></td></tr>';
   h+='</table>';
   el.innerHTML=h;
