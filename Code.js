@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.159 — 2026-10-02    (pairs with Index.html v0.5.227)
+ * Sequins ✨ — Code.js    v0.4.160 — 2026-10-02    (pairs with Index.html v0.5.228)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.159 No server change — paired with Index.html v0.5.227, which rebalances
- *          volume off a day that cannot fit it.
+ * v0.4.160 No server change — paired with Index.html v0.5.228, which names demand
+ *          that cannot be sequenced.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────

@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.227 — 2026-10-02    (pairs with Code.js v0.4.159)
+  Sequins ✨ — Index.html    v0.5.228 — 2026-10-02    (pairs with Code.js v0.4.160)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.227 Volume a short day cannot fit moves to the days with room instead of
-           vanishing. What genuinely fits nowhere is stated, not rounded away.
+  v0.5.228 Demand on SKUs Sequins cannot sequence is named and counted rather
+           than quietly left out of every option.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4171,7 +4171,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.227';
+var APP_VERSION='v0.5.228';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -6157,6 +6157,42 @@ function hpShapeWeeks_(target){
 }
 // Share of the week per day, pulled toward flat by `even` (0 = as it runs,
 // 1 = perfectly flat). Pick Tock's lever, same idea.
+// The PLANNED week first, because a SKU launching mid-season is exactly the one
+// this catches: CAESAR_PASTA_BOWL is zero in the August baseline and 3,437 in
+// Wk 52, taking over part of CRUNCHY_THAI_BOWL from the week of 10/12. Reading
+// only the baseline would report nothing. Falls back to the baseline average for
+// a week the forecast has not detailed yet.
+function hpExcluded_(label){
+  var tot={},own=STATE.demand[label]||{},any=false;
+  DAYS_ORDER.forEach(function(d){
+    var dd=own[d];if(!dd||!dd.skus)return;
+    Object.keys(dd.skus).forEach(function(k){
+      var q=Number(dd.skus[k])||0;if(q<=0)return;
+      any=true;
+      if(hpSequenceable_(k))return;
+      tot[k]=(tot[k]||0)+q;
+    });
+  });
+  if(!any){
+    var weeks=hpShapeWeeks_(label).weeks;
+    if(!weeks.length)return [];
+    weeks.forEach(function(l){
+      DAYS_ORDER.forEach(function(d){
+        var dd=(STATE.demand[l]||{})[d];if(!dd||!dd.skus)return;
+        Object.keys(dd.skus).forEach(function(k){
+          if(hpSequenceable_(k))return;
+          tot[k]=(tot[k]||0)+((Number(dd.skus[k])||0)/weeks.length);
+        });
+      });
+    });
+  }
+  return Object.keys(tot).map(function(k){
+    var m=(STATE.skuLibrary||{})[k.toUpperCase()];
+    var why=!m?'not in the SKU Library'
+      :(m.active===false?'inactive':(m.pending?'still staged':'not an assembly SKU'));
+    return{sku:k,units:tot[k],why:why};
+  }).sort(function(a,b){return b.units-a.units;});
+}
 function hpDayShape_(target,even){
   var pick=hpShapeWeeks_(target),sum={},tot=0,out={shares:{},weeks:pick.weeks,basis:pick.basis};
   if(!pick.weeks.length){
@@ -6754,6 +6790,14 @@ function hpRenderResult(){
     escHtml(nak.join(", "))+". "+(nak.length>1?"They":"It")+" still run"+(nak.length>1?"":"s")+
     " \u2014 the engine gives "+(nak.length>1?"them":"it")+" the worst case, all six allergens, so "+
     (nak.length>1?"they can":"it can")+" only go last on a line. Same whichever days you close, so it is not counted against any option below.</div>";
+  var exc=hpExcluded_(HP_WEEK);
+  if(exc.length){
+    var excTot=0;exc.forEach(function(x){excTot+=x.units;});
+    h+="<div class=\"sb-note\" style=\"margin-bottom:8px;color:var(--amber)\">"+
+      fmtUnits(Math.round(excTot))+" units a week sit on SKUs Sequins cannot sequence, so they are not in any option here \u2014 "+
+      escHtml(exc.slice(0,6).map(function(x){return x.sku+" ("+x.why+")";}).join(", "))+
+      (exc.length>6?"\u2026":"")+". They will not build in normal sequencing either.</div>";
+  }
   var noFc=false;
   HP_RESULT.forEach(function(R){R.days.forEach(function(r){
     if(r&&r.ok&&r.mixBasis==="baseline only")noFc=true;});});
