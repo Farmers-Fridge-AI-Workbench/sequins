@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.238 — 2026-10-02    (pairs with Code.js v0.4.170)
+  Sequins ✨ — Index.html    v0.5.240 — 2026-10-02    (pairs with Code.js v0.4.172)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.238 No client change — paired with Code.js v0.4.170, which shortens the
-           demand notice to the date and the fact.
+  v0.5.240 The Slack card shows the link the notice carries, and takes the app's
+           real /exec address.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -925,6 +925,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         <div class="card-title">Slack notice when demand lands</div>
         <div class="sb-note" style="margin-bottom:10px">Posts once, to whichever channel the webhook belongs to, as soon as pushed demand is imported and ready to publish. Nothing is sent on a run that imports nothing.</div>
         <div id="slackStatus" style="margin-bottom:10px"></div>
+        <div id="appUrlRow" style="margin-bottom:10px"></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
           <input type="password" class="form-input" id="slackHookInput" placeholder="https://hooks.slack.com/services/..." style="flex:1;min-width:280px" autocomplete="off">
           <button class="btn btn-teal btn-sm" onclick="saveSlackHook()">Save</button>
@@ -4319,7 +4320,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.238';
+var APP_VERSION='v0.5.240';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4394,7 +4395,30 @@ function renderSlackCard(){
       }
     }
     el.innerHTML=h;
+    renderAppUrl_(st);
   }).withFailureHandler(function(){card.style.display='none';}).getSlackStatus();
+}
+// The link the notice carries, on screen next to the hook. It was wrong for weeks
+// because nothing ever showed it.
+function renderAppUrl_(st){
+  var row=document.getElementById('appUrlRow');if(!row)return;
+  var u=(st&&st.appUrl)||'';
+  var h=(st&&st.appUrlSet)
+    ? '<div class="sb-note">Links to <a href="'+escHtml(u)+'" target="_blank" style="color:var(--teal)">'+escHtml(u)+'</a></div>'
+    : '<div class="status status-warn">No address set, so the notice is guessing \u2014 and the guess is a dead deployment. Paste the <b>/exec</b> URL from Deploy \u203a Manage deployments.</div>';
+  h+='<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">'+
+     '<input type="text" class="form-input" id="appUrlInput" placeholder="https://script.google.com/.../exec" style="flex:1;min-width:280px" autocomplete="off">'+
+     '<button class="btn btn-teal btn-sm" onclick="saveAppUrl()">Save address</button></div>';
+  row.innerHTML=h;
+}
+function saveAppUrl(){
+  var inp=document.getElementById('appUrlInput'),el=document.getElementById('slackStatus');
+  var v=(inp&&inp.value||'').trim();
+  if(!v){el.innerHTML='<div class="status status-warn">Paste the /exec URL first.</div>';return;}
+  el.innerHTML='<div class="status status-info"><span class="spinner"></span>Saving\u2026</div>';
+  google.script.run.withSuccessHandler(function(){renderSlackCard();}).withFailureHandler(function(err){
+    el.innerHTML='<div class="status status-err">'+escHtml(err.message||String(err))+'</div>';
+  }).setAppUrl(v);
 }
 function saveSlackHook(){
   var inp=document.getElementById('slackHookInput'),el=document.getElementById('slackStatus');

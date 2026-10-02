@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.170 — 2026-10-02    (pairs with Index.html v0.5.238)
+ * Sequins ✨ — Code.js    v0.4.172 — 2026-10-02    (pairs with Index.html v0.5.240)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.170 The demand notice uses Cori's own wording — just the date and that it
- *          is available. No units, week label or link.
+ * v0.4.172 The Slack link opens Sequins. getUrl() was handing back a deployment
+ *          nobody can load, so the app is told its address in Users instead.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -4211,7 +4211,10 @@ function getSlackStatus() {
   let last = null;
   try { last = JSON.parse(sp.getProperty(SLACK_LAST_KEY) || 'null'); } catch (e) {}
   // Only ever the tail, so someone can confirm WHICH hook without reading it.
-  return { admin: true, set: !!url, tail: url ? url.slice(-6) : '', last: last };
+  // appUrl is the link the notice carries. It was broken for weeks because
+  // nothing ever showed it — so now the card does.
+  return { admin: true, set: !!url, tail: url ? url.slice(-6) : '', last: last,
+           appUrl: getWebAppUrl(), appUrlSet: !!sp.getProperty(APP_URL_KEY) };
 }
 
 // Posts, records how it went, and NEVER throws into the caller. A notification
@@ -4279,7 +4282,35 @@ function notifyPushedDemand_(items) {
              (url ? ('\n<' + url + '|Open Sequins>') : ''));
 }
 
+// ScriptApp.getService().getUrl() is NOT the address anyone opens. On 2026-10-02
+// the Slack link landed on "Sorry, unable to open the file at this time" because
+// getUrl() returned a THIRD deployment id — neither @HEAD nor the versioned /exec
+// the floor and planners load. Same script, dead address.
+//
+// So the app is told its own address once, by an admin, in Users. A deployment id
+// IS the app url and this repo is public, so it lives in Script Properties and not
+// in this file. getUrl() stays only as the fallback for an install that has not
+// set one.
+const APP_URL_KEY = 'webAppUrl';
+const APP_URL_RE  = /^https:\/\/script\.google\.com\/(?:a\/)?(?:macros\/)?(?:[^\/]+\/)?(?:macros\/)?s\/[A-Za-z0-9_-]+\/exec$/;
+
+function setAppUrl(url) {
+  if (!getCurrentUser().isAdmin) throw new Error('Not authorized');
+  const u = String(url || '').trim().split('?')[0].split('#')[0];
+  if (!u) throw new Error('Paste the /exec URL first.');
+  if (!APP_URL_RE.test(u)) {
+    throw new Error('That should end in /exec \u2014 copy it from Deploy \u203a Manage deployments.');
+  }
+  PropertiesService.getScriptProperties().setProperty(APP_URL_KEY, u);
+  writeAuditLog_(getCurrentUser().email, 'app_url_set', '', '', '');
+  return { ok: true };
+}
+
 function getWebAppUrl() {
+  try {
+    const stored = PropertiesService.getScriptProperties().getProperty(APP_URL_KEY);
+    if (stored) return stored;
+  } catch (e) {}
   try { return ScriptApp.getService().getUrl() || ''; }
   catch (e) { return ''; }
 }
