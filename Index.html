@@ -1,10 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.217 — 2026-10-02    (pairs with Code.js v0.4.149)
+  Sequins ✨ — Index.html    v0.5.219 — 2026-10-02    (pairs with Code.js v0.4.151)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.217 The throughput banner flags a weekly UPM update that is scheduled but
-           has never run, or has gone quiet. It only caught 'not scheduled' and
-           'last run failed' — a job that just stopped looked healthy.
+  v0.5.219 The weekly UPM refresh actually happens: if the trigger has not run in
+           a week, opening SKU Library runs it. No banner anywhere — the red bar
+           across every page is gone.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -381,7 +381,6 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 </style>
 </head>
 <body>
-<div class="preview-banner" id="upmFlag" style="background:rgba(239,68,68,.12);border-bottom-color:var(--red);color:var(--red);cursor:default"></div>
 <div class="preview-banner" id="previewBanner">
   <span id="previewBannerText">Previewing as —</span>
   <button onclick="exitPreviewRole()">Exit Preview</button>
@@ -844,6 +843,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
              resync findings were 46 rows off-screen — invisible unless you
              filtered the list short enough to scroll past. A flag nobody sees
              is not a flag. -->
+        <div id="upmFlag" style="margin-bottom:10px"></div>
         <div id="skuLibStatus" style="margin-bottom:10px"></div>
         <div style="overflow-x:auto">
           <table class="data-table"><thead><tr>
@@ -3544,29 +3544,42 @@ function applyFloorOnlyChrome_(){
   var nav=document.querySelector('#myLineNav .nav-item');
   switchView('myline',nav||null);
 }
+// Admins only — getUpmAutoStatus returns {admin:false} to everyone else, so the
+// floor never sees any of this. It reports four distinct failures: the feed is
+// unhealthy, the job is not scheduled, its last run errored, or it is scheduled
+// and has quietly stopped.
+//
+// Shown as a dot on the SKU Library nav and a line inside that view. It used to
+// be a red bar across the top of every page, which is a fire alarm for something
+// that is only ever a maintenance task.
+// Admins only — getUpmAutoStatus returns {admin:false} to everyone else, so the
+// floor never sees any of this.
+//
+// Nothing is drawn outside SKU Library. There was a red bar pinned across every
+// page; a weekly maintenance job missing a Sunday is not an outage, and dressing
+// it as one costs the floor its trust in the tool.
+//
+// Calling this also triggers the server-side catch-up, so opening SKU Library is
+// what refreshes the UPMs when the weekly job has not.
 function checkUpmHealth(){
-  var el=document.getElementById("upmFlag");if(!el)return;
+  var el=document.getElementById("upmFlag");
   google.script.run.withSuccessHandler(function(st){
-    if(!st||!st.admin){el.className="preview-banner";return;}
-    var bad=(st.health&&!st.health.ok)?st.health.message:"";
-    // A weekly job that never got scheduled is exactly as silent as a feed that
-    // stopped, and with the status card gone this banner is the only thing left
-    // that would ever say so.
-    if(!bad&&st.weeklyOn===false)bad="The weekly UPM update is not scheduled"+(st.triggerError?(" \u2014 "+st.triggerError):"")+". UPMs will not refresh on their own.";
-    if(!bad&&st.last&&st.last.ok===false)bad=st.last.message;
-    // Scheduled, no error, and nothing to show for it. 10 days leaves room for
-    // one missed Sunday before it counts as stopped.
-    if(!bad&&st.weeklyOn!==false){
-      var lastAt=(st.last&&st.last.at)?new Date(st.last.at):null;
-      var ageD=(lastAt&&!isNaN(lastAt.getTime()))?((new Date()-lastAt)/86400000):null;
-      if(ageD===null)
-        bad="The weekly UPM update is scheduled but has never run. UPMs are not refreshing \u2014 open SKU Library and use Throughput trend (90d) to apply them by hand in the meantime.";
-      else if(ageD>10)
-        bad="The weekly UPM update last ran "+Math.round(ageD)+" days ago. It runs Sundays, so it has missed at least one.";
+    if(!el)return;
+    if(!st||!st.admin){el.innerHTML="";return;}
+    var cu=st.caughtUp||{};
+    if(cu.ran&&cu.ok){
+      el.innerHTML='<div class="status status-ok">\u2713 UPMs refreshed just now \u2014 '+escHtml(cu.message||"")+'</div>';
+      if(typeof renderSkuLibrary==="function"){
+        google.script.run.withSuccessHandler(function(state){
+          if(state&&state.skuLibrary){STATE.skuLibrary=state.skuLibrary;renderSkuLibrary();}
+        }).withFailureHandler(function(){}).getState();
+      }
+      return;
     }
-    if(!bad){el.className="preview-banner";el.innerHTML="";return;}
-    el.innerHTML='<span>\u26a0 <b>Throughput data problem</b> \u2014 '+escHtml(bad)+'</span>';
-    el.className="preview-banner active";
+    var bad=(st.health&&!st.health.ok)?st.health.message:"";
+    if(!bad&&st.last&&st.last.ok===false)bad=st.last.message;
+    if(!bad&&cu.error)bad="The UPM refresh could not run: "+cu.error;
+    el.innerHTML=bad?('<div class="status status-warn">'+escHtml(bad)+'</div>'):"";
   }).withFailureHandler(function(){}).getUpmAutoStatus();
 }
 function applyObservedUpm(){
@@ -4159,7 +4172,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.217';
+var APP_VERSION='v0.5.219';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -6756,7 +6769,7 @@ function switchView(name,btn){
   if(btn)btn.classList.add('active');
   var mainEl=document.querySelector('.main');if(mainEl)mainEl.scrollTop=0;
   if(name==='demand'){loadForecastWeeks();renderLoadedDemand();}
-  if(name==='skus'){renderSkuLibrary();loadObservedHc_();}
+  if(name==='skus'){renderSkuLibrary();loadObservedHc_();checkUpmHealth();}
   if(name==='lines'){renderLineConfig();renderRules();renderRulesAccess();renderLegend();}
   if(name==='users')renderUsers();
   if(name==='sequence'){document.querySelector('.main').classList.remove('wb-active');renderSequence();}
@@ -8315,8 +8328,6 @@ window.onload=function(){
     if(user.isAdmin||user.canEditRules)document.getElementById('sandboxNav').style.display='';
     if(user.isAdmin||user.canEditRules)document.getElementById('holidayNav').style.display='';
     if(user.isAdmin||user.canEditRules)document.getElementById('linePlannerNav').style.display='';
-    // v0.5.181: the throughput-data flag, once per load, admins only.
-    checkUpmHealth();
     if(user.isAdmin||user.isFloorViewer)document.getElementById('myLineNav').style.display='';
     applyFloorOnlyChrome_();
     if(user.isAdmin)document.getElementById('previewNav').style.display='';

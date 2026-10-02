@@ -1,9 +1,10 @@
 /**
- * Sequins ✨ — Code.js    v0.4.149 — 2026-10-02    (pairs with Index.html v0.5.217)
+ * Sequins ✨ — Code.js    v0.4.151 — 2026-10-02    (pairs with Index.html v0.5.219)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.149 No server change — paired with Index.html v0.5.217. getUpmAutoStatus
- *          already returned `last`; the banner now notices when it is stale.
+ * v0.4.151 The weekly UPM update no longer depends on the trigger firing. If the
+ *          last run is a week old, the next admin to open Sequins runs it, under
+ *          a lock. It had not run since 2026-09-03.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -1839,8 +1840,40 @@ function dataDropHealth() {
   return out;
 }
 
-// What the admin banner reads. Live health AND how the last weekly run went — a
-// job that failed on Sunday is exactly as invisible as a feed that stopped.
+// Cori, 2026-10-02: "I need for it to refresh on its own once a week."
+//
+// The time-based trigger is the intended mechanism and it has not produced a run
+// since 2026-09-03 — four Sundays. Reporting that over and over is not the job;
+// refreshing the UPMs is. So the weekly update no longer depends on Apps Script
+// firing: if the last recorded run is a week old, the next admin to open Sequins
+// runs it. The trigger stays as the normal path and this is the backstop.
+//
+// Under a lock, because two admins opening the app together would otherwise both
+// read the Data Drop and both write. tryLock rather than waitLock: if another
+// run already has it, this page load has nothing to add and should not sit
+// waiting on 12,000 rows.
+function catchUpUpmIfDue_() {
+  let last = null;
+  try { last = JSON.parse(PropertiesService.getScriptProperties().getProperty(UPM_AUTO_KEY) || 'null'); } catch (e) {}
+  const lastAt = (last && last.at) ? new Date(last.at).getTime() : 0;
+  const ageDays = (Date.now() - lastAt) / 86400000;
+  if (isFinite(ageDays) && ageDays < 7) return { ran: false, ageDays: ageDays };
+  const lock = LockService.getScriptLock();
+  let got = false;
+  try { got = lock.tryLock(1000); } catch (e) { got = false; }
+  if (!got) return { ran: false, busy: true };
+  try {
+    const r = applyObservedUpm_(OBSERVED_UPM_DAYS, 'weekly catch-up');
+    Logger.log('catchUpUpmIfDue_: ran after ' + Math.round(ageDays) + ' days — ' + r.message);
+    return { ran: true, changed: r.changed, message: r.message, ok: r.ok };
+  } catch (e) {
+    Logger.log('catchUpUpmIfDue_ failed: ' + e.message);
+    return { ran: false, error: e.message };
+  } finally { try { lock.releaseLock(); } catch (e) {} }
+}
+
+// Live health AND how the last run went — a job that failed on Sunday is exactly
+// as invisible as a feed that stopped.
 function getUpmAutoStatus() {
   const user = getCurrentUser();
   if (!user.isAdmin) return { admin: false };
@@ -1848,7 +1881,12 @@ function getUpmAutoStatus() {
   try { last = JSON.parse(PropertiesService.getScriptProperties().getProperty(UPM_AUTO_KEY) || 'null'); } catch (e) {}
   // Ensuring it here means an admin opening Sequins is enough to heal it.
   const trig = ensureWeeklyUpmTrigger_();
-  return { admin: true, health: dataDropHealth(), last: last,
+  // ...and if the trigger is not actually firing, do the work anyway.
+  const caught = catchUpUpmIfDue_();
+  if (caught.ran) {
+    try { last = JSON.parse(PropertiesService.getScriptProperties().getProperty(UPM_AUTO_KEY) || 'null'); } catch (e) {}
+  }
+  return { admin: true, health: dataDropHealth(), last: last, caughtUp: caught,
            weeklyOn: trig.ok, triggerError: trig.ok ? '' : trig.error };
 }
 
