@@ -1,10 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.223 — 2026-10-02    (pairs with Code.js v0.4.155)
+  Sequins ✨ — Index.html    v0.5.224 — 2026-10-02    (pairs with Code.js v0.4.156)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.223 Holiday is a tab inside Sandbox, not its own sidebar item — same kind
-           of thing, and the sidebar was getting a row per idea. Export to a
-           Sheet added.
+  v0.5.224 Early finish and late start are controls, not numbers baked into the
+           presets. Exported money reads as money.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4172,7 +4171,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.223';
+var APP_VERSION='v0.5.224';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -6026,6 +6025,10 @@ function runSandbox(){
 // Named holidays are PAID holidays. Christmas Eve and New Year's Eve are not on
 // the list: they are early-finish days, which is a day state, not a holiday.
 var HP_WEEK=null,HP_RESULT=null,HP_BUSY=false;
+// The eve finish and the holiday-morning start were baked into the presets, so
+// “out by 22:00” was a number only I could change. They are inputs now; these are
+// just the starting values (Cori, 2026-10-02).
+var HP_EARLY='22:00',HP_LATE='12:00';
 
 function hpRuleStr_(key,dflt){
   var v=(getRules()||{})[key];
@@ -6342,23 +6345,29 @@ function hpState_(o){
   return{open:o.open!==false,earlyFinish:o.earlyFinish||'',lateStart:o.lateStart||0};
 }
 // Her three standing preferences, by the holiday the week contains.
+// Cori’s standing preference per holiday, built from the two time controls so
+// the hours are hers rather than mine. A blank early finish leaves the eve
+// running to its natural end; a blank late start opens the holiday on the lines’
+// configured times.
 function hpPreference_(label){
   var hols=hpWeekHolidays_(label);if(!hols.length)return null;
   var iso=hols[0].iso,dayOf=hols[0].day,i=DAYS_ORDER.indexOf(dayOf);
   var eve=i>0?DAYS_ORDER[i-1]:null,st={};
+  var early=HP_EARLY||'',late=HP_LATE?curfewToMin_(HP_LATE):0;
   if(/-11-/.test(iso)){                       // Thanksgiving: dark on the day
     st[dayOf]={open:false};
-    return{name:'the Cori Special — dark Thanksgiving',states:st};
+    return{name:"the Cori Special \u2014 dark Thanksgiving",states:st};
   }
   if(/-12-25$/.test(iso)){                    // Christmas: early finish the eve, dark the day
     st[dayOf]={open:false};
-    if(eve)st[eve]={open:true,earlyFinish:'22:00'};
-    return{name:'the Cori Special — eve out by 22:00, dark Christmas',states:st};
+    if(eve&&early)st[eve]={open:true,earlyFinish:early};
+    return{name:"the Cori Special \u2014 "+(early?("eve out by "+early+", "):"")+"dark Christmas",states:st};
   }
-  if(/-01-01$/.test(iso)){                    // New Year: half day the eve, late start the day
-    st[dayOf]={open:true,lateStart:curfewToMin_('12:00')};
-    if(eve)st[eve]={open:true,earlyFinish:'14:00'};
-    return{name:'the Cori Special — half day NYE, late start New Year’s Day',states:st};
+  if(/-01-01$/.test(iso)){                    // New Year: short eve, late start on the day
+    st[dayOf]=late?{open:true,lateStart:late}:{open:true};
+    if(eve&&early)st[eve]={open:true,earlyFinish:early};
+    return{name:"the Cori Special \u2014 "+(early?("NYE out by "+early+", "):"")+
+      (late?("New Year\u2019s Day from "+HP_LATE):"New Year\u2019s Day as normal"),states:st};
   }
   return null;
 }
@@ -6502,6 +6511,10 @@ function hpRenderControls(){
         '<select class="sb-input" id="hpWeek" style="min-width:260px" onchange="hpWeekChanged(this.value)">'+opts+'</select></div>'+
       '<div><div class="sb-label">Week total units</div>'+
         '<input class="sb-input" id="hpTotal" type="number" min="0" step="1000" value="'+def+'" style="width:130px"></div>'+
+      '<div><div class="sb-label">Early finish by</div>'+
+        '<input class="sb-input" id="hpEarly" type="time" value="'+escHtml(HP_EARLY)+'" style="width:120px" title="Used for the eve of a holiday in your preferred option. Blank leaves the day running to its natural end."></div>'+
+      '<div><div class="sb-label">Late start at</div>'+
+        '<input class="sb-input" id="hpLate" type="time" value="'+escHtml(HP_LATE)+'" style="width:120px" title="Used for a holiday you stay open on. Blank starts the lines at their configured times."></div>'+
       '<div><div class="sb-label">Even out the week</div>'+
         '<select class="sb-input" id="hpEven" style="width:150px">'+
           '<option value="0">as it runs</option>'+
@@ -6522,6 +6535,8 @@ function hpRun(){
   if(HP_BUSY)return;
   var total=parseFloat((document.getElementById('hpTotal')||{}).value);
   var even=parseFloat((document.getElementById('hpEven')||{}).value);
+  HP_EARLY=((document.getElementById('hpEarly')||{}).value)||'';
+  HP_LATE=((document.getElementById('hpLate')||{}).value)||'';
   var out=document.getElementById('hpOut');
   if(!(total>0)){out.innerHTML='<div class="status status-warn">Enter the week total Demand Planning gave you.</div>';return;}
   HP_BUSY=true;
@@ -6811,6 +6826,11 @@ function hpExportPayload_(){
     })}
   };
 }
+function hpDismiss_(id){var e=document.getElementById(id);if(e)e.innerHTML='';}
+function hpCloseX_(id){
+  return '<span onclick="hpDismiss_(\''+id+'\')" title="Dismiss" '+
+    'style="float:right;cursor:pointer;opacity:.6;padding:0 2px;font-weight:700">\u2715</span>';
+}
 function hpExport(){
   var el=document.getElementById('hpExportOut');
   var pl=hpExportPayload_();
@@ -6818,9 +6838,9 @@ function hpExport(){
   if(el)el.innerHTML='<div class="status status-info"><span class="spinner"></span>Building the Sheet…</div>';
   google.script.run.withSuccessHandler(function(r){
     if(!el)return;
-    el.innerHTML='<div class="status status-ok">\u2713 <a href="'+escHtml(r.url)+'" target="_blank" style="color:var(--teal)">'+escHtml(r.name)+'</a> — opens in Drive</div>';
+    el.innerHTML='<div class="status status-ok">'+hpCloseX_('hpExportOut')+'\u2713 <a href="'+escHtml(r.url)+'" target="_blank" style="color:var(--teal)">'+escHtml(r.name)+'</a> — opens in Drive</div>';
   }).withFailureHandler(function(err){
-    if(el)el.innerHTML='<div class="status status-err">'+escHtml(err.message||String(err))+'</div>';
+    if(el)el.innerHTML='<div class="status status-err">'+hpCloseX_('hpExportOut')+escHtml(err.message||String(err))+'</div>';
   }).exportHolidayPlan(JSON.stringify(pl));
 }
 // Holiday lives inside Sandbox rather than as its own sidebar item (Cori,

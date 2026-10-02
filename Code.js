@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.155 — 2026-10-02    (pairs with Index.html v0.5.223)
+ * Sequins ✨ — Code.js    v0.4.156 — 2026-10-02    (pairs with Index.html v0.5.224)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.155 No server change — paired with Index.html v0.5.223, which folds the
- *          Holiday view into Sandbox as a tab.
+ * v0.4.156 The exported holiday Sheet formats its cost columns as currency and
+ *          its unit columns with thousands separators.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -4119,6 +4119,21 @@ function exportHolidayPlan(payload) {
   sh.getRange(1, 1, 1, width).setFontWeight('bold');
   sh.getRange(5, 1, 1, width).setFontWeight('bold');
   sh.setFrozenRows(5);
+
+  // Money should read as money. The four cost columns sit after the day columns
+  // and the two shift counts, so their position follows the week, not a constant.
+  const nDays = DAYS.length;
+  const firstCost = 1 + nDays + 2 + 1;        // Option + days + worked/lost, 1-based
+  const nOpts = p.options.length;
+  if (nOpts > 0) {
+    sh.getRange(6, firstCost, nOpts, 4).setNumberFormat('$#,##0');
+    sh.getRange(6, 2, nOpts, nDays).setNumberFormat('#,##0');
+  }
+  // and the split that gets handed over — 'closed' rows stay text, which a
+  // number format leaves alone.
+  if (p.pick && p.pick.rows && p.pick.rows.length) {
+    sh.getRange(rows.length - p.pick.rows.length + 1, 3, p.pick.rows.length, 1).setNumberFormat('#,##0');
+  }
   for (let i = 1; i <= width; i++) sh.autoResizeColumn(i);
 
   try { writeAuditLog_(user.email, 'export_holiday_plan', p.week, '', ss.getId()); } catch (e) {}
