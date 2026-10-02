@@ -1,9 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.233 — 2026-10-02    (pairs with Code.js v0.4.165)
+  Sequins ✨ — Index.html    v0.5.234 — 2026-10-02    (pairs with Code.js v0.4.166)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.233 No client change — paired with Code.js v0.4.165, which stores measured
-           UPMs to a tenth instead of leaving long values in place.
+  v0.5.234 A SKU with no UPM runs at the average of its package type rather than a
+           flat 15 — which understated small jars by a quarter. The field stays
+           blank and says what is being assumed.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -1168,6 +1169,42 @@ function isAllergenFree_(s){
   var lo=String(s||'').trim().toLowerCase().replace(/[.\s]+$/,'');
   return lo==='none'||lo==='n/a'||lo==='na'||lo==='no allergens'||lo==='no allergen';
 }
+// A SKU with no UPM used to run at a flat 15. That is a fair guess for a box or
+// a 32oz jar and badly wrong for a small one: measured over 90 days, 12oz jars
+// average 20.5 and 16oz jars 20.2, so 15 understates them by a quarter. The new
+// CAESAR_PASTA_BOWL is a 16oz jar.
+//
+// So the fallback is now the average of LIKE SKUs — same package type — taken
+// from the library’s own UPMs, which are the measured figures the weekly job
+// maintains. No extra fetch, and it tracks that refresh on its own. 15 survives
+// only when the package type has no comparable SKU to average.
+//
+// Computed per call rather than cached: it is a few dozen entries against a few
+// dozen jobs, and a stale cache here would quietly mis-time a whole day.
+//
+// The value is NEVER written into the SKU Library. An assumption that looks like
+// entered data is how a gap stops being visible — the same trap as treating
+// "No import" as "no allergens". The field stays blank and says what is assumed.
+function pkgUpmAverage_(pkg){
+  var want=String(pkg||'').trim().toLowerCase();
+  if(!want)return null;
+  var lib=STATE.skuLibrary||{},sum=0,cnt=0;
+  Object.keys(lib).forEach(function(k){
+    var m=lib[k];if(!m||m.active===false||m.pending)return;
+    if(String(m.packageType||'').trim().toLowerCase()!==want)return;
+    var u=parseFloat(m.upm);if(!(u>0))return;
+    sum+=u;cnt++;
+  });
+  return cnt?{upm:Math.round((sum/cnt)*10)/10,n:cnt}:null;
+}
+function upmFor_(meta){
+  var u=parseFloat(meta&&meta.upm);
+  if(u>0)return{upm:u,assumed:false,from:''};
+  var avg=pkgUpmAverage_(meta&&meta.packageType);
+  if(avg)return{upm:avg.upm,assumed:true,
+    from:String(meta.packageType).trim()+' average of '+avg.n+' SKU'+(avg.n>1?'s':'')};
+  return{upm:15,assumed:true,from:'no comparable SKU — flat default'};
+}
 function parseAllergens(s){
   // Worst case on unknown: assume all six. The SKU then has the largest possible
   // allergen set, so it can never seed a chain and can only land at the end.
@@ -1504,7 +1541,8 @@ function runSequencer(ctx){
     return !!meta&&meta.active!==false&&!isNonAssemblyPkg_(meta.packageType)&&!meta.pending;
   }).map(function(skuName){
     var qty=skus[skuName],key=skuName.toUpperCase(),meta=lib[key]||{};
-    var upm=parseFloat(meta.upm)||15,pkg=meta.packageType||'',al=parseAllergens(meta.allergens||'');
+    var upmInfo=upmFor_(meta),upm=upmInfo.upm;
+    var pkg=meta.packageType||'',al=parseAllergens(meta.allergens||'');
     // Food-contact classification (Samad's primary rule, first-class):
     // FC-W / FC-S is set explicitly per SKU and drives BOTH which line-type it
     // lands on AND which compounding chain it's ordered within. It overrides
@@ -1524,7 +1562,7 @@ function runSequencer(ctx){
       if(isCapperSize_(pkg))pool='capper';
       else capperSizeBlocked=true;
     }
-    return{sku:skuName,qty:Math.round(qty),upm:upm,pkg:pkg,pool:pool,fcClass:fcClass,hasAttrs:!!meta.packageType,isUSDA:key.indexOf('USDA')!==-1,hasSausage:key.indexOf('SAUSAGE')!==-1,hasSesame:al.sesame,isPreProcessed:!!meta.preProcessed,admissibleLines:admissibleLinesFor_(meta,day),needsCapper:pool==='capper',capperSizeBlocked:capperSizeBlocked,needsSmallCup:pool==='green',needsNight:pool==='night',allergenScore:allergenScore(al),allergenSet:allergenSetArr(al),allergenUnknown:!!al.unknown,runtimeMin:qty/upm,usdaPairedSku:(meta.usdaPairedSku||'').toUpperCase()||null};
+    return{sku:skuName,qty:Math.round(qty),upm:upm,pkg:pkg,pool:pool,fcClass:fcClass,hasAttrs:!!meta.packageType,upmAssumed:upmInfo.assumed,upmFrom:upmInfo.from,isUSDA:key.indexOf('USDA')!==-1,hasSausage:key.indexOf('SAUSAGE')!==-1,hasSesame:al.sesame,isPreProcessed:!!meta.preProcessed,admissibleLines:admissibleLinesFor_(meta,day),needsCapper:pool==='capper',capperSizeBlocked:capperSizeBlocked,needsSmallCup:pool==='green',needsNight:pool==='night',allergenScore:allergenScore(al),allergenSet:allergenSetArr(al),allergenUnknown:!!al.unknown,runtimeMin:qty/upm,usdaPairedSku:(meta.usdaPairedSku||'').toUpperCase()||null};
   }).filter(function(j){return j.qty>0;});
   var pools={wrap:[],sandwich:[],bowl:[],salad:[],flex:[],green:[],night:[],capper:[]};
   jobs.forEach(function(j){(pools[j.pool]||pools.flex).push(j);});
@@ -3872,7 +3910,7 @@ function filterSkuTable(){var search=(document.getElementById('skuSearch').value
       if(warn)sel+='<div style="font-family:var(--mono);font-size:10px;color:var(--amber);margin-top:3px;max-width:210px;line-height:1.3">\u26A0 '+warn+'</div>';
       return sel;
     })();
-    var fc=s.fcClass||'';var fcCell='<select class="inline-input" onchange="updateSkuField(\''+key+'\',\'fcClass\',this.value)" style="width:78px"><option value=""'+(fc===''?' selected':'')+'>—</option><option value="FC-W"'+(fc==='FC-W'?' selected':'')+'>FC-W</option><option value="FC-S"'+(fc==='FC-S'?' selected':'')+'>FC-S</option></select>';return'<tr><td><span class="sku-active-dot '+(s.active!==false?'dot-active':'dot-inactive')+'"></span>'+key+'</td><td>'+fcCell+'</td><td><input class="inline-input" value="'+(s.packageType||'')+'" onchange="updateSkuField(\''+key+'\',\'packageType\',this.value)" style="width:100px"></td><td><input class="inline-input" type="number" min="1" value="'+(s.unitsPerTote||'')+'" onchange="updateSkuField(\''+key+'\',\'unitsPerTote\',parseFloat(this.value))" style="width:82px"></td><td><input class="inline-input" type="number" value="'+(s.upm||'')+'" onchange="updateSkuField(\''+key+'\',\'upm\',parseFloat(this.value))" style="width:120px"></td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--muted)">'+(s.optimalHC||'\u2014')+'</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--muted)">'+skuAvgHc_(key,s)+'</td><td>'+allergenCell_(key,s)+'</td><td>'+labelCell+'</td><td>'+linesCell+'</td><td>'+linesLateCell+'</td><td>'+pairCell+'</td><td style="text-align:center">'+chk('capper')+'</td><td style="text-align:center">'+chk('nightShift')+'</td><td style="text-align:center">'+chk('preProcessed')+'</td><td style="text-align:center">'+chk('active')+'</td><td>'+stagingCell_(key,s)+'</td></tr>';}).join('');}
+    var fc=s.fcClass||'';var fcCell='<select class="inline-input" onchange="updateSkuField(\''+key+'\',\'fcClass\',this.value)" style="width:78px"><option value=""'+(fc===''?' selected':'')+'>—</option><option value="FC-W"'+(fc==='FC-W'?' selected':'')+'>FC-W</option><option value="FC-S"'+(fc==='FC-S'?' selected':'')+'>FC-S</option></select>';return'<tr><td><span class="sku-active-dot '+(s.active!==false?'dot-active':'dot-inactive')+'"></span>'+key+'</td><td>'+fcCell+'</td><td><input class="inline-input" value="'+(s.packageType||'')+'" onchange="updateSkuField(\''+key+'\',\'packageType\',this.value)" style="width:100px"></td><td><input class="inline-input" type="number" min="1" value="'+(s.unitsPerTote||'')+'" onchange="updateSkuField(\''+key+'\',\'unitsPerTote\',parseFloat(this.value))" style="width:82px"></td><td><input class="inline-input" type="number" value="'+(s.upm||'')+'" onchange="updateSkuField(\''+key+'\',\'upm\',parseFloat(this.value))" style="width:120px">'+upmAssumedNote_(s)+'</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--muted)">'+(s.optimalHC||'\u2014')+'</td><td style="text-align:right;font-family:var(--mono);font-size:11px;color:var(--muted)">'+skuAvgHc_(key,s)+'</td><td>'+allergenCell_(key,s)+'</td><td>'+labelCell+'</td><td>'+linesCell+'</td><td>'+linesLateCell+'</td><td>'+pairCell+'</td><td style="text-align:center">'+chk('capper')+'</td><td style="text-align:center">'+chk('nightShift')+'</td><td style="text-align:center">'+chk('preProcessed')+'</td><td style="text-align:center">'+chk('active')+'</td><td>'+stagingCell_(key,s)+'</td></tr>';}).join('');}
 var _skuTimer=null;
 // ─── STAGING / PENDING SKUS (v0.5.72) ────────────────────────────────────────
 // A pending SKU is one entered in Sequins before Menu Library knows it exists —
@@ -3939,6 +3977,13 @@ function deleteSkuRow(key){
   }).withFailureHandler(function(err){
     if(el)el.innerHTML='<div class="status status-err">⚠ Not removed: '+escHtml(err.message||String(err))+'</div>';
   }).saveSkuLibrary(STATE.skuLibrary);
+}
+// Says what the engine will use, without putting it in the box — the box staying
+// empty is the whole point.
+function upmAssumedNote_(m){
+  if(parseFloat(m&&m.upm)>0)return '';
+  var f=upmFor_(m);
+  return '<div style="font-size:9px;color:var(--amber);white-space:nowrap" title="No UPM set. The sequencer uses this until someone enters one.">assuming '+f.upm+'<br>'+escHtml(f.from)+'</div>';
 }
 function stagingCell_(key,m){
   if(!m.pending){
@@ -4232,7 +4277,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.233';
+var APP_VERSION='v0.5.234';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;

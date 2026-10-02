@@ -1,10 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.165 — 2026-10-02    (pairs with Index.html v0.5.233)
+ * Sequins ✨ — Code.js    v0.4.166 — 2026-10-02    (pairs with Index.html v0.5.234)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.165 Applying measured UPMs stores them to a tenth and compares against
- *          that. It compared rounded but stored raw, so a value already within
- *          a tenth kept its eleven decimal places forever.
+ * v0.4.166 No server change — paired with Index.html v0.5.234, which replaces the
+ *          flat 15 UPM default with a package-type average.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
