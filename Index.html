@@ -1,9 +1,10 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.229 — 2026-10-02    (pairs with Code.js v0.4.161)
+  Sequins ✨ — Index.html    v0.5.230 — 2026-10-02    (pairs with Code.js v0.4.162)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.229 A SKU thin on any single day is a cut candidate too, not only one small
-           across the whole week.
+  v0.5.230 Demand that never reaches the sequencer is said at the TOP of Workbench
+           with the SKUs named. It was only ever in a collapsed card at the
+           bottom, under the line cards.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -512,6 +513,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           <button class="btn btn-green" id="publishPlanBtn" style="display:none" onclick="publishPlan()">🚀 Publish Plan</button>
         </div>
       </div>
+      <div id="wbDemandAlert" style="display:none;margin-bottom:12px"></div>
       <div id="wbNoData" class="empty">
         <div class="empty-icon">🔧</div>
         <div class="empty-title">No demand loaded yet</div>
@@ -3066,6 +3068,24 @@ function renderDemandDebug(storedSkus,sequencerJobs){
   else if(delta!==0){html+='<div style="font-family:var(--mono);font-size:11px;color:var(--amber)">⚠ No per-SKU diffs but totals differ by '+delta+'.</div>';}
   else{html+='<div style="font-family:var(--mono);font-size:11px;color:var(--green)">✓ Stored demand and sequencer input match exactly.</div>';}
   el.innerHTML=html;
+
+  // and say it where it will be seen
+  var al=document.getElementById('wbDemandAlert');
+  if(!al)return;
+  if(!hasDiff){al.style.display='none';al.innerHTML='';return;}
+  var missing=diffs.filter(function(sku){return !(seqMap[sku]>0)&&(storedSkus[sku]>0);});
+  var lostUnits=0;missing.forEach(function(sku){lostUnits+=Math.round(storedSkus[sku]||0);});
+  var txt;
+  if(missing.length){
+    txt='<b>'+fmtUnits(lostUnits)+' units of demand are not being sequenced</b> \u2014 '+
+      escHtml(missing.slice(0,4).join(', '))+(missing.length>4?' and '+(missing.length-4)+' more':'')+
+      '. Check the SKU Library: a SKU that is not in it, or is inactive, is never built.';
+  }else{
+    txt='<b>Stored demand and what the engine was handed differ by '+delta+' units</b> across '+
+      diffs.length+' SKU'+(diffs.length>1?'s':'')+'. Detail in Demand Debug below.';
+  }
+  al.innerHTML='<div class="status status-warn" style="margin:0">'+txt+'</div>';
+  al.style.display='';
 }
 
 // Published plans live in the archive Sheet now (not Script Properties). The
@@ -4173,7 +4193,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.229';
+var APP_VERSION='v0.5.230';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
