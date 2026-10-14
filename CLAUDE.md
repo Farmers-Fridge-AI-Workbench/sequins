@@ -75,6 +75,31 @@ by rendering server-side with zero callbacks, so the page has no reach
 back into the app), and Preview-as-role is **UI-only** — server calls
 still execute as the real account.
 
+**A Sequins role grants nothing in Google Drive — settled 2026-10-14.**
+`appsscript.json` sets `executeAs: USER_DEPLOYING`, so every server function
+runs as Cori with Cori's file access, whoever is clicking. Two consequences
+that look contradictory until you hold them together:
+
+- Inside Sequins, a role is the ONLY thing gating anything. A floor viewer and
+  an admin reach the same sheets; what separates them is the role check, not
+  Drive. That is why those checks are load-bearing and re-checked server-side.
+- Outside Sequins, a Sequins role is worth nothing. A script in another project
+  — `SequinsDemandPush.gs` in the Production Planner, anything the warehouse
+  runs — executes as the person who runs it and needs its own Drive access to
+  every file it touches.
+
+This cost a week. Cori was on PTO 10/9–10/14/2026; colleagues with full Sequins
+Admin ran the Planner push and nothing arrived, because the archive Sheet was
+shared with nobody but her, and the push writes its `Demand` tab from outside
+the app. Admin in the Users view implied access that did not exist. A failed
+Drive write leaves no trace in the Demand tab either, so it looked like the
+script had never run.
+
+When something that touches Sequins data fails for one person and not another,
+check Drive sharing on the file before reading any Sequins code. The archive
+Sheet is domain-writable as of 2026-10-14 — Cori's call, knowing it puts the
+published-plan record in reach of anyone at FF.
+
 ## Code conventions
 
 - **ES5 in `Index.html` — `var`, never `const`/`let`.** The client is ES5
