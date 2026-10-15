@@ -1,10 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.174 — 2026-10-15    (pairs with Index.html v0.5.242)
+ * Sequins ✨ — Code.js    v0.4.175 — 2026-10-15    (pairs with Index.html v0.5.243)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.174 The Slack demand notice is paused, and an import now records what it
- *          did to each day in the Audit Log — including a rewrite that changed
- *          nothing, which is the 10/15 oddity we are still chasing.
+ * v0.4.175 The demand notice is back on and names only days whose numbers really
+ *          moved. A rewrite that changes nothing is logged, never announced.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -4223,21 +4222,21 @@ function exportHolidayPlan(payload) {
 // The webhook URL is a CREDENTIAL and this repo is public, so it lives in Script
 // Properties and is never returned to the client — getSlackStatus says whether
 // one is set and how the last post went, never what it is.
-// PAUSED 2026-10-15 by Cori. On 10/15 one import named two days in Slack when
-// neither had changed — 10/15 and 10/16 were both already loaded, and the run
-// rewrote them with identical numbers. One anomaly in 63 imports, and the data
-// was never wrong, but the channel is Samad's and Matt's and a notice that is
-// not true is worse than no notice. So the posting is off while the cause is
-// still open; the webhook stays in Script Properties, untouched.
+// The notice fires when demand actually LANDS — that is the thing Cori wants
+// announced. What it must never do is repeat itself.
 //
-// Everything else still runs, and importPushedDemand now writes a per-day line
-// to the Audit Log instead — which day, what it did, and whether the numbers
-// actually moved. That is where to look next time.
+// On 2026-10-15 one import named 10/15 and 10/16 when neither had changed: both
+// were already loaded and the run rewrote them with identical numbers. The data
+// was never wrong, but the message was, and that channel is Samad's and Matt's.
 //
-// Turning it back on is this one line. Do it together with naming only the days
-// whose quantities actually changed, so a no-op rewrite cannot reach Slack even
-// if the skip logic misses again.
-const NOTIFY_PUSHED_DEMAND = false;
+// The cause of that rewrite is still open. The guard does not depend on finding
+// it: notifyPushedDemand_ names only days whose per-SKU quantities actually
+// moved, so a no-op rewrite is silent whatever the skip logic does. An import
+// where nothing moved says nothing at all.
+//
+// This constant stays as a kill switch. Set it false to silence the channel
+// without touching the webhook or stopping the import.
+const NOTIFY_PUSHED_DEMAND = true;
 
 const SLACK_WEBHOOK_KEY = 'slackWebhookUrl';
 const SLACK_LAST_KEY    = 'slackLastResult';
@@ -4315,7 +4314,12 @@ function testSlackWebhook() {
 // wrong is three messages for one import. A run that imports nothing says
 // nothing.
 function notifyPushedDemand_(items) {
-  const done = (items || []).filter(function(i) { return i.action !== 'skip' && i.date; });
+  // 'changed' is set by importPushedDemand for every day it writes: false when
+  // the day was rewritten with the quantities it already had. Those are real
+  // writes and belong in the Audit Log, but there is nothing to tell anyone.
+  const done = (items || []).filter(function(i) {
+    return i.action !== 'skip' && i.date && i.changed !== false;
+  });
   if (!done.length) return;
   const seen = {}, dates = [];
   done.forEach(function(i) {
