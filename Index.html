@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.241 — 2026-10-02    (pairs with Code.js v0.4.173)
+  Sequins ✨ — Index.html    v0.5.242 — 2026-10-15    (pairs with Code.js v0.4.174)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.241 The Slack card is back to the webhook and nothing else — the app's own
-           address is not a setting.
+  v0.5.242 No client change — paired with Code.js v0.4.174, which pauses the Slack
+           demand notice and logs each imported day to the Audit Log.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4319,7 +4319,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.241';
+var APP_VERSION='v0.5.242';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;

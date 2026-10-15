@@ -1,9 +1,10 @@
 /**
- * Sequins ✨ — Code.js    v0.4.173 — 2026-10-02    (pairs with Index.html v0.5.241)
+ * Sequins ✨ — Code.js    v0.4.174 — 2026-10-15    (pairs with Index.html v0.5.242)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.173 The live /exec is a constant. The app is DOMAIN-restricted, so the url
- *          is an identifier, not a credential — and nobody has to set it.
+ * v0.4.174 The Slack demand notice is paused, and an import now records what it
+ *          did to each day in the Audit Log — including a rewrite that changed
+ *          nothing, which is the 10/15 oddity we are still chasing.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -1368,6 +1369,15 @@ function readPushedDemandRows_() {
 // quantities. Order-independent; quantities compared as rounded numbers because
 // the pushed side is rounded on read and the stored side may have been written
 // by a different fetch.
+// SKU count and unit total for one stored or pushed day, for the audit line.
+function demandTotals_(d) {
+  const s = (d && d.skus) || {};
+  const k = Object.keys(s);
+  let u = 0;
+  k.forEach(function(n) { u += Math.round(Number(s[n]) || 0); });
+  return { n: k.length, u: u };
+}
+
 function sameDemandSkus_(a, b) {
   a = a || {}; b = b || {};
   const ka = Object.keys(a), kb = Object.keys(b);
@@ -1487,12 +1497,27 @@ function importPushedDemand() {
   if (plan.missing) return { ok: true, missing: true, imported: 0, items: [] };
 
   let imported = 0;
+  // One line per day that was written, so an import that did something
+  // surprising says so somewhere durable. '(NO CHANGE)' is the tell: the day
+  // was rewritten with the numbers it already had, which is what happened on
+  // 2026-10-15 and is what we are watching for.
+  const notes = [];
   plan.items.forEach(function(item) {
     if (item.action === 'skip') return;
     const pushed = readPushedDemandRows_().days[item.date];
     if (!pushed) { item.action = 'skip'; item.reason = 'row vanished between plan and write'; return; }
 
     const existing = getDemandDay_(item.weekLabel, item.day);
+    const before = demandTotals_(existing);
+    const after  = demandTotals_({ skus: pushed.skus });
+    item.changed = !(existing && sameDemandSkus_(existing.skus, pushed.skus));
+    notes.push(item.date + ' ' + item.action + ' ' +
+      (existing
+        ? (before.n + '\u2192' + after.n + ' SKUs, ' + before.u + '\u2192' + after.u + ' units' +
+           (item.changed ? '' : ' (NO CHANGE)') +
+           (existing.mode !== 'actual' || existing.source !== PUSHED_SOURCE
+              ? (' [was ' + (existing.mode || '?') + '/' + (existing.source || 'none') + ']') : ''))
+        : (after.n + ' SKUs, ' + after.u + ' units')));
     const newDay = {
       skus: pushed.skus,
       mode: 'actual',             // v0.4.56 — see below
@@ -1515,9 +1540,23 @@ function importPushedDemand() {
   });
 
   if (imported) {
-    writeAuditLog_(user.email, 'import_pushed_demand', '', '', imported + ' days from Assembly Summary');
+    // A push for a date the Compiled Forecast does not cover is skipped with
+    // nothing to show for it — no error, no day, no message. Counting it here
+    // is the only trace that it happened.
+    const unmapped = plan.items.filter(function(i) {
+      return i.action === 'skip' && /not found in Compiled Forecast/.test(i.reason || '');
+    }).length;
+    const shown = notes.slice(0, 8).join('; ') +
+                  (notes.length > 8 ? ('; +' + (notes.length - 8) + ' more') : '');
+    writeAuditLog_(user.email, 'import_pushed_demand', '', '',
+      imported + ' day(s) from Assembly Summary — ' + shown +
+      (unmapped ? ('  [' + unmapped + ' unmapped date(s) skipped]') : ''));
     // Courtesy, not the job — postSlack_ swallows its own failures.
-    try { notifyPushedDemand_(plan.items); } catch (e) { Logger.log('notifyPushedDemand_: ' + e.message); }
+    if (NOTIFY_PUSHED_DEMAND) {
+      try { notifyPushedDemand_(plan.items); } catch (e) { Logger.log('notifyPushedDemand_: ' + e.message); }
+    } else {
+      Logger.log('notifyPushedDemand_: paused (NOTIFY_PUSHED_DEMAND=false)');
+    }
   }
   Logger.log('importPushedDemand: ' + imported + ' day(s) imported; ' +
              plan.items.filter(function(i) { return i.action === 'skip'; }).length + ' skipped');
@@ -4184,6 +4223,22 @@ function exportHolidayPlan(payload) {
 // The webhook URL is a CREDENTIAL and this repo is public, so it lives in Script
 // Properties and is never returned to the client — getSlackStatus says whether
 // one is set and how the last post went, never what it is.
+// PAUSED 2026-10-15 by Cori. On 10/15 one import named two days in Slack when
+// neither had changed — 10/15 and 10/16 were both already loaded, and the run
+// rewrote them with identical numbers. One anomaly in 63 imports, and the data
+// was never wrong, but the channel is Samad's and Matt's and a notice that is
+// not true is worse than no notice. So the posting is off while the cause is
+// still open; the webhook stays in Script Properties, untouched.
+//
+// Everything else still runs, and importPushedDemand now writes a per-day line
+// to the Audit Log instead — which day, what it did, and whether the numbers
+// actually moved. That is where to look next time.
+//
+// Turning it back on is this one line. Do it together with naming only the days
+// whose quantities actually changed, so a no-op rewrite cannot reach Slack even
+// if the skip logic misses again.
+const NOTIFY_PUSHED_DEMAND = false;
+
 const SLACK_WEBHOOK_KEY = 'slackWebhookUrl';
 const SLACK_LAST_KEY    = 'slackLastResult';
 
