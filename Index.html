@@ -1,8 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.257 — 2026-10-21    (pairs with Code.js v0.4.189)
+  Sequins ✨ — Index.html    v0.5.258 — 2026-10-21    (pairs with Code.js v0.4.190)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.257 The live cost read saves what it reads, so it happens once.
+  v0.5.258 Pilot volume is out of the day split as well as the SKU mix — a launch
+           week is an outlier, not a baseline.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4318,7 +4319,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.257';
+var APP_VERSION='v0.5.258';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -6403,11 +6404,23 @@ function hpDayShape_(target,even){
     out.basis='none';
     return out;
   }
+  // Pilot units are left out of the day shape as well as the SKU mix. Cori,
+  // 2026-10-21: new SKUs launch all at once, once a quarter, so a week carrying
+  // one is an outlier rather than a normal week — 'we shouldn't include it'.
+  //
+  // Measured on Wk 38-41 the contamination was small but entirely one-sided:
+  // 0.53% of Thursday and 0.55% of Friday, nothing on the other five days,
+  // because the pilots only ran Thu/Fri. Small and lopsided is worse than small,
+  // since it tilts exactly the two days a Thanksgiving plan turns on.
+  var pilots=hpPilotSkus_(target)||{};
   DAYS_ORDER.forEach(function(d){
     var s=0;
     pick.weeks.forEach(function(l){
       var dd=STATE.demand[l][d];
-      if(dd&&dd.skus)Object.keys(dd.skus).forEach(function(k){s+=Number(dd.skus[k])||0;});
+      if(dd&&dd.skus)Object.keys(dd.skus).forEach(function(k){
+        if(pilots[k])return;
+        s+=Number(dd.skus[k])||0;
+      });
     });
     sum[d]=s/pick.weeks.length;tot+=sum[d];
   });
@@ -7031,7 +7044,9 @@ function hpRenderResult(){
   var h="";
   var _pil=Object.keys(hpPilotSkus_(HP_WEEK)||{}).sort();
   if(_pil.length)h+="<div class=\"sb-note\" style=\"margin-bottom:8px\">"+_pil.length+" SKU"+(_pil.length>1?"s":"")+
-    " ran at pilot volume, or not at all, in those weeks — so the forecast sets "+(_pil.length>1?"their":"its")+" daily split instead: "+
+    " ran at pilot volume, or not at all, in those weeks, so "+(_pil.length>1?"they are":"it is")+
+    " left out of both the day split and the mix and "+(_pil.length>1?"take their":"takes its")+
+    " volume from the forecast instead: "+
     escHtml(_pil.slice(0,6).join(", "))+(_pil.length>6?"\u2026":"")+".</div>";
   h+="<div class=\"sb-note\" style=\"margin-bottom:8px\">Day split and SKU mix both come from "+shape.weeks.length+
      " week"+(shape.weeks.length===1?"":"s")+" that had no holiday in "+(shape.weeks.length===1?"it":"them")+": "+

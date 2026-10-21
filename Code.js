@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.189 — 2026-10-21    (pairs with Index.html v0.5.257)
+ * Sequins ✨ — Code.js    v0.4.190 — 2026-10-21    (pairs with Index.html v0.5.258)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.189 A stale cost store is rewritten by the first client that needs it, so
- *          the slow read happens once rather than on every click until 2am.
+ * v0.4.190 No server change — paired with Index.html v0.5.258, which keeps pilot
+ *          volume out of the holiday day split.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
