@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.195 — 2026-10-21    (pairs with Index.html v0.5.263)
+ * Sequins ✨ — Code.js    v0.4.196 — 2026-10-21    (pairs with Index.html v0.5.264)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.195 Labor share from Pick Tock sets the curfew, and answers back in the
- *          same rows. A curfew set by hand is never overwritten.
+ * v0.4.196 No server change — paired with Index.html v0.5.264, which applies the
+ *          labor share on load rather than on the trigger alone.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────

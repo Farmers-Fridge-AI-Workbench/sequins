@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.263 — 2026-10-21    (pairs with Code.js v0.4.195)
+  Sequins ✨ — Index.html    v0.5.264 — 2026-10-21    (pairs with Code.js v0.4.196)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.263 No client change — paired with Code.js v0.4.195, the Pick Tock labor
-           share sync.
+  v0.5.264 Opening Sequins applies Pick Tock's labor share, instead of waiting up
+           to fifteen minutes for the trigger.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4319,7 +4319,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.263';
+var APP_VERSION='v0.5.264';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -9244,6 +9244,9 @@ window.onload=function(){
     // render so the app is usable immediately and this fills in behind it, and
     // it self-gates on isAdmin inside checkPushedDemand.
     checkPushedDemand(false);
+    // Labor share from Pick Tock. Also on the 15-minute trigger; this is so
+    // somebody who is actually looking does not wait for it.
+    google.script.run.withSuccessHandler(function(){}).withFailureHandler(function(){}).syncLaborShare();
     checkDemandMigration();
     renderLegend();  // sidebar is always visible, so it can't wait for a view switch
   }).withFailureHandler(function(err){document.getElementById('seqNoDataSub').textContent='Error loading state: '+err.message;}).getState();
