@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.182 — 2026-10-21    (pairs with Index.html v0.5.250)
+ * Sequins ✨ — Code.js    v0.4.183 — 2026-10-21    (pairs with Index.html v0.5.251)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.182 No server change — paired with Index.html v0.5.250, which prices the
- *          options table as a full week cost.
+ * v0.4.183 No server change — paired with Index.html v0.5.251, which keeps food and
+ *          packaging out of every cost total.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────

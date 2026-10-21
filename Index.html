@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.250 — 2026-10-21    (pairs with Code.js v0.4.182)
+  Sequins ✨ — Index.html    v0.5.251 — 2026-10-21    (pairs with Code.js v0.4.183)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.250 The options table is a full week cost too — processing and food and
-           packaging alongside labor, and the ranking follows it.
+  v0.5.251 Cost is labor — assembly and processing — plus holiday. Food and
+           packaging is reported only as spend avoided, never inside a total.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4319,7 +4319,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.250';
+var APP_VERSION='v0.5.251';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -6885,12 +6885,12 @@ function hpRun(){
     try{
       var opts=hpBuildOptions_(HP_WEEK);
       HP_RESULT=opts.map(function(o){return hpRunOption_(HP_WEEK,o,total,even);});
-      // R.total is assembly labor, holiday pay and OT — the cost of the closure
-      // decision, which is all this view used to need. R.full is what the week
-      // actually costs: that plus processing and food & packaging across every
-      // SKU. Computed once here so both tables and the sort agree.
+      // Labor is assembly plus processing, so the options table and the cuts
+      // table below it mean the same thing by the word. Processing is units x a
+      // flat rate and every option builds the same week, so it moves no ranking
+      // — it is here to make the number right, not to change the answer.
       var _pr=ruleNum_(getRules(),'processingStaticPerUnit')||0;
-      HP_RESULT.forEach(function(R){R.full=hpWeekCost_(R,_pr,null);});
+      HP_RESULT.forEach(function(R){R.cost=hpWeekCost_(R,_pr,null);});
       HP_CUTS=null;HP_CUTSCEN=null;
       var ce=document.getElementById('hpCutsOut');if(ce)ce.innerHTML='';
       var xe=document.getElementById('hpExportOut');if(xe)xe.innerHTML='';
@@ -6981,7 +6981,7 @@ function hpRenderResult(){
   var hol={};hpWeekHolidays_(HP_WEEK).forEach(function(h){hol[h.day]=h.iso;});
   // Baseline first, always \u2014 it is the thing everything else is measured against,
   // so burying it at the bottom of a cost sort made the savings column unreadable.
-  var rest=HP_RESULT.filter(function(R){return R!==base;}).sort(function(a,b){return hpFullTotal_(a)-hpFullTotal_(b);});
+  var rest=HP_RESULT.filter(function(R){return R!==base;}).sort(function(a,b){return hpCostOf_(a).total-hpCostOf_(b).total;});
   var order=[base].concat(rest);
   var TH="padding:6px 8px;border:1px solid var(--border);background:var(--surface2);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)";
   var TD="padding:6px 8px;border:1px solid var(--border);font-size:11px";
@@ -7012,29 +7012,17 @@ function hpRenderResult(){
   HP_RESULT.forEach(function(R){R.days.forEach(function(r){
     if(r&&r.ok&&r.mixBasis==="baseline only")noFc=true;});});
   if(noFc)h+="<div class=\"sb-note\" style=\"margin-bottom:8px\">The forecast has no SKU detail for this week yet, so the mix as well as the day split comes from those weeks. Enter the total you want and it will build the rest.</div>";
-  var _up={};HP_RESULT.forEach(function(R){(R.full.unpriced||[]).forEach(function(k){_up[k]=true;});});
-  var _upk=Object.keys(_up);
-  if(_upk.length)h+="<div class=\"status status-warn\" style=\"margin-bottom:8px\">"+_upk.length+
-    " SKU"+(_upk.length>1?"s are":" is")+" not in the Production Planner's recipe list, so "+
-    (_upk.length>1?"their":"its")+" food and packaging is missing from every total below: "+
-    escHtml(_upk.slice(0,6).join(", "))+(_upk.length>6?"\u2026":"")+"</div>";
-  h+="<div class=\"sb-note\" style=\"margin-bottom:8px\">Total is what the week costs: assembly labor, holiday pay and OT from the engine, "+
-    "plus processing at "+sbMoney3_(ruleNum_(getRules(),'processingStaticPerUnit')||0)+"/unit and food &amp; packaging per unit from the Production Planner. "+
-    "Food &amp; packaging moves between options because each weekday carries its own SKU mix \u2014 closing a day pushes its volume "+
-    "onto the days that stay open, and they build a different mix at a different cost per unit.</div>";
   h+="<div style=\"overflow-x:auto\"><table style=\"border-collapse:collapse;width:100%\">";
   h+="<tr><th style=\""+TH+";text-align:left\">Option</th>";
   DAYS_ORDER.forEach(function(d){
     h+="<th style=\""+TH+";text-align:right\">"+DAY_SHORT[d]+
        (hol[d]?"<div style=\"font-size:9px;color:var(--amber);text-transform:none\">"+escHtml(hpHolidayName_(hol[d]))+"</div>":"")+"</th>";
   });
-  h+="<th style=\""+TH+";text-align:right\">Shifts<br>worked / lost</th><th style=\""+TH+";text-align:right\">Labor</th>"+
-     "<th style=\""+TH+";text-align:right\">Holiday pay</th>"+
-     "<th style=\""+TH+";text-align:right\">Processing</th>"+
-     "<th style=\""+TH+";text-align:right\">Food &amp; packaging</th>"+
-     "<th style=\""+TH+";text-align:right\">Total</th></tr>";
+  h+="<th style=\""+TH+";text-align:right\">Shifts<br>worked / lost</th>"+
+     "<th style=\""+TH+";text-align:right\">Labor<div style=\"font-size:9px;font-weight:400;text-transform:none;letter-spacing:0\">assembly + processing</div></th>"+
+     "<th style=\""+TH+";text-align:right\">Holiday pay</th><th style=\""+TH+";text-align:right\">Total</th></tr>";
   order.forEach(function(R,idx){
-    var d=R.full.total-base.full.total;
+    var d=hpCostOf_(R).total-hpCostOf_(base).total;
     var delta=R.baseline?"<div style=\"font-size:9px;color:var(--muted)\">everything else is measured against this</div>"
       :"<div style=\"font-size:9px;color:var("+(d<0?"--green":"--red")+")\">"+
       (d<0?"saves ":"costs ")+sbMoney_(Math.abs(d))+(d<0?"":" more")+"</div>";
@@ -7053,11 +7041,9 @@ function hpRenderResult(){
          "<div style=\"font-family:var(--mono);font-size:13px\">"+R.offered+"</div>"+
          "<div style=\"font-size:9px;color:var("+(R.lost?"--amber":"--muted")+")\">"+
            (R.lost?R.lost+" not offered a shift":"nobody loses a shift")+"</div>"+"</td>"+
-       "<td style=\""+TD+";text-align:right\">"+sbMoney_(R.labor)+"</td>"+
+       "<td style=\""+TD+";text-align:right\">"+sbMoney_(hpCostOf_(R).labor)+"</td>"+
        "<td style=\""+TD+";text-align:right\">"+(R.holiday?"<span style=\"color:var(--amber)\">"+sbMoney_(R.holiday)+"</span>":"\u2014")+"</td>"+
-       "<td style=\""+TD+";text-align:right\">"+sbMoney_(R.full.proc)+"</td>"+
-       "<td style=\""+TD+";text-align:right\">"+sbMoney_(R.full.fp)+"</td>"+
-       "<td style=\""+TD+";text-align:right\"><b>"+sbMoney_(R.full.total)+"</b>"+delta+"</td></tr>";
+       "<td style=\""+TD+";text-align:right\"><b>"+sbMoney_(hpCostOf_(R).total)+"</b>"+delta+"</td></tr>";
     h+=hpDetailHtml_(R,idx);
   });
   h+="</table></div>";
@@ -7179,7 +7165,17 @@ function hpRunCuts_(R,total,even,wkMax,dayMax){
 // Baseline is whichever option is flagged as such — run all 7 days — priced in
 // the SAME cut world, so the comparison isolates the closures. Mixing a cut
 // option against an uncut baseline would credit the closure with the cuts.
-function hpFullTotal_(R){return (R&&R.full&&isFinite(R.full.total))?R.full.total:(R?R.total:0);}
+// What an option COSTS is labor and holiday pay. Labor is assembly plus
+// processing — Cori, 2026-10-21: 'we really want the labor number (Processing,
+// Assembly)'.
+//
+// Food and packaging is NOT in the total and must not be. The week builds the
+// same units whichever days are closed, so that spend happens either way; adding
+// it buried a $35k decision inside a $470k number and, worse, reordered the
+// options on a mix-shift artifact. It is carried here for one purpose only: to
+// say what we would NOT spend if a SKU came out.
+// Falls back to the closure cost if an option has not been priced yet.
+function hpCostOf_(R){return (R&&R.cost)?R.cost:{labor:(R?R.labor+R.ot:0),holiday:(R?R.holiday:0),total:(R?R.total:0),proc:0,fp:0,unpriced:[]};}
 function hpWeekCost_(opt,procRate,cut){
   var w=hpWeekSkuTotals_(opt,cut).tot,fp=0,units=0,unpriced={};
   Object.keys(w).forEach(function(k){
@@ -7188,9 +7184,10 @@ function hpWeekCost_(opt,procRate,cut){
     if(c.priced)fp+=u*(c.food+c.pkg);else if(u>0)unpriced[k]=true;
   });
   var proc=units*procRate;
-  return{labor:opt.labor,holiday:opt.holiday,ot:opt.ot,scenario:opt.total,
-    proc:proc,fp:fp,units:units,total:opt.total+proc+fp,
-    unpriced:Object.keys(unpriced)};
+  return{labor:opt.labor+opt.ot+proc,  // assembly + OT + processing
+    assembly:opt.labor,ot:opt.ot,proc:proc,holiday:opt.holiday,
+    total:opt.total+proc,              // labor + holiday. No food, no packaging.
+    fp:fp,units:units,unpriced:Object.keys(unpriced)};
 }
 function hpRunCutScenarios_(rows,total,even){
   if(!HP_RESULT||!HP_RESULT.length||!rows||!rows.length)return null;
@@ -7207,13 +7204,16 @@ function hpRunCutScenarios_(rows,total,even){
     var after=hpWeekCost_(alt,procRate,cut),before=hpWeekCost_(R,procRate,null);
     after.unpriced.forEach(function(k){unpriced[k]=true;});
     var row={name:R.name,baseline:!!R.baseline,cost:after,costBefore:before,
-      cutSaved:before.total-after.total,
+      laborSaved:before.total-after.total,   // labor + holiday, the cost side
+      fpAvoided:before.fp-after.fp,          // never a cost here, only avoided
       risksBefore:R.risks,risksAfter:alt.risks,unfit:alt.unfit};
     if(row.baseline)base=row;
     out.push(row);
   });
   // Everything is measured against running all seven days, in the same cut world.
   out.forEach(function(r){r.vsBase=base?(base.cost.total-r.cost.total):0;});
+  // The F&P avoided is the same money whichever option runs, give or take the
+  // mix shift, so it is reported once rather than raced between options.
   return{rows:out,skus:skus,unpriced:Object.keys(unpriced),hasBase:!!base};
 }
 function hpCutThreshold_(){
@@ -7235,8 +7235,7 @@ function hpShowCuts(){
   var total=parseFloat((document.getElementById('hpTotal')||{}).value);
   var even=parseFloat((document.getElementById('hpEven')||{}).value);
   var best=null;
-  // Cheapest by what the WEEK costs, the same ranking the options table shows.
-  HP_RESULT.forEach(function(R){if(R.baseline)return;if(!best||hpFullTotal_(R)<hpFullTotal_(best))best=R;});
+  HP_RESULT.forEach(function(R){if(R.baseline)return;if(!best||hpCostOf_(R).total<hpCostOf_(best).total)best=R;});
   if(!best)best=HP_RESULT[0];
   var el=document.getElementById('hpCutsOut');
   var store=(STATE.fpCosts&&STATE.fpCosts.costs)||null;
@@ -7336,28 +7335,28 @@ function hpCutScenarioHtml_(TH,TD){
   var rest=S.rows.filter(function(r){return !r.baseline;}).sort(function(a,b){return a.cost.total-b.cost.total;});
   var order=(base?[base]:[]).concat(rest);
   var h='<div style="margin-top:18px">';
-  h+='<div class="card-title" style="margin-bottom:6px">What the week costs if we cut all '+S.skus.length+'</div>';
+  h+='<div class="card-title" style="margin-bottom:6px">What each option costs if we cut all '+S.skus.length+'</div>';
   h+='<div class="sb-note" style="margin-bottom:8px">Every option re-sequenced with all '+S.skus.length+
-    ' removed together, then priced in full: assembly labor and holiday pay from the engine, plus processing and '+
-    'food &amp; packaging across every SKU that still runs. <b>Total</b> is the cost of the whole week, and savings are '+
-    'measured against running all seven days.</div>';
+    ' removed together. <b>Total</b> is labor \u2014 assembly and processing \u2014 plus holiday pay, and savings under it are '+
+    'measured against running all seven days. <b>Food &amp; packaging is deliberately not in any total</b>: the week builds '+
+    'the same units whichever days close, so that spend happens either way. The last column is the part we would not '+
+    'buy at all once these SKUs come out.</div>';
   h+='<div class="sb-note" style="margin-bottom:8px">Food &amp; packaging moves between options because each weekday '+
     'carries its own SKU mix. Closing a day pushes its volume onto the days that stay open, and they build a different '+
     'mix at a different cost per unit \u2014 so the same week total is not the same money.</div>';
   if(S.unpriced.length){
     h+='<div class="status status-warn" style="margin-bottom:8px">'+S.unpriced.length+' SKU'+
-      (S.unpriced.length>1?'s are':' is')+' not in the Production Planner\u2019s recipe list, so '+
-      (S.unpriced.length>1?'their':'its')+' food and packaging is missing from these totals: '+
-      escHtml(S.unpriced.slice(0,6).join(', '))+(S.unpriced.length>6?'\u2026':'')+'</div>';
+      (S.unpriced.length>1?'s are':' is')+' not in the Production Planner\u2019s recipe list, so anything we would '+
+      'avoid spending on '+(S.unpriced.length>1?'them':'it')+' is missing from the last column: '+
+      escHtml(S.unpriced.slice(0,6).join(', '))+(S.unpriced.length>6?'\u2026':'')+'. The cost columns are unaffected.</div>';
   }
   h+='<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%">';
   h+='<tr><th style="'+TH+';text-align:left">Option</th>'+
-     '<th style="'+TH+';text-align:right">Labor</th>'+
+     '<th style="'+TH+';text-align:right">Labor<div style="font-size:9px;font-weight:400;text-transform:none;letter-spacing:0">assembly + processing</div></th>'+
      '<th style="'+TH+';text-align:right">Holiday pay</th>'+
-     '<th style="'+TH+';text-align:right">Processing</th>'+
-     '<th style="'+TH+';text-align:right">Food &amp; packaging</th>'+
      '<th style="'+TH+';text-align:right">Total</th>'+
-     '<th style="'+TH+';text-align:right" title="What taking these SKUs out is worth to this option.">Saved by cutting</th></tr>';
+     '<th style="'+TH+';text-align:right" title="Labor and holiday pay this option stops spending once these SKUs come out.">Labor saved by cutting</th>'+
+     '<th style="'+TH+';text-align:right" title="Food, packaging and labels we would not buy at all. Not part of any total above.">F&amp;P we would not spend</th></tr>';
   order.forEach(function(r){
     var c=r.cost,dr=r.risksAfter-r.risksBefore;
     var tag=r.baseline?'<div style="font-size:9px;color:var(--muted)">everything else is measured against this</div>':'';
@@ -7367,12 +7366,11 @@ function hpCutScenarioHtml_(TH,TD){
       :'<div style="font-size:9px;color:var('+(r.vsBase>0?'--green':'--red')+')">'+
        (r.vsBase>0?'saves ':'costs ')+sbMoney_(Math.abs(r.vsBase))+(r.vsBase>0?'':' more')+'</div>';
     h+='<tr><td style="'+TD+'">'+escHtml(r.name)+risk+'</td>'+
-       '<td style="'+TD+';text-align:right">'+sbMoney_(c.labor+c.ot)+'</td>'+
-       '<td style="'+TD+';text-align:right">'+(c.holiday>0?sbMoney_(c.holiday):'\u2014')+'</td>'+
-       '<td style="'+TD+';text-align:right">'+sbMoney_(c.proc)+'</td>'+
-       '<td style="'+TD+';text-align:right">'+sbMoney_(c.fp)+'</td>'+
+       '<td style="'+TD+';text-align:right">'+sbMoney_(c.labor)+'</td>'+
+       '<td style="'+TD+';text-align:right">'+(c.holiday>0?'<span style="color:var(--amber)">'+sbMoney_(c.holiday)+'</span>':'\u2014')+'</td>'+
        '<td style="'+TD+';text-align:right"><b>'+sbMoney_(c.total)+'</b>'+vs+'</td>'+
-       '<td style="'+TD+';text-align:right"><b style="color:var(--green)">'+sbMoney_(r.cutSaved)+'</b></td></tr>';
+       '<td style="'+TD+';text-align:right"><b style="color:var(--green)">'+sbMoney_(r.laborSaved)+'</b></td>'+
+       '<td style="'+TD+';text-align:right"><b style="color:var(--green)">'+sbMoney_(r.fpAvoided)+'</b></td></tr>';
   });
   h+='</table></div></div>';
   return h;
@@ -7388,7 +7386,7 @@ function hpExportPayload_(){
   if(!HP_RESULT||!HP_RESULT.length)return null;
   var base=null;HP_RESULT.forEach(function(R){if(R.baseline)base=R;});
   if(!base)base=HP_RESULT[0];
-  var rest=HP_RESULT.filter(function(R){return R!==base;}).sort(function(a,b){return hpFullTotal_(a)-hpFullTotal_(b);});
+  var rest=HP_RESULT.filter(function(R){return R!==base;}).sort(function(a,b){return hpCostOf_(a).total-hpCostOf_(b).total;});
   var pick=rest.length?rest[0]:base;
   var dates={};hpWeekDates_(HP_WEEK).forEach(function(x){dates[x.day]=x.iso;});
   function split(R){
