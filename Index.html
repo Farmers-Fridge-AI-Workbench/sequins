@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.261 — 2026-10-21    (pairs with Code.js v0.4.193)
+  Sequins ✨ — Index.html    v0.5.262 — 2026-10-21    (pairs with Code.js v0.4.194)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.261 The holiday export carries both cut tables, and quotes the same labor
-           number the screen does.
+  v0.5.262 The cuts table says what it assumes: fewer units built, sales lost,
+           no backfill.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4319,7 +4319,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.261';
+var APP_VERSION='v0.5.262';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -7275,6 +7275,7 @@ function hpRunCutScenarios_(rows,total,even){
       laborSaved:before.total-after.total,   // labor + holiday, the cost side
       fpAvoided:before.fp-after.fp,          // never a cost here, only avoided
       pvLost:before.pv-after.pv,             // sales we would not make
+      unitsCut:before.units-after.units,     // the week simply builds this many fewer
       risksBefore:R.risks,risksAfter:alt.risks,unfit:alt.unfit};
     if(row.baseline)base=row;
     out.push(row);
@@ -7480,6 +7481,22 @@ function hpCutScenarioHtml_(TH,TD){
     h+='<div class="status status-warn" style="margin-top:6px">No sale price for '+escHtml(S.noPv.join(', '))+
       ', so the PV given up is understated.</div>';
   }
+  // The model drops the cut SKU's share and leaves every other share alone, so
+  // the week builds fewer units and those sales are simply gone. That is one end
+  // of a range. If Demand Planning hands back the same week total with the volume
+  // spread across what is left, PV is not given up at all and the labor saving is
+  // only the changeovers.
+  //
+  // Not modelled, on purpose. Cori, 2026-10-21: which way it goes 'would depend on
+  // the retailer that's getting these SKUs and what their menu selections are'.
+  // There is no single rate to apply, so the honest thing is to say what the
+  // number assumes rather than pick a nuance and hide it.
+  var _uc=0;S.rows.forEach(function(r){if(r.baseline)_uc=r.unitsCut||0;});
+  if(!_uc&&S.rows.length)_uc=S.rows[0].unitsCut||0;
+  h+='<div class="status status-info" style="margin-top:6px">Assumes the week builds '+
+    fmtUnits(Math.round(_uc))+' fewer units and those sales are lost. If Demand Planning '+
+    'backfills the volume with other SKUs, the PV is not given up and the labor saving is '+
+    'only the changeovers.</div>';
   h+='<div class="sb-note" style="margin-top:6px">Shifts slightly between options because each weekday carries its own SKU mix.</div>';
   h+='</div>';
 

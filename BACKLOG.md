@@ -105,19 +105,6 @@ dissolve it entirely if Samad reopened that rule.
 
 ---
 
-## Blocked on Samad
-
-### Does cutting a SKU lose the sale, or move it?
-
-The PV column assumes a customer who cannot buy the ham sandwich buys nothing.
-That is the worst case. If half that volume moves to another SKU, the three
-candidates cost about -$4k net rather than -$15.5k, which could flip the
-recommendation.
-
-This is a demand question, not a Sequins one. Even a rough standing assumption
-("we keep about half") would let the column say what cutting really costs. Until
-then it is labelled as the worst case.
-
 ## Blocked on Cori
 
 ## Blocked on someone else

@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.193 — 2026-10-21    (pairs with Index.html v0.5.261)
+ * Sequins ✨ — Code.js    v0.4.194 — 2026-10-21    (pairs with Index.html v0.5.262)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.193 The holiday export gains a Cuts tab — what each SKU is worth, and what
- *          each option costs with them all taken out.
+ * v0.4.194 No server change — paired with Index.html v0.5.262, which states what
+ *          the cuts table assumes about volume that is cut.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
