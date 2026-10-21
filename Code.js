@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.188 — 2026-10-21    (pairs with Index.html v0.5.256)
+ * Sequins ✨ — Code.js    v0.4.189 — 2026-10-21    (pairs with Index.html v0.5.257)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.188 The stored costs carry a shape stamp, so a client that wants more than
- *          they hold refetches instead of waiting for someone to run the sync.
+ * v0.4.189 A stale cost store is rewritten by the first client that needs it, so
+ *          the slow read happens once rather than on every click until 2am.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -2391,14 +2391,23 @@ function runFpCostSyncNow() {
 // long to sit behind a button someone presses with a colleague waiting.
 //
 // Read-only and stores nothing. The client holds the result for the session.
+// Reads the Planner AND saves what it read, so this is the last slow click
+// rather than every click until 2am. v0.4.188 only read, which meant a store
+// written before the current shape stayed stale all day and the fallback fired
+// every single time — the same annoyance it was meant to end.
+//
+// Writing here is not background work: it happens because someone asked for the
+// cut table, and it writes exactly what the nightly job writes, to the section
+// that job owns. Nothing of anyone's is touched.
 function fetchFpCosts(skuNames) {
   const user = getCurrentUser();
   if (!user.isAdmin && !user.canEditRules && !user.isPlanner) throw new Error('Not authorized');
-  const wanted = (skuNames && skuNames.length)
-    ? new Set(skuNames.map(s => normalizeSku_(s))) : null;
-  const fp = recipeMasterCosts_(wanted);
-  fp.v = FP_COST_VERSION;
-  return fp;
+  const stored = getSection_(STATE_KEYS.fpCosts);
+  if (stored && stored.costs && (stored.v || 0) >= FP_COST_VERSION) return stored;
+  // Stale or missing — refresh the whole set, not just the SKUs asked for, so
+  // the next caller finds a complete store rather than another partial one.
+  syncFpCosts_();
+  return getSection_(STATE_KEYS.fpCosts);
 }
 
 function fetchSkuAttributesFor(skuNames) {
