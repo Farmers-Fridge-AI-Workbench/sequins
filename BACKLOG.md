@@ -66,13 +66,6 @@ real device or a decision:
 
 ## Small, mine to do
 
-### The holiday export carries neither cut table
-
-`hpExportPayload_` predates both. The Sheet gets the option comparison and the
-daily split for Demand Planning, and none of the costing: not the per-SKU cut
-table, not the cost-and-what-we-give-up pair. Everything built on 2026-10-21
-lives on screen only. If this is going to leadership, that is the gap.
-
 ### Two trigger installers still have the editor gate bug
 
 `installPushedDemandTrigger` and `installAllergenSyncTrigger` both open with

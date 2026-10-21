@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.260 — 2026-10-21    (pairs with Code.js v0.4.192)
+  Sequins ✨ — Index.html    v0.5.261 — 2026-10-21    (pairs with Code.js v0.4.193)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.260 No client change — paired with Code.js v0.4.192, which fixes the last
-           two editor-run trigger installers.
+  v0.5.261 The holiday export carries both cut tables, and quotes the same labor
+           number the screen does.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4319,7 +4319,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.260';
+var APP_VERSION='v0.5.261';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -7515,16 +7515,55 @@ function hpExportPayload_(){
     shapeWeeks:base.shape.weeks,
     shapeBasis:base.shape.basis==='actual'?'what actually ran':base.shape.basis,
     days:DAYS_ORDER.map(function(d){return DAY_SHORT[d];}),
+    // hpCostOf_, not R.labor/R.total: those predate processing being part of
+    // labor, so the Sheet was quoting a different number from the screen.
     options:[base].concat(rest).map(function(R){
+      var C=hpCostOf_(R);
       return{name:R.name,baseline:!!R.baseline,split:split(R),
         offered:R.offered,lost:R.lost,
-        labor:Math.round(R.labor),holiday:Math.round(R.holiday),total:Math.round(R.total),
-        delta:Math.round(R.total-base.total)};
+        labor:Math.round(C.labor),holiday:Math.round(C.holiday),total:Math.round(C.total),
+        delta:Math.round(C.total-hpCostOf_(base).total)};
     }),
     pick:{name:pick.name,rows:DAYS_ORDER.map(function(d,i){
       var r=pick.days[i];
       return{day:d,date:dates[d]||'',units:(r&&r.closed)?'closed':Math.round(pick.split[d]||0)};
-    })}
+    })},
+    // Both cut tables, when they have been run. Absent is fine — the Sheet just
+    // leaves the tab out rather than exporting empty headings.
+    cuts:hpCutsExport_(),
+    cutScenarios:hpCutScenExport_()
+  };
+}
+function hpRiskNote_(r){
+  var d=r.risksAfter-r.risksBefore;
+  return d<0?('clears '+(-d)+' problem'+(d<-1?'s':'')):d>0?('creates '+d+' more'):'nothing else moves';
+}
+function hpCutsExport_(){
+  if(!HP_CUTS||!HP_CUTS.rows||!HP_CUTS.rows.length)return null;
+  return{
+    costDay:HP_CUTS.costDay||'',procRate:HP_CUTS.procRate||0,
+    unpriced:HP_CUTS.unpriced||0,wkMax:HP_CUTS.wkMax,dayMax:HP_CUTS.dayMax,
+    rows:HP_CUTS.rows.map(function(r){
+      return{sku:r.sku,units:Math.round(r.units),
+        thinDay:r.thin?(DAY_SHORT[r.thin.day]||r.thin.day):'',
+        thinUnits:r.thin?Math.round(r.thin.units):'',
+        food:r.priced?Math.round(r.food):'',pkg:r.priced?Math.round(r.pkg):'',
+        labor:Math.round(r.labor),saved:Math.round(r.saving),note:hpRiskNote_(r)};
+    })
+  };
+}
+function hpCutScenExport_(){
+  if(!HP_CUTSCEN||!HP_CUTSCEN.rows||!HP_CUTSCEN.rows.length)return null;
+  return{
+    skus:HP_CUTSCEN.skus||[],noPv:HP_CUTSCEN.noPv||[],
+    rows:HP_CUTSCEN.rows.map(function(r){
+      return{name:r.name,baseline:!!r.baseline,
+        labor:Math.round(r.costBefore.labor),holiday:Math.round(r.costBefore.holiday),
+        laborSaved:Math.round(r.laborSaved),total:Math.round(r.cost.total),
+        vsBase:Math.round(r.vsBase),
+        fpAvoided:Math.round(r.fpAvoided),pvLost:Math.round(r.pvLost),
+        net:Math.round(r.fpAvoided-r.pvLost)};
+    })
   };
 }
 function hpDismiss_(id){var e=document.getElementById(id);if(e)e.innerHTML='';}

@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.192 — 2026-10-21    (pairs with Index.html v0.5.260)
+ * Sequins ✨ — Code.js    v0.4.193 — 2026-10-21    (pairs with Index.html v0.5.261)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.192 The last two trigger installers survive being run from the editor,
- *          where Session.getActiveUser throws.
+ * v0.4.193 The holiday export gains a Cuts tab — what each SKU is worth, and what
+ *          each option costs with them all taken out.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -4430,8 +4430,72 @@ function exportHolidayPlan(payload) {
   }
   for (let i = 1; i <= width; i++) sh.autoResizeColumn(i);
 
+  // ── Cuts, on their own tab ────────────────────────────────────────────────
+  // Only written when the cut table has actually been run. An empty heading
+  // reads as 'we looked and found nothing', which is not the same thing.
+  if (p.cuts || p.cutScenarios) writeCutTabs_(ss, p, user);
+
   try { writeAuditLog_(user.email, 'export_holiday_plan', p.week, '', ss.getId()); } catch (e) {}
   return { url: ss.getUrl(), name: ss.getName() };
+}
+
+// The two cut tables, laid out the way the screen reads them: what each SKU is
+// worth, then what each option costs with them all taken out. Money formats are
+// applied by range because the columns move with the content.
+function writeCutTabs_(ss, p, user) {
+  const sh = ss.insertSheet('Cuts');
+  const rows = [];
+  const money = [];   // [firstRow, firstCol, nRows, nCols] to format as $
+  const plain = [];   // the same, as #,##0
+
+  if (p.cuts) {
+    const C = p.cuts;
+    rows.push(['WORTH CUTTING?', '', '', '', '', '', '', '']);
+    rows.push(['Under (units/week)', C.wkMax || '', 'or under on any day', C.dayMax || '',
+               'Food & packaging from', C.costDay || '', 'Processing $/unit', C.procRate || 0]);
+    if (C.unpriced) {
+      rows.push(['NOTE', C.unpriced + ' of these have no food or packaging cost \u2014 those rows are labor only']);
+    }
+    rows.push([]);
+    rows.push(['SKU', 'Units that week', 'Thinnest day', 'On', 'Food', 'Packaging',
+               'Labor (assembly + processing)', 'Total saved', 'What else changes']);
+    const first = rows.length + 1;
+    (C.rows || []).forEach(function(r) {
+      rows.push([r.sku, r.units, r.thinUnits, r.thinDay, r.food, r.pkg, r.labor, r.saved, r.note]);
+    });
+    if (C.rows && C.rows.length) {
+      plain.push([first, 2, C.rows.length, 2]);
+      money.push([first, 5, C.rows.length, 4]);
+    }
+    rows.push([]);
+  }
+
+  if (p.cutScenarios) {
+    const S = p.cutScenarios;
+    rows.push(['WHAT EACH OPTION COSTS IF WE CUT ' + (S.skus || []).length]);
+    rows.push(['Cut', (S.skus || []).join(', ')]);
+    rows.push(['Food & packaging and PV are NOT in Total \u2014 the week builds the same units whichever days close']);
+    if (S.noPv && S.noPv.length) {
+      rows.push(['NOTE', 'No sale price for ' + S.noPv.join(', ') + ' \u2014 PV given up is understated']);
+    }
+    rows.push([]);
+    rows.push(['Option', 'Labor (assembly + processing)', 'Holiday pay', 'Less: saved by cutting',
+               'Total', 'vs baseline', 'F&P we would not spend', 'PV we would not make', 'Net']);
+    const first = rows.length + 1;
+    (S.rows || []).forEach(function(r) {
+      rows.push([r.name, r.labor, r.holiday || '', -r.laborSaved, r.total,
+                 r.baseline ? '' : r.vsBase, r.fpAvoided, -r.pvLost, r.net]);
+    });
+    if (S.rows && S.rows.length) money.push([first, 2, S.rows.length, 8]);
+  }
+
+  const width = rows.reduce(function(m, r) { return Math.max(m, r.length); }, 0);
+  const padded = rows.map(function(r) { while (r.length < width) r.push(''); return r; });
+  sh.getRange(1, 1, padded.length, width).setValues(padded);   // one write
+  money.forEach(function(m) { sh.getRange(m[0], m[1], m[2], m[3]).setNumberFormat('$#,##0'); });
+  plain.forEach(function(m) { sh.getRange(m[0], m[1], m[2], m[3]).setNumberFormat('#,##0'); });
+  sh.getRange(1, 1, 1, width).setFontWeight('bold');
+  for (let i = 1; i <= width; i++) sh.autoResizeColumn(i);
 }
 
 // ─── SLACK NOTIFY (v0.4.169) ─────────────────────────────────────────────────
