@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.244 — 2026-10-21    (pairs with Code.js v0.4.176)
+  Sequins ✨ — Index.html    v0.5.245 — 2026-10-21    (pairs with Code.js v0.4.177)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.244 Cut candidates are priced in full FPL — food, packaging and labor —
-           not labor alone.
+  v0.5.245 The cut table prices itself from the Production Planner on every run,
+           instead of waiting for an attribute pull.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4319,7 +4319,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.244';
+var APP_VERSION='v0.5.245';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -7128,6 +7128,14 @@ function hpCutDayThreshold_(){
   var v=parseFloat((document.getElementById('hpCutDayMax')||{}).value);
   return (v>0)?v:0;
 }
+// Costs are fetched HERE, on the click, not carried in from an attribute pull.
+// Cori does not run that pull often, and she wants whatever standard cost is true
+// today — ingredient pricing moves constantly. Reading at the point of use means
+// there is no stale copy and no step to remember, which is the only way a money
+// table is safe to put in front of leadership.
+//
+// Nothing is stored. The costs live on STATE.skuLibrary for this session only, so
+// the next click re-reads them and no save can overwrite anything of hers.
 function hpShowCuts(){
   if(!HP_RESULT)return;
   var total=parseFloat((document.getElementById('hpTotal')||{}).value);
@@ -7136,10 +7144,36 @@ function hpShowCuts(){
   HP_RESULT.forEach(function(R){if(R.baseline)return;if(!best||R.total<best.total)best=R;});
   if(!best)best=HP_RESULT[0];
   var el=document.getElementById('hpCutsOut');
+  el.innerHTML='<div class="status status-info"><span class="spinner"></span>Pricing from the Production Planner…</div>';
+  google.script.run.withSuccessHandler(function(fp){
+    hpApplyFpCosts_(fp);
+    hpCutsRun_(best,total,even,el,'');
+  }).withFailureHandler(function(err){
+    // Pricing failing must not take the labor answer away — show the table and
+    // say plainly that the money side is missing.
+    hpCutsRun_(best,total,even,el,err.message||String(err));
+  }).fetchFpCosts(Object.keys(STATE.skuLibrary||{}));
+}
+// Session-only. Writes to STATE.skuLibrary but never saves it.
+function hpApplyFpCosts_(fp){
+  if(!fp||!fp.costs)return;
+  var byKey={};
+  Object.keys(STATE.skuLibrary||{}).forEach(function(k){
+    byKey[String(k).toUpperCase().replace(/[^A-Z0-9]/g,'')]=k;
+  });
+  Object.keys(fp.costs).forEach(function(nk){
+    var k=byKey[nk];if(!k)return;
+    STATE.skuLibrary[k].foodCost=fp.costs[nk].food;
+    STATE.skuLibrary[k].pkgCost=fp.costs[nk].pkg;
+    if(fp.day)STATE.skuLibrary[k].fpCostDay=fp.day;
+  });
+}
+function hpCutsRun_(best,total,even,el,priceErr){
   el.innerHTML='<div class="status status-info"><span class="spinner"></span>Re-running the week without each candidate…</div>';
   setTimeout(function(){
     try{
       HP_CUTS=hpRunCuts_(best,total,even,hpCutThreshold_(),hpCutDayThreshold_());
+      HP_CUTS.priceErr=priceErr||'';
       hpRenderCuts_(best);
     }catch(e){el.innerHTML='<div class="status status-err">'+escHtml(e.message||String(e))+'</div>';}
   },30);
@@ -7157,10 +7191,13 @@ function hpRenderCuts_(best){
   // packaging on some of its rows is worse than no total, and nobody reads to
   // the end of a table to find that out.
   var h='';
-  if(C.unpriced){
+  if(C.priceErr){
+    h+='<div class="status status-err" style="margin-bottom:8px">Could not reach the Production Planner, so these are '+
+      'labor only: '+escHtml(C.priceErr)+'</div>';
+  }else if(C.unpriced){
     h+='<div class="status status-warn" style="margin-bottom:8px">'+C.unpriced+' of these '+C.rows.length+
-      ' have no food or packaging cost — the Planner only prices what is running that day. '+
-      'Those rows are labor only, so their real saving is larger. Pull attributes in SKU Library to price them.</div>';
+      ' are not in the Production Planner\u2019s recipe list, so they carry no food or packaging cost. '+
+      'Those rows are labor only.</div>';
   }
   h+='<div class="sb-note" style="margin-bottom:8px">Priced against <b>'+escHtml(best.name)+'</b>, '+
     'the cheapest option above. <b>Food</b> and <b>packaging</b> are standard cost per unit from the Production Planner'+
@@ -7192,8 +7229,8 @@ function hpRenderCuts_(best){
      '<td style="'+TD+';text-align:right"><b>'+sbMoney_(tf)+'</b></td>'+
      '<td style="'+TD+';text-align:right"><b>'+sbMoney_(tp)+'</b></td>'+
      '<td style="'+TD+';text-align:right"><b>'+sbMoney_(tl)+'</b></td>'+
-     '<td style="'+TD+';text-align:right"><b style="color:var(--green)">'+sbMoney_(tot)+'</b>'+
-     '<div style="font-size:9px;color:var(--muted)">roughly — each was priced on its own</div></td><td style="'+TD+'"></td></tr>';
+     '<td style="'+TD+';text-align:right"><b style="color:var(--green)">'+sbMoney_(tot)+'</b></td>'+
+     '<td style="'+TD+'"></td></tr>';
   h+='</table>';
   el.innerHTML=h;
 }

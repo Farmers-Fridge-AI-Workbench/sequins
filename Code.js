@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.176 — 2026-10-21    (pairs with Index.html v0.5.244)
+ * Sequins ✨ — Code.js    v0.4.177 — 2026-10-21    (pairs with Index.html v0.5.245)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.176 An attribute pull now brings back food and packaging cost per unit,
- *          summed from the Recipe Master ingredient lines (E food, P+L packaging).
+ * v0.4.177 fetchFpCosts reads food and packaging cost on demand, so the cut table
+ *          prices itself instead of waiting for an attribute pull.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -2245,6 +2245,63 @@ function ensureWeeklyUpmTrigger_() {
  * Returns a map keyed by SKU name (uppercased) -> attributes.
  * SKUs not found in these sources are flagged, not guessed.
  */
+// Food and packaging per unit, summed from the Recipe Master ingredient lines.
+// See the constants above for the E / P / L rule. Returns { costs, day, n }.
+function recipeMasterCosts_(wantedKeys) {
+  const rm = SpreadsheetApp.openById(PLANNER_SHEET_ID).getSheetByName(RECIPE_MASTER_TAB);
+  if (!rm) throw new Error('Tab "' + RECIPE_MASTER_TAB + '" not found in the Production Planner');
+  const lastRow = rm.getLastRow();
+  if (lastRow < 2) return { costs: {}, day: '', n: 0 };
+
+  const n     = lastRow - 1;
+  const ids   = rm.getRange(2, RECIPE_SKU_COL, n, 2).getValues();  // C:D
+  const cells = rm.getRange(2, RECIPE_COST_COL, n, 1).getValues(); // DL
+  // Which production day this explosion is for, so the number carries its date.
+  const day   = String(rm.getRange(2, 1).getDisplayValue() || '').trim();
+
+  const food = {}, pkg = {}, seen = {};
+  ids.forEach((row, i) => {
+    const name = String(row[0] || '').trim();
+    if (!name) return;
+    const key = normalizeSku_(name);
+    if (wantedKeys && !wantedKeys.has(key)) return;
+    // The SKU counts as priced the moment it appears, even on a line carrying
+    // no cost — a sub-recipe row reads $0.0000 and is not a gap.
+    seen[key] = true;
+    const item = String(row[1] || '').trim().toUpperCase().charAt(0);
+    const cost = parseFloat(String(cells[i][0]).replace(/[$,\s]/g, ''));
+    if (!isFinite(cost) || !item) return;
+    if (item === 'E') food[key] = (food[key] || 0) + cost;
+    else if (item === 'P' || item === 'L') pkg[key] = (pkg[key] || 0) + cost;
+  });
+
+  const costs = {};
+  Object.keys(seen).forEach(key => {
+    costs[key] = {
+      food: Math.round((food[key] || 0) * 10000) / 10000,
+      pkg:  Math.round((pkg[key]  || 0) * 10000) / 10000
+    };
+  });
+  Logger.log('recipeMasterCosts_: priced ' + Object.keys(costs).length + ' SKU(s) from ' + (day || 'an undated tab'));
+  return { costs: costs, day: day, n: Object.keys(costs).length };
+}
+
+// Called by the Holiday cut table every time it runs, rather than relying on an
+// attribute pull. Cori, 2026-10-21: 'I don't run pull attributes very often'
+// — and she also wants whatever standard cost is true today, since ingredient
+// pricing moves constantly and a scenario is not worth delaying over it. Fetching
+// at the point of use satisfies both: there is no stale copy to go looking for,
+// and no step to remember.
+//
+// Read-only and stores nothing. The client holds the result for the session.
+function fetchFpCosts(skuNames) {
+  const user = getCurrentUser();
+  if (!user.isAdmin && !user.canEditRules && !user.isPlanner) throw new Error('Not authorized');
+  const wanted = (skuNames && skuNames.length)
+    ? new Set(skuNames.map(s => normalizeSku_(s))) : null;
+  return recipeMasterCosts_(wanted);
+}
+
 function fetchSkuAttributesFor(skuNames) {
   const user = getCurrentUser();
   if (!user.isAdmin && !user.canEditRules) throw new Error('Not authorized');
@@ -2313,42 +2370,15 @@ function fetchSkuAttributesFor(skuNames) {
     }
   } catch(e) { Logger.log('Processing Complexity fetch failed: ' + e.message); }
 
-  // 4. Recipe Master — food and packaging cost per unit, summed from the
-  //    ingredient lines. See the constants above for the E/P/L rule.
+  // 4. Recipe Master — food and packaging cost per unit.
   try {
-    const rm = SpreadsheetApp.openById(PLANNER_SHEET_ID).getSheetByName(RECIPE_MASTER_TAB);
-    if (rm) {
-      const lastRow = rm.getLastRow();
-      if (lastRow > 1) {
-        const n     = lastRow - 1;
-        const ids   = rm.getRange(2, RECIPE_SKU_COL, n, 2).getValues();  // C:D
-        const costs = rm.getRange(2, RECIPE_COST_COL, n, 1).getValues(); // DL
-        // Which day this explosion is for, so the number carries its own date.
-        const day   = String(rm.getRange(2, 1).getDisplayValue() || '').trim();
-        const food = {}, pkg = {}, seen = {};
-        ids.forEach((row, i) => {
-          const name = String(row[0] || '').trim();
-          if (!name) return;
-          const key = normalizeSku_(name);
-          if (!wantedKeys.has(key)) return;
-          // The SKU is priced the moment it appears, even on a row that carries
-          // no cost — a sub-recipe line reads $0.0000 and is not a gap.
-          seen[key] = true;
-          const item = String(row[1] || '').trim().toUpperCase().charAt(0);
-          const cost = parseFloat(String(costs[i][0]).replace(/[$,\s]/g, ''));
-          if (!isFinite(cost) || !item) return;
-          if (item === 'E') food[key] = (food[key] || 0) + cost;
-          else if (item === 'P' || item === 'L') pkg[key] = (pkg[key] || 0) + cost;
-        });
-        Object.keys(seen).forEach(key => {
-          if (!result[key]) result[key] = {};
-          result[key].foodCost  = Math.round((food[key] || 0) * 10000) / 10000;
-          result[key].pkgCost   = Math.round((pkg[key]  || 0) * 10000) / 10000;
-          if (day) result[key].fpCostDay = day;
-        });
-        Logger.log('Recipe Master: priced ' + Object.keys(seen).length + ' SKU(s) from ' + (day || 'an undated tab'));
-      }
-    }
+    const fp = recipeMasterCosts_(wantedKeys);
+    Object.keys(fp.costs).forEach(key => {
+      if (!result[key]) result[key] = {};
+      result[key].foodCost  = fp.costs[key].food;
+      result[key].pkgCost   = fp.costs[key].pkg;
+      if (fp.day) result[key].fpCostDay = fp.day;
+    });
   } catch(e) { Logger.log('Recipe Master fetch failed: ' + e.message); }
 
   // Mark which originally-requested SKUs found nothing at all
