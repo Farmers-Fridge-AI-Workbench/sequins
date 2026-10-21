@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.187 — 2026-10-21    (pairs with Index.html v0.5.255)
+ * Sequins ✨ — Code.js    v0.4.188 — 2026-10-21    (pairs with Index.html v0.5.256)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.186 The nightly cost sync also brings back sale price per SKU, so a cut can
- *          say what sales it gives up as well as what it saves.
+ * v0.4.188 The stored costs carry a shape stamp, so a client that wants more than
+ *          they hold refetches instead of waiting for someone to run the sync.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -47,6 +47,14 @@ const RECIPE_COST_COL       = 116; // DL Standard Cost
 // it moves with ingredient prices, and it covers 62 of the 63 SKUs in the library
 // against this tab's 55. The two agree where both have a SKU — CHEDDAR_CHEESE
 // $0.33/$0.16 and CHIPS_GUAC $0.79/$0.27 — which is how this tab was validated.
+// Bump whenever syncFpCosts_ changes what it stores. The client compares this
+// against the stored stamp and refetches live when they differ, which is what
+// stops a shape change meaning someone has to open the Apps Script editor and
+// run a function by hand. It happened twice on 2026-10-21 and should not have
+// happened once — a nightly job is supposed to be invisible.
+//   1  food, pkg
+//   2  + pv
+const FP_COST_VERSION       = 2;
 const PLANNER_COST_TAB      = 'Crrent Food & Pkg Cost';
 const PCOST_NAME_COL        = 2;   // B  Item Name
 const PCOST_PV_COL          = 4;   // D  Sale Price (PV)
@@ -2339,7 +2347,7 @@ function recipeMasterCosts_(wantedKeys) {
 // again. Cost is a copy of the Planner's number, so it has its own home.
 function syncFpCosts_() {
   const fp = recipeMasterCosts_(null);
-  const payload = { costs: fp.costs, day: fp.day, at: new Date().toISOString(), n: fp.n };
+  const payload = { v: FP_COST_VERSION, costs: fp.costs, day: fp.day, at: new Date().toISOString(), n: fp.n };
   setSection_(STATE_KEYS.fpCosts, payload);
   return { skus: fp.n, day: fp.day };
 }
@@ -2388,7 +2396,9 @@ function fetchFpCosts(skuNames) {
   if (!user.isAdmin && !user.canEditRules && !user.isPlanner) throw new Error('Not authorized');
   const wanted = (skuNames && skuNames.length)
     ? new Set(skuNames.map(s => normalizeSku_(s))) : null;
-  return recipeMasterCosts_(wanted);
+  const fp = recipeMasterCosts_(wanted);
+  fp.v = FP_COST_VERSION;
+  return fp;
 }
 
 function fetchSkuAttributesFor(skuNames) {

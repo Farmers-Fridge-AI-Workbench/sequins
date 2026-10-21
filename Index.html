@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.255 — 2026-10-21    (pairs with Code.js v0.4.187)
+  Sequins ✨ — Index.html    v0.5.256 — 2026-10-21    (pairs with Code.js v0.4.188)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.255 What we give up by cutting is its own table: F&P we would not spend,
-           PV we would not make, and the net of the two.
+  v0.5.256 Stale stored costs refetch themselves instead of needing someone to
+           run the sync by hand.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4319,7 +4319,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.255';
+var APP_VERSION='v0.5.256';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -7117,6 +7117,9 @@ function hpRenderResult(){
 // of the saving, never the whole of it.
 var HP_CUTS=null;
 var HP_CUTSCEN=null;
+// Must match FP_COST_VERSION in Code.js. The two files ship as a pair, so this
+// is a shape contract between them rather than a setting.
+var FP_COST_SHAPE=2;
 // A SKU can look fine across the week and still be barely worth setting up on a
 // given day — a ham sandwich at 90 units costs the same changeover as one at
 // 900 (Cori, 2026-10-02). So the week total and the thinnest single day are both
@@ -7290,10 +7293,16 @@ function hpShowCuts(){
   HP_RESULT.forEach(function(R){if(R.baseline)return;if(!best||hpCostOf_(R).total<hpCostOf_(best).total)best=R;});
   if(!best)best=HP_RESULT[0];
   var el=document.getElementById('hpCutsOut');
-  var store=(STATE.fpCosts&&STATE.fpCosts.costs)||null;
+  // Usable only if it holds what this build asks for. A store written by an
+  // older build counts as missing, so the live read covers the gap and tonight's
+  // sync writes the new shape. Nobody has to run anything: twice on 2026-10-21 a
+  // change to what gets stored meant Cori had to open the Apps Script editor,
+  // which is exactly what a nightly job is supposed to prevent.
+  var fpc=STATE.fpCosts;
+  var store=(fpc&&fpc.costs&&(fpc.v||0)>=FP_COST_SHAPE)?fpc.costs:null;
   if(store&&Object.keys(store).length){hpCutsRun_(best,total,even,el,'');return;}
   el.innerHTML='<div class="status status-info"><span class="spinner"></span>Pricing from the Production Planner… '+
-    '<span style="color:var(--muted)">(first run — after tonight this is instant)</span></div>';
+    '<span style="color:var(--muted)">(reading it live this once — tonight’s sync makes it instant again)</span></div>';
   google.script.run.withSuccessHandler(function(fp){
     hpApplyFpCosts_(fp);
     hpCutsRun_(best,total,even,el,'');
@@ -7307,7 +7316,7 @@ function hpShowCuts(){
 // lookup has one path to read. The SKU Library is not touched at all.
 function hpApplyFpCosts_(fp){
   if(!fp||!fp.costs)return;
-  STATE.fpCosts={costs:fp.costs,day:fp.day||'',at:''};
+  STATE.fpCosts={v:fp.v||FP_COST_SHAPE,costs:fp.costs,day:fp.day||'',at:''};
 }
 function hpCutsRun_(best,total,even,el,priceErr){
   el.innerHTML='<div class="status status-info"><span class="spinner"></span>Re-running the week without each candidate…</div>';
