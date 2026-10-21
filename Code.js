@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.178 — 2026-10-21    (pairs with Index.html v0.5.246)
+ * Sequins ✨ — Code.js    v0.4.179 — 2026-10-21    (pairs with Index.html v0.5.247)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.178 Food and packaging cost is refreshed nightly at 2am and stored, so the
- *          cut table prices instantly instead of reading the Planner on a click.
+ * v0.4.179 No server change — paired with Index.html v0.5.247, which re-runs every
+ *          holiday option with the recommended cuts taken out.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -2316,7 +2316,9 @@ function fpCostSyncTrigger() {
 
 // Run ONCE from the editor. Idempotent — checks first, so it cannot duplicate.
 function installFpCostTrigger() {
-  if (!getCurrentUser().isAdmin) throw new Error('Not authorized');
+  // Editor-run. getCurrentUser() throws there without the userinfo.email scope,
+  // which is what broke the first attempt on 2026-10-21.
+  assertAdminOrScheduled_();
   const existing = ScriptApp.getProjectTriggers().filter(function(t) {
     return t.getHandlerFunction() === 'fpCostSyncTrigger';
   });
@@ -2330,8 +2332,7 @@ function installFpCostTrigger() {
 
 // Fills the store immediately, so the cut table is fast before 2am ever runs.
 function runFpCostSyncNow() {
-  const user = getCurrentUser();
-  if (!user.isAdmin && !user.canEditRules) throw new Error('Not authorized');
+  assertAdminOrScheduled_();
   const res = syncFpCosts_();
   Logger.log('runFpCostSyncNow: ' + JSON.stringify(res));
   return res;

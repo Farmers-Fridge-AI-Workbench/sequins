@@ -1,8 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.246 — 2026-10-21    (pairs with Code.js v0.4.178)
+  Sequins ✨ — Index.html    v0.5.247 — 2026-10-21    (pairs with Code.js v0.4.179)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.246 Cut pricing comes from the nightly cost sync, so the table is instant.
+  v0.5.247 Below the costing: every option re-sequenced with all the cuts taken
+           out at once, with labor, processing and F&P saved kept apart.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4318,7 +4319,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.246';
+var APP_VERSION='v0.5.247';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -6884,7 +6885,7 @@ function hpRun(){
     try{
       var opts=hpBuildOptions_(HP_WEEK);
       HP_RESULT=opts.map(function(o){return hpRunOption_(HP_WEEK,o,total,even);});
-      HP_CUTS=null;
+      HP_CUTS=null;HP_CUTSCEN=null;
       var ce=document.getElementById('hpCutsOut');if(ce)ce.innerHTML='';
       var xe=document.getElementById('hpExportOut');if(xe)xe.innerHTML='';
       hpRenderResult();
@@ -7060,6 +7061,7 @@ function hpRenderResult(){
 // Labor only. Sequins has no material or packaging cost, so this is the floor
 // of the saving, never the whole of it.
 var HP_CUTS=null;
+var HP_CUTSCEN=null;
 // A SKU can look fine across the week and still be barely worth setting up on a
 // given day — a ham sandwich at 90 units costs the same changeover as one at
 // 900 (Cori, 2026-10-02). So the week total and the thinnest single day are both
@@ -7126,6 +7128,41 @@ function hpRunCuts_(R,total,even,wkMax,dayMax){
   return{rows:out,considered:cands.length,wkMax:wkMax,dayMax:dayMax,
     procRate:procRate,costDay:costDay,unpriced:unpriced};
 }
+// The second question, and the one leadership actually decides on: if we DO ask
+// for these cuts, what does each option look like then? Every option re-run with
+// the whole set removed at once — not one at a time, because that is not how the
+// week would run.
+//
+// Three savings, kept apart so the arithmetic is checkable rather than asserted:
+//   labor      the scenario model's own number — assembly, holiday pay and OT.
+//              Only this one moves the scenario cost, so cost-now minus
+//              cost-after equals it exactly.
+//   processing per unit at the static rate. Real, but never part of a scenario
+//              total, so it is shown beside rather than folded in.
+//   food+pkg   per unit from the Planner. Same reason.
+function hpRunCutScenarios_(rows,total,even){
+  if(!HP_RESULT||!HP_RESULT.length||!rows||!rows.length)return null;
+  var cut={},skus=[];
+  rows.forEach(function(r){cut[r.sku]=true;skus.push(r.sku);});
+  var procRate=ruleNum_(getRules(),'processingStaticPerUnit')||0;
+  var out=[];
+  HP_RESULT.forEach(function(R){
+    var alt=hpRunOption_(HP_WEEK,{name:R.name,states:R._states||{},baseline:!!R.baseline},total,even,cut);
+    // Units are taken from THIS option's own week, because a closed day moves
+    // volume and a SKU is not worth the same in every option.
+    var w=hpWeekSkuTotals_(R).tot,fp=0,proc=0;
+    skus.forEach(function(k){
+      var u=w[k]||0,c=hpFpFor_(k);
+      proc+=u*procRate;
+      if(c.priced)fp+=u*(c.food+c.pkg);
+    });
+    out.push({name:R.name,baseline:!!R.baseline,before:R.total,after:alt.total,
+      laborSaved:R.total-alt.total,proc:proc,fp:fp,
+      saved:(R.total-alt.total)+proc+fp,
+      risksBefore:R.risks,risksAfter:alt.risks,unfit:alt.unfit});
+  });
+  return{rows:out,skus:skus};
+}
 function hpCutThreshold_(){
   var v=parseFloat((document.getElementById('hpCutMax')||{}).value);
   return (v>0)?v:1000;
@@ -7173,6 +7210,7 @@ function hpCutsRun_(best,total,even,el,priceErr){
     try{
       HP_CUTS=hpRunCuts_(best,total,even,hpCutThreshold_(),hpCutDayThreshold_());
       HP_CUTS.priceErr=priceErr||'';
+      HP_CUTSCEN=hpRunCutScenarios_(HP_CUTS.rows,total,even);
       hpRenderCuts_(best);
     }catch(e){el.innerHTML='<div class="status status-err">'+escHtml(e.message||String(e))+'</div>';}
   },30);
@@ -7231,7 +7269,45 @@ function hpRenderCuts_(best){
      '<td style="'+TD+';text-align:right"><b style="color:var(--green)">'+sbMoney_(tot)+'</b></td>'+
      '<td style="'+TD+'"></td></tr>';
   h+='</table>';
+  h+=hpCutScenarioHtml_(TH,TD);
   el.innerHTML=h;
+}
+// Goes BELOW the costing, because it only means anything once you have seen what
+// the cuts are worth.
+function hpCutScenarioHtml_(TH,TD){
+  var S=HP_CUTSCEN;if(!S||!S.rows.length)return '';
+  var base=null;S.rows.forEach(function(r){if(r.baseline)base=r;});
+  var rest=S.rows.filter(function(r){return !r.baseline;}).sort(function(a,b){return a.after-b.after;});
+  var order=(base?[base]:[]).concat(rest);
+  var h='<div style="margin-top:18px">';
+  h+='<div class="card-title" style="margin-bottom:6px">And if we cut all '+S.skus.length+'?</div>';
+  h+='<div class="sb-note" style="margin-bottom:8px">Every option above, re-sequenced with all '+S.skus.length+
+    ' removed together. <b>Scenario cost</b> is the same number as the options table \u2014 assembly, holiday pay and OT \u2014 so '+
+    'cost now minus cost after is exactly the labor saved. Processing and food &amp; packaging are per unit and sit outside '+
+    'that model, so they are shown beside it rather than folded in.</div>';
+  h+='<table style="border-collapse:collapse;width:100%">';
+  h+='<tr><th style="'+TH+';text-align:left">Option</th>'+
+     '<th style="'+TH+';text-align:right">Scenario cost now</th>'+
+     '<th style="'+TH+';text-align:right">Scenario cost after cuts</th>'+
+     '<th style="'+TH+';text-align:right">Labor saved</th>'+
+     '<th style="'+TH+';text-align:right">Processing saved</th>'+
+     '<th style="'+TH+';text-align:right">Food &amp; packaging saved</th>'+
+     '<th style="'+TH+';text-align:right">Total saved</th></tr>';
+  order.forEach(function(r){
+    var dr=r.risksAfter-r.risksBefore;
+    var tag=r.baseline?'<div style="font-size:9px;color:var(--muted)">baseline</div>':'';
+    var risk=dr<0?'<div style="font-size:9px;color:var(--green)">clears '+(-dr)+'</div>'
+      :dr>0?'<div style="font-size:9px;color:var(--amber)">'+dr+' more to look at</div>':'';
+    h+='<tr><td style="'+TD+'">'+escHtml(r.name)+tag+risk+'</td>'+
+       '<td style="'+TD+';text-align:right">'+sbMoney_(r.before)+'</td>'+
+       '<td style="'+TD+';text-align:right"><b>'+sbMoney_(r.after)+'</b></td>'+
+       '<td style="'+TD+';text-align:right">'+sbMoney_(r.laborSaved)+'</td>'+
+       '<td style="'+TD+';text-align:right">'+sbMoney_(r.proc)+'</td>'+
+       '<td style="'+TD+';text-align:right">'+sbMoney_(r.fp)+'</td>'+
+       '<td style="'+TD+';text-align:right"><b style="color:var(--green)">'+sbMoney_(r.saved)+'</b></td></tr>';
+  });
+  h+='</table></div>';
+  return h;
 }
 // Export. The ask that leaves the app — the comparison, and underneath it the
 // daily numbers to hand Demand Planning. The server only writes what is passed;
