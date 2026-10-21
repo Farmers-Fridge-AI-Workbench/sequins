@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.194 — 2026-10-21    (pairs with Index.html v0.5.262)
+ * Sequins ✨ — Code.js    v0.4.195 — 2026-10-21    (pairs with Index.html v0.5.263)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.194 No server change — paired with Index.html v0.5.262, which states what
- *          the cuts table assumes about volume that is cut.
+ * v0.4.195 Labor share from Pick Tock sets the curfew, and answers back in the
+ *          same rows. A curfew set by hand is never overwritten.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -1306,6 +1306,32 @@ function publishActualDays(entries) {
 // is read from the same Compiled Forecast rows the manual fetch reads, so the
 // two can't disagree about what a week is called.
 const PUSHED_DEMAND_TAB = 'Demand';  // same spreadsheet as PLAN_ARCHIVE_SHEET_ID
+
+// ─── LABOR SHARE (Pick Tock ⏱️ → Sequins) ───────────────────────────────────
+// On nights Pick Pack needs help, assembly finishes early and those people walk
+// over. Pick Tock decides that: tick "doing it", and it works out when assembly
+// bodies are due on the pick line. Assembly therefore has to be DONE five minutes
+// before that, which is exactly the curfew Sequins already has.
+//
+// Same shape as the demand push: Pick Tock writes rows into a tab in the archive
+// Sheet, Sequins reads them and writes its answer back into the same rows. One
+// sheet, one direction each way, and the whole exchange is visible to a human
+// without either app running.
+//
+// Cori, 2026-10-21, on what the answer has to be worth: she wants an error in
+// Pick Tock when they disagree. So Sequins NEVER overwrites a curfew a person
+// set to a different time — it reports the conflict and leaves theirs alone. A
+// curfew this sync set is its own to update or clear; a human's is not.
+const LABOR_SHARE_TAB    = 'Labor Share';  // same spreadsheet as PLAN_ARCHIVE_SHEET_ID
+const LABOR_SHARE_HEADER = ['Date','Sharing','AssemblyStart','Units','WrittenAt','WrittenBy',
+                            'Curfew','AppliedAt','Status','Note'];
+// Walk-over time between the assembly floor finishing and bodies on the pick
+// line. A constant rather than a rule because nobody has said it varies; if it
+// ever does, it becomes a sequencingRules field and the Pick Tock side reads it.
+const LABOR_SHARE_LEAD_MIN = 5;
+// Marks a curfew as this sync's rather than a person's. Additive — every existing
+// reader of finishBy takes {enabled,time} and ignores the rest.
+const LABOR_SHARE_SOURCE = 'labor-share';
 // Stamped onto every day this importer writes. It is what separates a pushed
 // day from a Demands 2025 actual now that both carry mode 'actual'.
 const PUSHED_SOURCE     = 'assembly_summary';
@@ -1627,6 +1653,124 @@ function previewPushedDemand() {
              '; unusable rows: ' + (plan.skippedRows || 0));
 }
 
+// 'HH:MM' or a Sheets time value -> minutes from midnight. Same coercion problem
+// as _finishByMin_, which is why the display value is read rather than the raw.
+function laborShareMin_(disp, raw) {
+  const m = String(disp || '').match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+  if (m) {
+    let h = parseInt(m[1], 10);
+    const mm = parseInt(m[2], 10);
+    const ap = (m[3] || '').toUpperCase();
+    if (ap === 'PM' && h < 12) h += 12;
+    if (ap === 'AM' && h === 12) h = 0;
+    return h * 60 + mm;
+  }
+  if (raw instanceof Date && !isNaN(raw.getTime())) return raw.getHours() * 60 + raw.getMinutes();
+  const n = parseFloat(raw);
+  if (isFinite(n) && n > 0 && n < 1) return Math.round(n * 1440);   // Sheets day fraction
+  return null;
+}
+function minToHHMM_(min) {
+  const h = Math.floor(min / 60), m = min % 60;
+  return ('0' + h).slice(-2) + ':' + ('0' + m).slice(-2);
+}
+
+// Reads what Pick Tock asked for, applies what it can, and writes the answer
+// back into the same rows. Never throws into its caller — a curfew that did not
+// get set must not take down a demand import riding on the same trigger.
+function applyLaborShare_() {
+  const ss  = SpreadsheetApp.openById(PLAN_ARCHIVE_SHEET_ID);
+  const tab = ss.getSheetByName(LABOR_SHARE_TAB);
+  if (!tab) return { ok: true, missing: true, applied: 0, rows: 0 };
+  const lastRow = tab.getLastRow();
+  if (lastRow < 2) return { ok: true, missing: false, applied: 0, rows: 0 };
+
+  const n     = lastRow - 1;
+  const rng   = tab.getRange(2, 1, n, LABOR_SHARE_HEADER.length);
+  const vals  = rng.getValues();
+  const disp  = rng.getDisplayValues();
+  const map   = forecastDateMap_();
+  const stamp = new Date().toISOString();
+  // Read the whole finishBy store once, not per row. Refreshed after each write
+  // so a later row sees what an earlier one did — two rows can land on one day.
+  let fbAll   = stateStoreGet_('finishBy');
+
+  let applied = 0, conflicts = 0, cleared = 0;
+  const back = [];   // [Curfew, AppliedAt, Status, Note] per row, one write
+
+  vals.forEach(function(r, i) {
+    const dateStr = normalizePushedDate_(disp[i][0], r[0], Session.getScriptTimeZone());
+    const sharing = /^(y|yes|true|1)$/i.test(String(r[1] || '').trim());
+    const loc     = dateStr ? map[dateStr] : null;
+
+    if (!dateStr)      { back.push(['', stamp, 'skipped', 'no date on this row']); return; }
+    if (!loc)          { back.push(['', stamp, 'skipped', dateStr + ' is not in the Compiled Forecast']); return; }
+
+    const cur = (fbAll[loc.weekLabel] && fbAll[loc.weekLabel][loc.day]) || null;
+    const curSetByUs = !!(cur && cur.source === LABOR_SHARE_SOURCE);
+
+    // Untick clears, per Cori 2026-10-21 — but only a curfew this sync set.
+    if (!sharing) {
+      if (cur && cur.enabled && !curSetByUs) {
+        conflicts++;
+        back.push(['', stamp, 'conflict',
+          'not sharing, but a curfew of ' + (cur.time || '?') + ' is set in Sequins by hand']);
+        return;
+      }
+      if (cur && cur.enabled) {
+        saveFinishByInternal_(loc.weekLabel, loc.day, { enabled: false, time: '' }, LABOR_SHARE_SOURCE);
+        fbAll = stateStoreGet_('finishBy');
+        cleared++;
+        back.push(['', stamp, 'cleared', 'labor share turned off']);
+        return;
+      }
+      back.push(['', stamp, 'not sharing', '']);
+      return;
+    }
+
+    const startMin = laborShareMin_(disp[i][2], r[2]);
+    if (startMin === null) { back.push(['', stamp, 'skipped', 'no assembly start time']); return; }
+    const want = minToHHMM_(Math.max(0, startMin - LABOR_SHARE_LEAD_MIN));
+
+    if (cur && cur.enabled && cur.time === want) {
+      back.push([want, stamp, 'ok', '']);   // already right, whoever set it
+      return;
+    }
+    if (cur && cur.enabled && !curSetByUs) {
+      conflicts++;
+      back.push([cur.time || '', stamp, 'conflict',
+        'Sequins has ' + cur.time + ' set by hand; this asks for ' + want]);
+      return;
+    }
+    saveFinishByInternal_(loc.weekLabel, loc.day, { enabled: true, time: want }, LABOR_SHARE_SOURCE);
+    fbAll = stateStoreGet_('finishBy');
+    applied++;
+    back.push([want, stamp, 'set', 'assembly start ' + (disp[i][2] || '') + ' less ' + LABOR_SHARE_LEAD_MIN + ' min']);
+  });
+
+  tab.getRange(2, 7, back.length, 4).setValues(back);   // one write, cols G:J
+  Logger.log('applyLaborShare_: ' + applied + ' set, ' + cleared + ' cleared, ' + conflicts + ' conflict(s)');
+  return { ok: true, missing: false, rows: back.length, applied: applied, cleared: cleared, conflicts: conflicts };
+}
+
+// saveFinishBy without the user gate, and carrying provenance. The public
+// saveFinishBy stays exactly as it was — a person setting a curfew leaves no
+// source, which is what makes 'set by hand' detectable at all.
+function saveFinishByInternal_(weekLabel, day, obj, source) {
+  const entry = { enabled: !!(obj && obj.enabled), time: (obj && obj.time) || '' };
+  if (source) { entry.source = source; entry.setAt = new Date().toISOString(); }
+  stateStorePut_('finishBy', weekLabel, day, entry);
+  writeAuditLog_(source || 'system', 'save_finish_by', weekLabel, day,
+                 entry.enabled ? entry.time : 'off');
+}
+
+// Admin or scheduled. Returns the counts so a caller can say what happened.
+function syncLaborShare() {
+  assertAdminOrScheduled_();
+  try { return applyLaborShare_(); }
+  catch (e) { Logger.log('syncLaborShare failed: ' + e.message); return { ok: false, error: e.message }; }
+}
+
 // ─── PUSHED DEMAND TRIGGER ────────────────────────────────────────────────────
 // Runs importPushedDemand() on a timer so an ALREADY-OPEN tab fills in without a
 // refresh. It works because setDemandDay_ -> setSection_ bumps sequins_meta's
@@ -1669,6 +1813,18 @@ function pushedDemandTrigger() {
   }
   // Repair the Sunday trigger if it is gone. Idempotent and never throws.
   try { ensureWeeklyUpmTrigger_(); } catch (e) {}
+
+  // Labor share, for the same reason the UPM catch-up is here: this trigger
+  // demonstrably fires. It is cheap — one sheet read — and it is what makes the
+  // Pick Tock check go green without anyone opening Sequins.
+  try {
+    const ls = applyLaborShare_();
+    if (ls && (ls.applied || ls.cleared || ls.conflicts)) {
+      Logger.log('pushedDemandTrigger: labor share — ' + JSON.stringify(ls));
+    }
+  } catch (e) {
+    Logger.log('pushedDemandTrigger: labor share failed: ' + e.message);
+  }
 }
 
 // Default every 15 minutes. Apps Script's Run button can't pass arguments, so
