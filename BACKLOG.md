@@ -63,14 +63,6 @@ real device or a decision. **Nothing here is mine to do** — checked 2026-10-21
 
 ## Small, mine to do
 
-### Two trigger installers still have the editor gate bug
-
-`installPushedDemandTrigger` and `installAllergenSyncTrigger` both open with
-`if (!getCurrentUser().isAdmin) throw`, which throws in the Apps Script editor
-without the userinfo.email scope — the error Cori hit on 2026-10-21 installing
-the cost trigger. `assertAdminOrScheduled_()` is the fix and is already used by
-the siblings. Two one-line changes, only bites on a reinstall.
-
 ### WRAP_SHAWARMA_CHICKPEA cannot be placed on any day
 
 **Cause found 2026-10-21. Needs a Line Config decision, not code.** 437 units a
