@@ -4018,9 +4018,21 @@ function reclaimSandboxProperty() {
 }
 
 // ─── FINISH-BY (CURFEW) ──────────────────────────────────────
-// Per week/day: { enabled: bool, time: 'HH:MM' }. Warning-only on the client —
-// nothing here affects sequencing. Whole day's object replaces on save, same
-// pattern as break overrides and scenarios.
+// Per week/day: { enabled: bool, time: 'HH:MM' }. Whole day's object replaces on
+// save, same pattern as break overrides and scenarios.
+//
+// AS OF 2026-10-21 the engine ENFORCES this rather than warning about it: fits()
+// rejects any job that would end past the cap, and the unplaced reason reads
+// "cannot take it without passing the 2:00 PM cap". So setting a curfew reshapes
+// the plan and can push SKUs to unplaced.
+//
+// This comment previously said the opposite, and that was probably true when it
+// was written. Cori, 2026-10-21: "they keep changing the rules and capabilities
+// ... it probably was true at some point and maybe it will be in the future."
+// Read the date, not the tense — and check fits() before relying on either.
+//
+// It matters now because Pick Tock sets these automatically from its labor-share
+// tick, which means an outside system is changing what the floor builds.
 function saveFinishBy(weekLabel, day, obj) {
   const user = getCurrentUser();
   if (!user.isAdmin && !user.isPlanner && !user.canEditRules) throw new Error('Not authorized');
