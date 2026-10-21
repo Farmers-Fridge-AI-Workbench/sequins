@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.190 — 2026-10-21    (pairs with Index.html v0.5.258)
+ * Sequins ✨ — Code.js    v0.4.191 — 2026-10-21    (pairs with Index.html v0.5.259)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.190 No server change — paired with Index.html v0.5.258, which keeps pilot
- *          volume out of the holiday day split.
+ * v0.4.191 The weekly UPM refresh rides on the demand trigger, which actually
+ *          fires, instead of waiting for someone to open the SKU Library.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -1645,6 +1645,30 @@ function pushedDemandTrigger() {
   } catch (err) {
     Logger.log('pushedDemandTrigger failed: ' + err.message);
   }
+
+  // The weekly UPM refresh rides along here, because this trigger demonstrably
+  // fires and the Sunday one does not. Confirmed 2026-10-21: opening the SKU
+  // Library after 19 days updated 47 UPMs in one go, which is not what a weekly
+  // job that is running leaves behind.
+  //
+  // Until now the only caller of catchUpUpmIfDue_ was getUpmAutoStatus, reached
+  // only by an admin opening the SKU Library view. That is a poor place for it:
+  // the refresh waits on someone visiting one page, and so does the code that
+  // reinstalls a missing trigger — so a trigger that goes missing can only be
+  // repaired by the person who would not notice it was gone.
+  //
+  // catchUpUpmIfDue_ is already a no-op before seven days have passed and takes
+  // a lock, so running it every fifteen minutes costs one property read. It goes
+  // AFTER the import on purpose: the demand landing is the job, and if reading
+  // the Data Drop ever runs long it must not take that with it.
+  try {
+    const up = catchUpUpmIfDue_();
+    if (up.ran) Logger.log('pushedDemandTrigger: UPM catch-up — ' + up.message);
+  } catch (e) {
+    Logger.log('pushedDemandTrigger: UPM catch-up failed: ' + e.message);
+  }
+  // Repair the Sunday trigger if it is gone. Idempotent and never throws.
+  try { ensureWeeklyUpmTrigger_(); } catch (e) {}
 }
 
 // Default every 15 minutes. Apps Script's Run button can't pass arguments, so
