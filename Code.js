@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.183 — 2026-10-21    (pairs with Index.html v0.5.251)
+ * Sequins ✨ — Code.js    v0.4.184 — 2026-10-21    (pairs with Index.html v0.5.252)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.183 No server change — paired with Index.html v0.5.251, which keeps food and
- *          packaging out of every cost total.
+ * v0.4.184 No server change — paired with Index.html v0.5.252, which stops a pilot
+ *          run setting a launch SKU's daily split.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
