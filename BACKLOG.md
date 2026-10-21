@@ -108,22 +108,6 @@ allergen compounding) would dissolve it if Samad reopened that rule.
 
 ## Blocked on Samad
 
-### What should we be cutting for — pain, or margin?
-
-The cut list finds SKUs that are thin on a day, which is an operations answer:
-a thin SKU costs a full changeover however few units it carries, and takes a
-slot either way. Samad would pick the same ones.
-
-With PV in, the money says the opposite. On Wk 48 the three candidates were
-worth ~$1.7k of labor saved against ~$22.5k of sales given up and ~$5.3k of food
-and packaging avoided — net about -$15.5k. Cutting them destroys contribution.
-
-Both numbers are real and they point different ways. The question for Samad is
-what the list should rank by: pain to run, or contribution lost per labor hour
-saved. The tool can do either; nobody has said which is wanted.
-
-Depends on the substitution question below.
-
 ### Does cutting a SKU lose the sale, or move it?
 
 The PV column assumes a customer who cannot buy the ham sandwich buys nothing.
