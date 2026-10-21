@@ -218,6 +218,31 @@ Sequins web app UI — those are fine for error surfacing.
   nothing trips the rule. It fires again at the next quarterly launch, which is
   when it should.
 
+**Labor share — Pick Tock sets the curfew, settled 2026-10-21:**
+
+- On nights Pick Pack needs help, assembly finishes early and those people walk
+  over. **Pick Tock decides it**; Sequins only receives the consequence.
+- Pick Tock works out when assembly bodies are due on the pick line. Assembly
+  must be DONE five minutes before that, and that is the Sequins curfew.
+  `curfew = assembly start − 5 min`, the five being walk-over time.
+- The channel is a **`Labor Share` tab in the archive Sheet**, same shape as the
+  Planner's demand push. Pick Tock writes A–F, Sequins answers in G–J. A human
+  can read the whole exchange with neither app running.
+- Sequins applies it on the 15-minute `pushedDemandTrigger` and on page load.
+- **A curfew someone set by hand is never overwritten.** The row comes back
+  `conflict` and Pick Tock shows red. Provenance is a `source` field on the
+  finishBy entry — a person's has none, which is what makes 'set by hand'
+  detectable at all. Unticking clears, but only a curfew this sync set.
+- Pick Tock is `executeAs: USER_ACCESSING`, so it writes as whoever ticked the
+  box. That works only because the archive Sheet is domain-writable. Narrowing
+  that sharing breaks this silently for everyone but its owner — the same way
+  the demand push failed during the October PTO.
+- Cori sets these on a **Wednesday for the following week**, and a person reviews
+  the shift before publishing, so latency is not a concern and the curfew gets
+  human eyes long before the floor sees it.
+- **Holiday Planning is NOT wired to this yet** — her call, 2026-10-21. Its
+  early-finish field is still typed by hand.
+
 **Changeover — settled 2026-10-02:**
 
 - 11 minutes, charged between **every** consecutive SKU. That is the measured

@@ -10,19 +10,20 @@ Opened 2026-08-19. Last refreshed 2026-10-21.
 
 ## Ready to build
 
-### Pick Pack labor share — the last hole in Holiday Planning
+### Wire labor share into Holiday Planning
 
-Every other lever in Holiday Planning is real. The early-finish times are not:
-they are whatever hour someone types, with no idea whether Pick Pack needs the
-people that day. Cori, 2026-10-01: "this ‘end early’ for assembly will end up
-being predicated on whether Pick Pack needs our labor share (which I haven’t
-discussed with you much yet — it’s related to curfew)."
+The mechanism exists and works as of 2026-10-21: ticking "doing it" in Pick Tock
+writes a Labor Share row, Sequins sets that day’s curfew to assembly start minus
+five, and Pick Tock shows a dot when they agree. See CLAUDE.md, "Labor share".
 
-Needs her to say what sharing actually does to assembly on a shared day — heads
-off the lines, or a hard finish time — and whether it is a fixed weekday or set
-per plan. The seam is `hpState_`: a day already carries `earlyFinish` and
-`lateStart`, so a labor-share rule would set those rather than add a new lever.
+What is not wired is Holiday Planning. Its early-finish field is still whatever
+hour someone types, with no idea whether Pick Pack needs the people that day —
+the original complaint. The seam is `hpState_`: a day already carries
+`earlyFinish`, so a holiday week would read the same Labor Share rows rather than
+gaining a new lever.
 
+Cori, 2026-10-21: "It will touch holiday planning yes but I'm not quite ready to
+push that into the holiday planner yet." So this waits for her, not for code.
 ### A forecast week that is dated but not filled in
 
 Written and tested on 2026-10-02, deliberately left unshipped — Cori: "we can
