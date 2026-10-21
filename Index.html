@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.264 — 2026-10-21    (pairs with Code.js v0.4.196)
+  Sequins ✨ — Index.html    v0.5.265 — 2026-10-21    (pairs with Code.js v0.4.197)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.264 Opening Sequins applies Pick Tock's labor share, instead of waiting up
-           to fifteen minutes for the trigger.
+  v0.5.265 A curfew the labor-share sync just set shows up without a second
+           refresh.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4319,7 +4319,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.264';
+var APP_VERSION='v0.5.265';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -9246,7 +9246,19 @@ window.onload=function(){
     checkPushedDemand(false);
     // Labor share from Pick Tock. Also on the 15-minute trigger; this is so
     // somebody who is actually looking does not wait for it.
-    google.script.run.withSuccessHandler(function(){}).withFailureHandler(function(){}).syncLaborShare();
+    //
+    // It runs AFTER getState, so anything it changes is not in STATE yet. On
+    // 2026-10-21 that meant Sequins set a curfew correctly and the page carried
+    // on showing the toolbar unticked — correct in storage, wrong on screen,
+    // until a second refresh. So when it reports a change, re-read.
+    google.script.run.withSuccessHandler(function(r){
+      if(!r||!(r.applied||r.cleared))return;
+      google.script.run.withSuccessHandler(function(st){
+        if(!st)return;
+        if(st.finishBy)STATE.finishBy=st.finishBy;
+        renderSequence();renderWorkbench();
+      }).withFailureHandler(function(){}).getState();
+    }).withFailureHandler(function(){}).syncLaborShare();
     checkDemandMigration();
     renderLegend();  // sidebar is always visible, so it can't wait for a view switch
   }).withFailureHandler(function(err){document.getElementById('seqNoDataSub').textContent='Error loading state: '+err.message;}).getState();
