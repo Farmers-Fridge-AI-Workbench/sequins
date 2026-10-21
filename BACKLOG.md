@@ -105,8 +105,6 @@ dissolve it entirely if Samad reopened that rule.
 
 ---
 
-## Blocked on Cori
-
 ## Blocked on someone else
 
 ### Push run-sheet actuals into the internal system the floor already types into
