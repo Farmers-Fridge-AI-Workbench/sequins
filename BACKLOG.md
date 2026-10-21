@@ -4,7 +4,7 @@ Open items only. Delete an entry when it's done — git history is the record,
 this file is the "what's still hanging" list. Each entry should stand alone:
 enough context to act on without the conversation that created it.
 
-Opened 2026-08-19. Last refreshed 2026-10-02.
+Opened 2026-08-19. Last refreshed 2026-10-21.
 
 ---
 
@@ -64,6 +64,34 @@ real device or a decision:
 
 ## Small, mine to do
 
+### The holiday export carries neither cut table
+
+`hpExportPayload_` predates both. The Sheet gets the option comparison and the
+daily split for Demand Planning, and none of the costing: not the per-SKU cut
+table, not the cost-and-what-we-give-up pair. Everything built on 2026-10-21
+lives on screen only. If this is going to leadership, that is the gap.
+
+### Two trigger installers still have the editor gate bug
+
+`installPushedDemandTrigger` and `installAllergenSyncTrigger` both open with
+`if (!getCurrentUser().isAdmin) throw`, which throws in the Apps Script editor
+without the userinfo.email scope — the error Cori hit on 2026-10-21 installing
+the cost trigger. `assertAdminOrScheduled_()` is the fix and is already used by
+the siblings. Two one-line changes, only bites on a reinstall.
+
+### The dated-week fix from 2026-10-02 was lost
+
+A week the Compiled Forecast has dated but not filled still cannot be loaded:
+`fetchForecastWeekData` only creates a day where it finds a positive quantity.
+It was written and tested on 10/02, left unshipped at Cori’s request, and then
+lost when Code.js was rebuilt from v0.4.170 the same day. It is in the git
+history of that session if wanted. May be moot if Compiled has since filled W53.
+
+### Net column in the cuts table
+
+Added unasked on 2026-10-21 — F&P avoided less PV given up. Keep or drop is
+Cori’s call; it is one column and trivial either way.
+
 ### WRAP_SHAWARMA_CHICKPEA cannot be placed on any day
 
 Declares [soy, wheat, sesame] and cannot extend the compounding chain on LINE-2
@@ -78,12 +106,47 @@ allergen compounding) would dissolve it if Samad reopened that rule.
 
 ---
 
+## Blocked on Samad
+
+### What should we be cutting for — pain, or margin?
+
+The cut list finds SKUs that are thin on a day, which is an operations answer:
+a thin SKU costs a full changeover however few units it carries, and takes a
+slot either way. Samad would pick the same ones.
+
+With PV in, the money says the opposite. On Wk 48 the three candidates were
+worth ~$1.7k of labor saved against ~$22.5k of sales given up and ~$5.3k of food
+and packaging avoided — net about -$15.5k. Cutting them destroys contribution.
+
+Both numbers are real and they point different ways. The question for Samad is
+what the list should rank by: pain to run, or contribution lost per labor hour
+saved. The tool can do either; nobody has said which is wanted.
+
+Depends on the substitution question below.
+
+### Does cutting a SKU lose the sale, or move it?
+
+The PV column assumes a customer who cannot buy the ham sandwich buys nothing.
+That is the worst case. If half that volume moves to another SKU, the three
+candidates cost about -$4k net rather than -$15.5k, which could flip the
+recommendation.
+
+This is a demand question, not a Sequins one. Even a rough standing assumption
+("we keep about half") would let the column say what cutting really costs. Until
+then it is labelled as the worst case.
+
 ## Blocked on Cori
 
 ### CAESAR_PASTA_BOWL has no UPM
 
+**Probably resolved on 2026-10-21 — needs one look to confirm and then delete.**
+The weekly UPM refresh had not run for 19 days; when it did it updated 47 UPMs
+from 3,898 runs over 90 days. This SKU has been building since 10/12, so it very
+likely picked up a measured rate in that batch. Check the SKU Library row: if the
+UPM field has a number rather than amber text, this entry is done.
+
 Launches 2026-10-12 taking part of CRUNCHY_THAI_BOWL’s volume — 49,412 units from
-Wk 42 on. Nothing has a rate for it: not the Master Document, and no runs in the
+Wk 42 on. Nothing had a rate for it: not the Master Document, and no runs in the
 Data Drop. The engine falls back to the 16oz jar average, currently about 19,
 and the SKU Library row says so in amber.
 

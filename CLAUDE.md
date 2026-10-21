@@ -167,6 +167,57 @@ Sequins web app UI — those are fine for error surfacing.
   Christmas dark; New Year’s Eve half day and New Year’s Day open with a late
   start. Early finish and late start are **inputs**, not baked into the presets.
 
+**What a holiday week COSTS — settled 2026-10-21 by Cori:**
+
+- Cost is **labor plus holiday pay**, and labor means **assembly + processing**.
+  Processing is `processingStaticPerUnit` (a rule, currently $0.11), charged on
+  every unit built.
+- **Food, packaging and PV are never inside a cost total.** The week builds the
+  same units whichever days close, so that spend happens either way; putting it
+  in buried a ~$35k decision inside a ~$476k number and reordered the options on
+  a weekday-mix artifact. They answer a different question and live in their own
+  table: F&P is what we would NOT spend if a SKU came out, PV is the sales we
+  would NOT make.
+- PV assumes **no substitution** — that a customer who cannot buy the ham sandwich
+  buys nothing instead. That is the worst case and it is not labelled as a
+  forecast. If the demand team ever gives a substitution rate, it belongs here.
+- Where each number comes from:
+  - food, packaging (labels included) — Production Planner, `Recipe Master
+    (Buyer - Demand 1)`, Standard Cost in col DL, bucketed by the item number in
+    col D: `E` food, `P` and `L` packaging. Summed per SKU.
+  - sale price (PV) — same workbook, `Crrent Food & Pkg Cost` tab, col D. (The
+    tab name's spelling is theirs.)
+  - Food and packaging deliberately do NOT come from that second tab even though
+    it carries them: Recipe Master is the live explosion for the planning day and
+    covers 62 of 63 library SKUs against the tab's 55. They agree where both have
+    a SKU, which is how the tab was validated.
+- Refreshed nightly at 2am into its own Script Properties section, never into the
+  SKU Library. Stale or missing, the first client that needs it refetches and
+  saves. Nobody should ever have to run a function to make costs appear.
+
+**Pilot SKUs — settled 2026-10-21 by Cori:**
+
+- New SKUs launch **all at once, once a quarter**, and they replace SKUs
+  discontinued in the fridges (the retail volume stays). Their fridge volume is a
+  fill decision the team makes, not a projection, which is why the forecast
+  outranks any history for them.
+- A SKU whose baseline volume is under **a third** of its forecast for the same
+  week is a pilot. It is left out of the day split AND the SKU mix, and takes its
+  daily split from the forecast instead.
+- Why: three launch SKUs had run only Thursday and Friday across the four baseline
+  weeks, 200-250 units each in total. Baseline supplied a share where it had one
+  and the forecast filled the rest, so those two days inherited a 0.16% trial
+  share while the other five used the forecast — BUFFALO_CHICKEN_WRAP came out at
+  5,699 units a week with 57 on Friday, and the cut list ranked all three top as
+  'thin on a day'.
+- The weeks themselves are kept; only the pilot units leave them. Measured on
+  Wk 38-41 the contamination was 0.53% of Thursday and 0.55% of Friday and
+  nothing elsewhere — small, but one-sided onto the two days a Thanksgiving plan
+  turns on.
+- **It self-corrects.** Once the baseline window sits entirely after a launch,
+  nothing trips the rule. It fires again at the next quarterly launch, which is
+  when it should.
+
 **Changeover — settled 2026-10-02:**
 
 - 11 minutes, charged between **every** consecutive SKU. That is the measured
@@ -218,6 +269,17 @@ do not parse.
   The freeze is date-aware: past days are frozen, today and future are
   re-fetchable. No manual unfreeze for historical days.
 - **Automatic data deletion requires explicit per-instance sign-off.**
+- **A job nobody visits does not run.** Three things broke this way and the shape
+  is always the same: work that must happen on a schedule was hung off a page
+  someone has to open, or a function someone has to call. The weekly UPM refresh
+  sat behind opening SKU Library and went 19 days without running, then updated
+  47 UPMs at once; worse, the code that reinstalls a missing trigger sat in the
+  same place, so only the person who would never notice could repair it. The cost
+  store needed a hand-run sync every time its shape changed. Put scheduled work
+  on a trigger that demonstrably fires — `pushedDemandTrigger` runs every 15
+  minutes and is checkable in the audit log — and make anything cached carry a
+  version stamp so a client that wants more than the cache holds refetches and
+  SAVES, rather than refetching forever.
 - `unitsPerTote` is owned data living in Sequins, not a live fetch from
   the retiring Assembly Sequencing 2.0 workbook.
 - Partial totes are excluded from the daily tote total.
