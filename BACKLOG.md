@@ -44,15 +44,12 @@ it may well have, which would make this unnecessary.
 Cori, 2026-09-03, on priority: "I think the focus on the tablet piece is
 priority". v0.5.174 added the 900px breakpoint and v0.5.175 the Start/Stop
 buttons, both verified against her Galaxy Fold at 766px. What is left needs a
-real device or a decision:
+real device or a decision. **Nothing here is mine to do** — checked 2026-10-21:
 
 - **Hide the nav strip entirely for a floor-viewer-only login.** She sees seven
   nav items as an admin; a line lead sees two, and on a handheld even two is a
   row of screen given to navigation nobody uses. Flagged 2026-08-31, never
   answered — needs her call, not a guess.
-- **ACTUAL UNITS still raises the alphabet keyboard.** `inputmode="numeric"`,
-  one attribute. Left alone because she said the entry panel was not the focus,
-  but it is a five-second fix whenever the panel matters.
 - **Test on the tablet they actually buy.** The Fold unfolds to roughly 766 CSS
   px; a 10-inch tablet is nearer 1024 landscape. The layout will be close but
   the breakpoint should be confirmed on the real thing.
