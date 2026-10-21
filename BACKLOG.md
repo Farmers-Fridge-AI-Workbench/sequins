@@ -76,15 +76,35 @@ the siblings. Two one-line changes, only bites on a reinstall.
 
 ### WRAP_SHAWARMA_CHICKPEA cannot be placed on any day
 
-Declares [soy, wheat, sesame] and cannot extend the compounding chain on LINE-2
-or LINE-3 — every eligible line already carries an allergen it lacks. About 426
-units a day, every day, in every week checked. Its allergen data is complete, so
-this is a genuine chain problem rather than a data gap.
+**Cause found 2026-10-21. Needs a Line Config decision, not code.** 437 units a
+day (Wk 41), its allergen data complete.
 
-Note it published fine for 59 days across 87 archived rows, always LINE-2, never
-marked overridden — so something about the current mix changed, not the SKU.
-Worth a look before November. Cori’s 10-minute-clean argument (see CLAUDE.md,
-allergen compounding) would dissolve it if Samad reopened that rule.
+It declares [soy, wheat, sesame] and is blocked at BOTH ends of the wrap chain:
+
+- No milk. The greedy chain starts with ITALIAN_WRAP_202502 [milk, wheat], the
+  smallest set among the wraps, so milk is in the accumulated set from slot 1
+  and this wrap can never join.
+- Yes sesame, which no other FC-W wrap carries. So it cannot go first either —
+  nothing could follow it.
+
+It is the only no-milk, yes-sesame SKU on a line where every other SKU is the
+reverse. Moving it to the sandwich line does not help: TURKEY_CLUB_SANDWICH puts
+milk in at slot 1 there too (simulated).
+
+What works: **seed an FC line with it.** Its food-contact block is then itself
+alone — about 36 minutes at UPM 12.3 — and non-FC runs after it, which the
+two-block rule allows. The other wraps go on the remaining two FC lines. Both the
+seed and the line assignment are config and Cori’s to set.
+
+NAPA_CHICKPEA_WRAP [soy, wheat] has the same no-milk problem but zero volume —
+in the library, not on the menu — so it never reaches the engine. If it comes
+back it would place immediately before the shawarma wrap, and the pair would make
+a clean two-SKU FC block.
+
+It published fine for 59 days across 87 archived rows, always LINE-2, never
+overridden — consistent with the menu since adding milk to nearly every wrap.
+Cori’s 10-minute-clean argument (see CLAUDE.md, allergen compounding) would
+dissolve it entirely if Samad reopened that rule.
 
 ---
 
