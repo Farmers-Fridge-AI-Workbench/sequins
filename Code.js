@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.179 — 2026-10-21    (pairs with Index.html v0.5.247)
+ * Sequins ✨ — Code.js    v0.4.180 — 2026-10-21    (pairs with Index.html v0.5.248)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.179 No server change — paired with Index.html v0.5.247, which re-runs every
- *          holiday option with the recommended cuts taken out.
+ * v0.4.180 No server change — paired with Index.html v0.5.248, which prices a full
+ *          week per option and measures it against baseline.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
