@@ -25,7 +25,9 @@ per plan. The seam is `hpState_`: a day already carries `earlyFinish` and
 
 ### A forecast week that is dated but not filled in
 
-Written, tested, NOT shipped — Cori, 2026-10-02: "we can just wait a few days."
+Written and tested on 2026-10-02, deliberately left unshipped — Cori: "we can
+just wait a few days" — and then LOST when Code.js was rebuilt from v0.4.170
+later the same day. It is in that session’s git history, not in the tree.
 
 `fetchForecastWeekData` only creates a day when it finds a positive quantity, so
 a week the forecast has dated and not yet filled comes back empty: nothing to
@@ -34,8 +36,8 @@ New Year week today — Compiled carries seven placeholder cells for Dec 28 – 
 against 427 for Wk 48.
 
 One line seeds the day from the date columns instead. Worth shipping only if
-Compiled still has not filled that week in when she wants to plan it; if it has,
-this is unnecessary. The patch is in the 2026-10-02 session if it is wanted.
+Compiled still has not filled that week in when she wants to plan it — 19 days on,
+it may well have, which would make this unnecessary.
 
 ### Finish the tablet pass on My Line
 
@@ -78,14 +80,6 @@ lives on screen only. If this is going to leadership, that is the gap.
 without the userinfo.email scope — the error Cori hit on 2026-10-21 installing
 the cost trigger. `assertAdminOrScheduled_()` is the fix and is already used by
 the siblings. Two one-line changes, only bites on a reinstall.
-
-### The dated-week fix from 2026-10-02 was lost
-
-A week the Compiled Forecast has dated but not filled still cannot be loaded:
-`fetchForecastWeekData` only creates a day where it finds a positive quantity.
-It was written and tested on 10/02, left unshipped at Cori’s request, and then
-lost when Code.js was rebuilt from v0.4.170 the same day. It is in the git
-history of that session if wanted. May be moot if Compiled has since filled W53.
 
 ### WRAP_SHAWARMA_CHICKPEA cannot be placed on any day
 
