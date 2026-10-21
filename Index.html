@@ -1,9 +1,8 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.245 — 2026-10-21    (pairs with Code.js v0.4.177)
+  Sequins ✨ — Index.html    v0.5.246 — 2026-10-21    (pairs with Code.js v0.4.178)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.245 The cut table prices itself from the Production Planner on every run,
-           instead of waiting for an attribute pull.
+  v0.5.246 Cut pricing comes from the nightly cost sync, so the table is instant.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4319,7 +4318,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.245';
+var APP_VERSION='v0.5.246';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -7087,6 +7086,13 @@ function hpWeekSkuTotals_(R){
 // A SKU the Planner did not price is reported unpriced, never as zero. Zero
 // would quietly understate the saving and read as a real answer.
 function hpFpFor_(sku){
+  // The nightly store first. It is keyed the way the server normalises names,
+  // which is what lets BAJA_CHIC and BAJA_CHICKEN find each other.
+  var nk=String(sku).toUpperCase().replace(/[^A-Z0-9]/g,'');
+  var store=(STATE.fpCosts&&STATE.fpCosts.costs)||{};
+  if(store[nk])return{priced:true,food:store[nk].food||0,pkg:store[nk].pkg||0,
+    day:(STATE.fpCosts&&STATE.fpCosts.day)||''};
+  // Then whatever an attribute pull happened to leave on the row.
   var m=(STATE.skuLibrary||{})[String(sku).toUpperCase()]||{};
   var f=parseFloat(m.foodCost),g=parseFloat(m.pkgCost);
   if(!isFinite(f)&&!isFinite(g))return{priced:false,food:0,pkg:0,day:''};
@@ -7128,14 +7134,12 @@ function hpCutDayThreshold_(){
   var v=parseFloat((document.getElementById('hpCutDayMax')||{}).value);
   return (v>0)?v:0;
 }
-// Costs are fetched HERE, on the click, not carried in from an attribute pull.
-// Cori does not run that pull often, and she wants whatever standard cost is true
-// today — ingredient pricing moves constantly. Reading at the point of use means
-// there is no stale copy and no step to remember, which is the only way a money
-// table is safe to put in front of leadership.
+// Costs come from the nightly 2am sync, already in STATE, so this is instant.
+// Reading the Planner live took several seconds and that was too long to sit
+// behind a button pressed with someone waiting — Cori, 2026-10-21.
 //
-// Nothing is stored. The costs live on STATE.skuLibrary for this session only, so
-// the next click re-reads them and no save can overwrite anything of hers.
+// The live read survives as the fallback for a session that opens before the
+// sync has ever run, so the table is never silently unpriced.
 function hpShowCuts(){
   if(!HP_RESULT)return;
   var total=parseFloat((document.getElementById('hpTotal')||{}).value);
@@ -7144,7 +7148,10 @@ function hpShowCuts(){
   HP_RESULT.forEach(function(R){if(R.baseline)return;if(!best||R.total<best.total)best=R;});
   if(!best)best=HP_RESULT[0];
   var el=document.getElementById('hpCutsOut');
-  el.innerHTML='<div class="status status-info"><span class="spinner"></span>Pricing from the Production Planner…</div>';
+  var store=(STATE.fpCosts&&STATE.fpCosts.costs)||null;
+  if(store&&Object.keys(store).length){hpCutsRun_(best,total,even,el,'');return;}
+  el.innerHTML='<div class="status status-info"><span class="spinner"></span>Pricing from the Production Planner… '+
+    '<span style="color:var(--muted)">(first run — after tonight this is instant)</span></div>';
   google.script.run.withSuccessHandler(function(fp){
     hpApplyFpCosts_(fp);
     hpCutsRun_(best,total,even,el,'');
@@ -7154,19 +7161,11 @@ function hpShowCuts(){
     hpCutsRun_(best,total,even,el,err.message||String(err));
   }).fetchFpCosts(Object.keys(STATE.skuLibrary||{}));
 }
-// Session-only. Writes to STATE.skuLibrary but never saves it.
+// Session-only, and it lands in the same shape the nightly sync stores, so the
+// lookup has one path to read. The SKU Library is not touched at all.
 function hpApplyFpCosts_(fp){
   if(!fp||!fp.costs)return;
-  var byKey={};
-  Object.keys(STATE.skuLibrary||{}).forEach(function(k){
-    byKey[String(k).toUpperCase().replace(/[^A-Z0-9]/g,'')]=k;
-  });
-  Object.keys(fp.costs).forEach(function(nk){
-    var k=byKey[nk];if(!k)return;
-    STATE.skuLibrary[k].foodCost=fp.costs[nk].food;
-    STATE.skuLibrary[k].pkgCost=fp.costs[nk].pkg;
-    if(fp.day)STATE.skuLibrary[k].fpCostDay=fp.day;
-  });
+  STATE.fpCosts={costs:fp.costs,day:fp.day||'',at:''};
 }
 function hpCutsRun_(best,total,even,el,priceErr){
   el.innerHTML='<div class="status status-info"><span class="spinner"></span>Re-running the week without each candidate…</div>';

@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.177 — 2026-10-21    (pairs with Index.html v0.5.245)
+ * Sequins ✨ — Code.js    v0.4.178 — 2026-10-21    (pairs with Index.html v0.5.246)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.177 fetchFpCosts reads food and packaging cost on demand, so the cut table
- *          prices itself instead of waiting for an attribute pull.
+ * v0.4.178 Food and packaging cost is refreshed nightly at 2am and stored, so the
+ *          cut table prices instantly instead of reading the Planner on a click.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -131,7 +131,10 @@ const STATE_KEYS = {
   breakOverrides:  'sequins_break_overrides',
   scenarios:       'sequins_scenarios',
   sandboxes:       'sequins_sandboxes',
-  floorViewers:    'sequins_floor_viewers'
+  floorViewers:    'sequins_floor_viewers',
+  // Food and packaging cost per unit, refreshed nightly. Sized by the menu, not
+  // by the calendar, so it belongs in Script Properties: ~60 SKUs x two numbers.
+  fpCosts:         'sequins_fp_costs'
 };
 // Demand is stored one Script Property per day (sequins_demand__<week>__
 // <day>), with history in a separate per-day key, tracked by this index.
@@ -880,6 +883,7 @@ function getState() {
     sandboxes:       getSection_(STATE_KEYS.sandboxes) || [],
     floorViewers:    getSection_(STATE_KEYS.floorViewers) || [],
     sequencingRules: getSection_(STATE_KEYS.sequencingRules),
+    fpCosts:         getSection_(STATE_KEYS.fpCosts) || null,
     lastModified:    meta.lastModified || null
   };
 }
@@ -2286,12 +2290,57 @@ function recipeMasterCosts_(wantedKeys) {
   return { costs: costs, day: day, n: Object.keys(costs).length };
 }
 
-// Called by the Holiday cut table every time it runs, rather than relying on an
-// attribute pull. Cori, 2026-10-21: 'I don't run pull attributes very often'
-// — and she also wants whatever standard cost is true today, since ingredient
-// pricing moves constantly and a scenario is not worth delaying over it. Fetching
-// at the point of use satisfies both: there is no stale copy to go looking for,
-// and no step to remember.
+// Refreshes the stored food and packaging costs. Reads every SKU the Recipe
+// Master lists — no wanted-key filter — so a SKU added to the library later is
+// already priced rather than waiting for the next night.
+//
+// Writes its own section and NOTHING else. It deliberately does not touch the
+// SKU Library: a nightly job that rewrites that store is how CAESAR_PASTA_BOWL
+// disappeared on 2026-10-02, and no automatic job should be able to do that
+// again. Cost is a copy of the Planner's number, so it has its own home.
+function syncFpCosts_() {
+  const fp = recipeMasterCosts_(null);
+  const payload = { costs: fp.costs, day: fp.day, at: new Date().toISOString(), n: fp.n };
+  setSection_(STATE_KEYS.fpCosts, payload);
+  return { skus: fp.n, day: fp.day };
+}
+
+// Nightly at 2am, per Cori 2026-10-21 — reading the Planner on every click was
+// too slow to sit behind a button she presses while someone is waiting. The
+// numbers only change when the Planner is rebuilt, so once a night is plenty.
+function fpCostSyncTrigger() {
+  assertAdminOrScheduled_();
+  try { Logger.log('fpCostSyncTrigger: ' + JSON.stringify(syncFpCosts_())); }
+  catch(e) { Logger.log('fpCostSyncTrigger failed: ' + e.message); }
+}
+
+// Run ONCE from the editor. Idempotent — checks first, so it cannot duplicate.
+function installFpCostTrigger() {
+  if (!getCurrentUser().isAdmin) throw new Error('Not authorized');
+  const existing = ScriptApp.getProjectTriggers().filter(function(t) {
+    return t.getHandlerFunction() === 'fpCostSyncTrigger';
+  });
+  if (existing.length) {
+    Logger.log('fpCostSyncTrigger already installed (' + existing.length + ') — no action taken.');
+    return;
+  }
+  ScriptApp.newTrigger('fpCostSyncTrigger').timeBased().everyDays(1).atHour(2).create();
+  Logger.log('Installed daily fpCostSyncTrigger (~2am script timezone).');
+}
+
+// Fills the store immediately, so the cut table is fast before 2am ever runs.
+function runFpCostSyncNow() {
+  const user = getCurrentUser();
+  if (!user.isAdmin && !user.canEditRules) throw new Error('Not authorized');
+  const res = syncFpCosts_();
+  Logger.log('runFpCostSyncNow: ' + JSON.stringify(res));
+  return res;
+}
+
+// The FALLBACK path, for a session that opens before the nightly sync has ever
+// run. The cut table uses STATE.fpCosts when it is there and only calls this
+// when it is not — reading the Planner live costs several seconds, which is too
+// long to sit behind a button someone presses with a colleague waiting.
 //
 // Read-only and stores nothing. The client holds the result for the session.
 function fetchFpCosts(skuNames) {
