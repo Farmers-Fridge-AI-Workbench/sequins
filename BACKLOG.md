@@ -41,26 +41,19 @@ it may well have, which would make this unnecessary.
 
 ### Finish the tablet pass on My Line
 
-Cori, 2026-09-03, on priority: "I think the focus on the tablet piece is
-priority". v0.5.174 added the 900px breakpoint and v0.5.175 the Start/Stop
-buttons, both verified against her Galaxy Fold at 766px. What is left needs a
-real device or a decision. **Nothing here is mine to do** — checked 2026-10-21:
+**Three of the four items were already done — checked 2026-10-21.** The numeric
+keyboard shipped in v0.5.187; hiding the nav for a floor-only login shipped as
+applyFloorOnlyChrome_, which also lands them straight on My Line; and Cori
+confirmed individual logins per tablet (2026-09-03 and again 2026-10-21), which
+is the shape floorOnly_ already assumes.
 
-- **Hide the nav strip entirely for a floor-viewer-only login.** She sees seven
-  nav items as an admin; a line lead sees two, and on a handheld even two is a
-  row of screen given to navigation nobody uses. Flagged 2026-08-31, never
-  answered — needs her call, not a guess.
-- **Test on the tablet they actually buy.** The Fold unfolds to roughly 766 CSS
-  px; a 10-inch tablet is nearer 1024 landscape. The layout will be close but
-  the breakpoint should be confirmed on the real thing.
-- **Decide the login.** If all seven tablets share one Google account, every
-  actual is attributed to that account in the audit log and in `UpdatedBy`.
-  Fine for testing, worth settling before it is the evidentiary record.
+What is left needs the hardware:
 
----
-
----
-
+- **Confirm the breakpoint on the tablet the floor actually uses.** Cori,
+  2026-10-21: it will be existing equipment, model not yet known. v0.5.174 set
+  the 900px breakpoint and it was verified on her Galaxy Fold at 766px. A
+  10-inch tablet is nearer 1024 landscape, so the layout should hold, but the
+  run sheet and the entry panel want a real look before the floor relies on it.
 ## Small, mine to do
 
 ### WRAP_SHAWARMA_CHICKPEA cannot be placed on any day
