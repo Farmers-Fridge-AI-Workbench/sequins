@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.175 — 2026-10-15    (pairs with Index.html v0.5.243)
+ * Sequins ✨ — Code.js    v0.4.176 — 2026-10-21    (pairs with Index.html v0.5.244)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.175 The demand notice is back on and names only days whose numbers really
- *          moved. A rewrite that changes nothing is logged, never announced.
+ * v0.4.176 An attribute pull now brings back food and packaging cost per unit,
+ *          summed from the Recipe Master ingredient lines (E food, P+L packaging).
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -16,6 +16,28 @@ const MASTER_DOC_SHEET_ID   = '1FRJ77-304M51SLwxrmljjZlrqv3YGMO_DRVrGu0pDBQ'; //
 const MASTER_DOC_TAB        = 'Master Document';   // cols G(name) - J(UPM), H(Optimal HC)
 const MENU_LIBRARY_SHEET_ID = '1Exdh-emJxD7TohJ3IzjIQZDP3siPgjuVXhp3J7Gw2Ik'; // Menu Library
 const MENU_LIBRARY_TAB      = 'Full Menu Summary';  // B=Category, C=SKU Name, L=Package, M=Allergens
+// Food and packaging cost per unit. The Production Planner explodes every SKU
+// into its ingredient lines, one row each, with a Standard Cost in column DL.
+// The ITEM NUMBER in column D says which bucket a line belongs to:
+//
+//     E…  food          P…  packaging          L…  label
+//
+// Labels are packaging, per Cori 2026-10-21, so P and L sum together. Verified
+// against the FPL Model Engine's own per-SKU figures before wiring: CHEDDAR_
+// CHEESE food $0.3304 / pkg $0.1562 and CHIPS_GUAC food $0.7851 / pkg $0.2704,
+// against $0.33/$0.15 and $0.79/$0.27 there. Same numbers, derived separately.
+//
+// The tab holds ONE production day, refreshed each planning run, so this is
+// today's standard cost rather than an average. That is deliberate — Cori,
+// 2026-10-21: pricing always moves, and a scenario is not worth delaying over
+// one ingredient. A SKU that is not running that day gets no cost and is shown
+// as unpriced rather than as zero.
+const PLANNER_SHEET_ID      = '1jo9IlFEs_OBOofwyaccbt3nzKs0cWjXHLmgtWIRTsoc'; // Production Planner 4.0_MASTER
+const RECIPE_MASTER_TAB     = 'Recipe Master (Buyer - Demand 1)';
+const RECIPE_SKU_COL        = 3;   // C  SKU
+const RECIPE_ITEM_COL       = 4;   // D  Ingredient Item Number — E / P / L
+const RECIPE_COST_COL       = 116; // DL Standard Cost
+
 const PROCESSING_SHEET_ID   = '1v_C2ZUR9_PjTqCO4XU16x2oRTvmvpdT43cs0d3tyh54'; // FPLModel Engine
 const PROCESSING_TAB        = 'Processing Complexity'; // B=SKU Name, E=90 Day Duration/Unit
 // Observed throughput. The analytics team drops one row per production run into
@@ -2290,6 +2312,44 @@ function fetchSkuAttributesFor(skuNames) {
       });
     }
   } catch(e) { Logger.log('Processing Complexity fetch failed: ' + e.message); }
+
+  // 4. Recipe Master — food and packaging cost per unit, summed from the
+  //    ingredient lines. See the constants above for the E/P/L rule.
+  try {
+    const rm = SpreadsheetApp.openById(PLANNER_SHEET_ID).getSheetByName(RECIPE_MASTER_TAB);
+    if (rm) {
+      const lastRow = rm.getLastRow();
+      if (lastRow > 1) {
+        const n     = lastRow - 1;
+        const ids   = rm.getRange(2, RECIPE_SKU_COL, n, 2).getValues();  // C:D
+        const costs = rm.getRange(2, RECIPE_COST_COL, n, 1).getValues(); // DL
+        // Which day this explosion is for, so the number carries its own date.
+        const day   = String(rm.getRange(2, 1).getDisplayValue() || '').trim();
+        const food = {}, pkg = {}, seen = {};
+        ids.forEach((row, i) => {
+          const name = String(row[0] || '').trim();
+          if (!name) return;
+          const key = normalizeSku_(name);
+          if (!wantedKeys.has(key)) return;
+          // The SKU is priced the moment it appears, even on a row that carries
+          // no cost — a sub-recipe line reads $0.0000 and is not a gap.
+          seen[key] = true;
+          const item = String(row[1] || '').trim().toUpperCase().charAt(0);
+          const cost = parseFloat(String(costs[i][0]).replace(/[$,\s]/g, ''));
+          if (!isFinite(cost) || !item) return;
+          if (item === 'E') food[key] = (food[key] || 0) + cost;
+          else if (item === 'P' || item === 'L') pkg[key] = (pkg[key] || 0) + cost;
+        });
+        Object.keys(seen).forEach(key => {
+          if (!result[key]) result[key] = {};
+          result[key].foodCost  = Math.round((food[key] || 0) * 10000) / 10000;
+          result[key].pkgCost   = Math.round((pkg[key]  || 0) * 10000) / 10000;
+          if (day) result[key].fpCostDay = day;
+        });
+        Logger.log('Recipe Master: priced ' + Object.keys(seen).length + ' SKU(s) from ' + (day || 'an undated tab'));
+      }
+    }
+  } catch(e) { Logger.log('Recipe Master fetch failed: ' + e.message); }
 
   // Mark which originally-requested SKUs found nothing at all
   Object.keys(result).forEach(key => {

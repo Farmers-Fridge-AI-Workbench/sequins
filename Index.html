@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.243 — 2026-10-15    (pairs with Code.js v0.4.175)
+  Sequins ✨ — Index.html    v0.5.244 — 2026-10-21    (pairs with Code.js v0.4.176)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.243 No client change — paired with Code.js v0.4.175, which announces only
-           the days whose demand actually changed.
+  v0.5.244 Cut candidates are priced in full FPL — food, packaging and labor —
+           not labor alone.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4137,7 +4137,7 @@ function applyAdmissibleLinesModal(){
 }
 function updateSkuCounts(){var lib=STATE.skuLibrary,k=Object.keys(lib).filter(function(x){return !lib[x].pending;});var pend=Object.keys(lib).filter(function(x){return !!lib[x].pending;});var pEl=document.getElementById('sc-pending');if(pEl)pEl.textContent=pend.length?String(pend.length):'0';document.getElementById('sc-capper').textContent=k.filter(function(x){return lib[x].capper;}).length;document.getElementById('sc-night').textContent=k.filter(function(x){return lib[x].nightShift;}).length;document.getElementById('sc-preproc').textContent=k.filter(function(x){return lib[x].preProcessed;}).length;document.getElementById('sc-active').textContent=k.filter(function(x){return lib[x].active!==false;}).length;document.getElementById('sc-total').textContent=k.length;}
 function saveSkuLibrary(isAutoSave){var el=document.getElementById('skuLibStatus');if(el)el.innerHTML='<div class="status status-info"><span class="spinner"></span>Saving…</div>';google.script.run.withSuccessHandler(function(r){_cfgDirty.sku=false;if(r&&r.mirror){if(el)el.innerHTML='<div class="status status-warn">✓ Saved — but '+r.mirror+'</div>';return;}if(el){el.innerHTML='<div class="status status-ok">✓ Saved'+(isAutoSave?' (auto)':'')+'</div>';setTimeout(function(){if(el.innerHTML.indexOf('Saved')!==-1)el.innerHTML='';},3000);}}).withFailureHandler(function(err){if(el)el.innerHTML='<div class="status status-err">⚠ SAVE FAILED: '+err.message+'</div>';}).saveSkuLibrary(STATE.skuLibrary);}
-function importSkusFromForecast(){var allSkuNamesSet={};Object.keys(STATE.demand).forEach(function(wk){Object.keys(STATE.demand[wk]).forEach(function(day){Object.keys(STATE.demand[wk][day].skus||{}).forEach(function(sku){allSkuNamesSet[sku]=true;});});});Object.keys(STATE.skuLibrary).forEach(function(key){allSkuNamesSet[key]=true;});var allSkuNames=Object.keys(allSkuNamesSet),el=document.getElementById('skuLibStatus');if(!allSkuNames.length){el.innerHTML='<div class="status status-warn">No demand loaded yet — load demand first.</div>';return;}el.innerHTML='<div class="status status-info"><span class="spinner"></span>Pulling attributes…</div>';google.script.run.withSuccessHandler(function(result){var attributes=result.attributes,notFound=result.notFound,added=0,updated=0;allSkuNames.forEach(function(sku){var key=sku.toUpperCase(),normKey=key.replace(/[^A-Z0-9]/g,''),attrs=attributes[normKey];if(!STATE.skuLibrary[key]){STATE.skuLibrary[key]={active:true,category:'',packageType:'',unitsPerTote:'',upm:'',allergens:'',capper:false,nightShift:false,preProcessed:false};added++;}if(attrs){if(attrs.category)STATE.skuLibrary[key].category=attrs.category;if(attrs.packageType)STATE.skuLibrary[key].packageType=attrs.packageType;if(attrs.allergens)STATE.skuLibrary[key].allergens=attrs.allergens;if(attrs.upm&&!(parseFloat(STATE.skuLibrary[key].upm)>0))STATE.skuLibrary[key].upm=Math.round(attrs.upm*10)/10;if(attrs.optimalHC!==undefined&&attrs.optimalHC!=='')STATE.skuLibrary[key].optimalHC=attrs.optimalHC;updated++;}});renderSkuLibrary();var nfMsg=notFound.length?('<br><span style="color:var(--amber)">⚠ '+notFound.length+' not found: '+notFound.slice(0,10).join(', ')+(notFound.length>10?'…':'')+'</span>'):'';el.innerHTML='<div class="status status-info"><span class="spinner"></span>'+added+' new, '+updated+' matched — saving…</div>';google.script.run.withSuccessHandler(function(){el.innerHTML='<div class="status status-ok">✓ Saved — '+added+' new, '+updated+' matched'+nfMsg+'</div>';}).withFailureHandler(function(err){el.innerHTML='<div class="status status-err">⚠ Pull ok, SAVE FAILED: '+err.message+'</div>';}).saveSkuLibrary(STATE.skuLibrary);}).withFailureHandler(function(err){el.innerHTML='<div class="status status-err">'+err.message+'</div>';}).fetchSkuAttributesFor(allSkuNames);}
+function importSkusFromForecast(){var allSkuNamesSet={};Object.keys(STATE.demand).forEach(function(wk){Object.keys(STATE.demand[wk]).forEach(function(day){Object.keys(STATE.demand[wk][day].skus||{}).forEach(function(sku){allSkuNamesSet[sku]=true;});});});Object.keys(STATE.skuLibrary).forEach(function(key){allSkuNamesSet[key]=true;});var allSkuNames=Object.keys(allSkuNamesSet),el=document.getElementById('skuLibStatus');if(!allSkuNames.length){el.innerHTML='<div class="status status-warn">No demand loaded yet — load demand first.</div>';return;}el.innerHTML='<div class="status status-info"><span class="spinner"></span>Pulling attributes…</div>';google.script.run.withSuccessHandler(function(result){var attributes=result.attributes,notFound=result.notFound,added=0,updated=0;allSkuNames.forEach(function(sku){var key=sku.toUpperCase(),normKey=key.replace(/[^A-Z0-9]/g,''),attrs=attributes[normKey];if(!STATE.skuLibrary[key]){STATE.skuLibrary[key]={active:true,category:'',packageType:'',unitsPerTote:'',upm:'',allergens:'',capper:false,nightShift:false,preProcessed:false};added++;}if(attrs){if(attrs.category)STATE.skuLibrary[key].category=attrs.category;if(attrs.packageType)STATE.skuLibrary[key].packageType=attrs.packageType;if(attrs.allergens)STATE.skuLibrary[key].allergens=attrs.allergens;if(attrs.upm&&!(parseFloat(STATE.skuLibrary[key].upm)>0))STATE.skuLibrary[key].upm=Math.round(attrs.upm*10)/10;if(attrs.optimalHC!==undefined&&attrs.optimalHC!=='')STATE.skuLibrary[key].optimalHC=attrs.optimalHC;if(attrs.foodCost!==undefined)STATE.skuLibrary[key].foodCost=attrs.foodCost;if(attrs.pkgCost!==undefined)STATE.skuLibrary[key].pkgCost=attrs.pkgCost;if(attrs.fpCostDay)STATE.skuLibrary[key].fpCostDay=attrs.fpCostDay;updated++;}});renderSkuLibrary();var nfMsg=notFound.length?('<br><span style="color:var(--amber)">⚠ '+notFound.length+' not found: '+notFound.slice(0,10).join(', ')+(notFound.length>10?'…':'')+'</span>'):'';el.innerHTML='<div class="status status-info"><span class="spinner"></span>'+added+' new, '+updated+' matched — saving…</div>';google.script.run.withSuccessHandler(function(){el.innerHTML='<div class="status status-ok">✓ Saved — '+added+' new, '+updated+' matched'+nfMsg+'</div>';}).withFailureHandler(function(err){el.innerHTML='<div class="status status-err">⚠ Pull ok, SAVE FAILED: '+err.message+'</div>';}).saveSkuLibrary(STATE.skuLibrary);}).withFailureHandler(function(err){el.innerHTML='<div class="status status-err">'+err.message+'</div>';}).fetchSkuAttributesFor(allSkuNames);}
 
 // v0.5.58: rules consolidation — line seeds moved into the Active Lines table
 // (per-line attribute, natural home) and category home lines moved to their
@@ -4319,7 +4319,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.243';
+var APP_VERSION='v0.5.244';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -5828,6 +5828,9 @@ function sbMoney_(n){
   var v=Math.round(Number(n)||0);
   return '$'+String(v).replace(/\B(?=(\d{3})+(?!\d))/g,',');
 }
+// Per-unit rates are cents, not dollars, and rounding one to the nearest dollar
+// prints $0 for every rate the plant has.
+function sbMoney3_(n){return '$'+(Number(n)||0).toFixed(3);}
 function sbSummarise(res){
   var out={byLine:{},unplaced:[],placedOn:{},total:0,units:0,latestEnd:0};
   if(!res)return out;
@@ -7075,8 +7078,24 @@ function hpWeekSkuTotals_(R){
   });
   return{tot:tot,thin:thin};
 }
+// Food and packaging per unit, as the last attribute pull left them. Both are
+// LINEAR: cutting a SKU removes exactly its units' worth and there is nothing
+// to re-sequence to find that out. Labor is the opposite — it only shows up by
+// running the week again without the SKU, because most of what a thin SKU costs
+// is the changeover around it rather than its own run time.
+//
+// A SKU the Planner did not price is reported unpriced, never as zero. Zero
+// would quietly understate the saving and read as a real answer.
+function hpFpFor_(sku){
+  var m=(STATE.skuLibrary||{})[String(sku).toUpperCase()]||{};
+  var f=parseFloat(m.foodCost),g=parseFloat(m.pkgCost);
+  if(!isFinite(f)&&!isFinite(g))return{priced:false,food:0,pkg:0,day:''};
+  return{priced:true,food:isFinite(f)?f:0,pkg:isFinite(g)?g:0,day:m.fpCostDay||''};
+}
 function hpRunCuts_(R,total,even,wkMax,dayMax){
   var w=hpWeekSkuTotals_(R),weekSku=w.tot,thin=w.thin,out=[];
+  var procRate=ruleNum_(getRules(),'processingStaticPerUnit')||0;
+  var costDay='',unpriced=0;
   var cands=Object.keys(weekSku).filter(function(k){
     if(wkMax>0&&weekSku[k]<=wkMax)return true;
     if(dayMax>0&&thin[k]&&thin[k].units<dayMax)return true;
@@ -7087,12 +7106,19 @@ function hpRunCuts_(R,total,even,wkMax,dayMax){
   cands.slice(0,12).forEach(function(k){
     var cut={};cut[k]=true;
     var alt=hpRunOption_(HP_WEEK,{name:R.name,states:R._states||{},baseline:false},total,even,cut);
-    out.push({sku:k,units:weekSku[k],thin:thin[k]||null,saving:R.total-alt.total,
+    var fp=hpFpFor_(k),u=weekSku[k];
+    if(!fp.priced)unpriced++;else if(!costDay&&fp.day)costDay=fp.day;
+    var assembly=R.total-alt.total,proc=u*procRate;
+    var food=fp.priced?u*fp.food:0,pack=fp.priced?u*fp.pkg:0;
+    out.push({sku:k,units:u,thin:thin[k]||null,
+      food:food,pkg:pack,assembly:assembly,proc:proc,labor:assembly+proc,
+      priced:fp.priced,saving:food+pack+assembly+proc,
       why:(wkMax>0&&weekSku[k]<=wkMax)?'small all week':'thin on a day',
       risksBefore:R.risks,risksAfter:alt.risks});
   });
   out.sort(function(a,b){return b.saving-a.saving;});
-  return{rows:out,considered:cands.length,wkMax:wkMax,dayMax:dayMax};
+  return{rows:out,considered:cands.length,wkMax:wkMax,dayMax:dayMax,
+    procRate:procRate,costDay:costDay,unpriced:unpriced};
 }
 function hpCutThreshold_(){
   var v=parseFloat((document.getElementById('hpCutMax')||{}).value);
@@ -7127,25 +7153,46 @@ function hpRenderCuts_(best){
   }
   var TH='padding:6px 8px;border:1px solid var(--border);background:var(--surface2);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)';
   var TD='padding:6px 8px;border:1px solid var(--border);font-size:11px';
-  var h='<div class="sb-note" style="margin-bottom:8px">Priced against <b>'+escHtml(best.name)+'</b>, '+
-    'the cheapest option above. Each row is the whole week re-sequenced without that SKU — so it counts the changeover it saves, '+
-    'not just its run time. Labor only: Sequins holds no material cost, so the real saving is larger.</div>';
+  // The unpriced count goes FIRST. A total that is quietly missing the food and
+  // packaging on some of its rows is worse than no total, and nobody reads to
+  // the end of a table to find that out.
+  var h='';
+  if(C.unpriced){
+    h+='<div class="status status-warn" style="margin-bottom:8px">'+C.unpriced+' of these '+C.rows.length+
+      ' have no food or packaging cost — the Planner only prices what is running that day. '+
+      'Those rows are labor only, so their real saving is larger. Pull attributes in SKU Library to price them.</div>';
+  }
+  h+='<div class="sb-note" style="margin-bottom:8px">Priced against <b>'+escHtml(best.name)+'</b>, '+
+    'the cheapest option above. <b>Food</b> and <b>packaging</b> are standard cost per unit from the Production Planner'+
+    (C.costDay?(' ('+escHtml(C.costDay)+')'):'')+', labels included. <b>Labor</b> is the whole week re-sequenced without that SKU — so it '+
+    'counts the changeover it saves, not just its run time — plus processing at '+sbMoney3_(C.procRate)+'/unit.</div>';
   h+='<table style="border-collapse:collapse;width:100%">';
   h+='<tr><th style="'+TH+';text-align:left">SKU</th><th style="'+TH+';text-align:right">Units that week</th><th style="'+TH+';text-align:right" title="The smallest single day this SKU runs in the week. A changeover costs the same whatever the run is worth.">Thinnest day</th>'+
-     '<th style="'+TH+';text-align:right">Saved by cutting</th><th style="'+TH+';text-align:left" title="Cutting a SKU re-sequences the whole week. This says whether that clears a problem elsewhere or causes one.">What else changes</th></tr>';
+     '<th style="'+TH+';text-align:right">Food</th><th style="'+TH+';text-align:right" title="Packaging and labels together.">Packaging</th>'+
+     '<th style="'+TH+';text-align:right" title="Assembly from re-sequencing the week, plus processing at the static rate.">Labor<div style="font-size:9px;font-weight:400;text-transform:none;letter-spacing:0">assembly + processing</div></th>'+
+     '<th style="'+TH+';text-align:right">Total saved</th><th style="'+TH+';text-align:left" title="Cutting a SKU re-sequences the whole week. This says whether that clears a problem elsewhere or causes one.">What else changes</th></tr>';
   C.rows.forEach(function(r){
     var dr=r.risksAfter-r.risksBefore;
     var note=dr<0?'<span style="color:var(--green)">clears '+(-dr)+' problem'+(dr<-1?'s':'')+'</span>'
       :dr>0?'<span style="color:var(--amber)">creates '+dr+' more</span>':'<span style="color:var(--muted)">nothing else moves</span>';
+    var fpCell=r.priced?null:'<span style="color:var(--amber)" title="Not priced by the Planner for that day">\u2014</span>';
     h+='<tr><td style="'+TD+';font-family:var(--mono)">'+escHtml(r.sku)+'</td>'+
        '<td style="'+TD+';text-align:right">'+fmtUnits(Math.round(r.units))+'</td>'+
        '<td style="'+TD+';text-align:right">'+(r.thin?(fmtUnits(Math.round(r.thin.units))+'<div style="font-size:9px;color:var(--muted)">'+DAY_SHORT[r.thin.day]+'</div>'):'\u2014')+'</td>'+
+       '<td style="'+TD+';text-align:right">'+(fpCell||sbMoney_(r.food))+'</td>'+
+       '<td style="'+TD+';text-align:right">'+(fpCell||sbMoney_(r.pkg))+'</td>'+
+       '<td style="'+TD+';text-align:right">'+sbMoney_(r.labor)+'</td>'+
        '<td style="'+TD+';text-align:right"><b style="color:var(--green)">'+sbMoney_(r.saving)+'</b></td>'+
        '<td style="'+TD+'">'+note+'</td></tr>';
   });
-  var tot=0;C.rows.forEach(function(r){tot+=r.saving;});
+  var tot=0,tf=0,tp=0,tl=0;
+  C.rows.forEach(function(r){tot+=r.saving;tf+=r.food;tp+=r.pkg;tl+=r.labor;});
   h+='<tr style="border-top:2px solid var(--border)"><td style="'+TD+'"><b>All '+C.rows.length+' together</b></td>'+
-     '<td style="'+TD+'"></td><td style="'+TD+'"></td><td style="'+TD+';text-align:right"><b style="color:var(--green)">'+sbMoney_(tot)+'</b>'+
+     '<td style="'+TD+'"></td><td style="'+TD+'"></td>'+
+     '<td style="'+TD+';text-align:right"><b>'+sbMoney_(tf)+'</b></td>'+
+     '<td style="'+TD+';text-align:right"><b>'+sbMoney_(tp)+'</b></td>'+
+     '<td style="'+TD+';text-align:right"><b>'+sbMoney_(tl)+'</b></td>'+
+     '<td style="'+TD+';text-align:right"><b style="color:var(--green)">'+sbMoney_(tot)+'</b>'+
      '<div style="font-size:9px;color:var(--muted)">roughly — each was priced on its own</div></td><td style="'+TD+'"></td></tr>';
   h+='</table>';
   el.innerHTML=h;
