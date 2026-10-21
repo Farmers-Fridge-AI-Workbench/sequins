@@ -240,8 +240,17 @@ Sequins web app UI — those are fine for error surfacing.
 - Cori sets these on a **Wednesday for the following week**, and a person reviews
   the shift before publishing, so latency is not a concern and the curfew gets
   human eyes long before the floor sees it.
-- **Holiday Planning is NOT wired to this yet** — her call, 2026-10-21. Its
-  early-finish field is still typed by hand.
+- **Holiday Planning INHERITS it.** A holiday week is the real week, so if Pick
+  Pack needs bodies on Monday they need them whichever days close. It is not a
+  choice between options: every option finishes by that time, and where an
+  option asks for a later finish the labor-share time wins — you cannot hand
+  people over at 2:05 and still be running at 3.
+- **Sandbox OFFERS it**, as a button beside the Finish-by grid. A sandbox is a
+  what-if about a week that may never happen, so it shows the times rather than
+  taking them; once taken they are ordinary finish-by values.
+- Times cross the sheet as strings and Sheets coerces them. Read the Labor Share
+  tab with getDisplayValues() and compare MINUTES, never clock strings — a
+  correct 14:00 came back as a 1899 Date and showed red on 2026-10-21.
 
 **Changeover — settled 2026-10-02:**
 
