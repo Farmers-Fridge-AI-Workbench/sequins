@@ -1,9 +1,8 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.252 — 2026-10-21    (pairs with Code.js v0.4.184)
+  Sequins ✨ — Index.html    v0.5.253 — 2026-10-21    (pairs with Code.js v0.4.185)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.252 A SKU that only ran at pilot volume takes its daily split from the
-           forecast, not from the trial.
+  v0.5.253 The cuts table ends on Total, the way the options table above it does.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4319,7 +4318,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.252';
+var APP_VERSION='v0.5.253';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -7389,9 +7388,11 @@ function hpCutScenarioHtml_(TH,TD){
     'measured against running all seven days. <b>Food &amp; packaging is deliberately not in any total</b>: the week builds '+
     'the same units whichever days close, so that spend happens either way. The last column is the part we would not '+
     'buy at all once these SKUs come out.</div>';
-  h+='<div class="sb-note" style="margin-bottom:8px">Food &amp; packaging moves between options because each weekday '+
-    'carries its own SKU mix. Closing a day pushes its volume onto the days that stay open, and they build a different '+
-    'mix at a different cost per unit \u2014 so the same week total is not the same money.</div>';
+  // Left over from when food and packaging sat inside the total. It now explains
+  // only why the LAST column wobbles by a few dollars between options, and said
+  // at that length it reads as a caveat on the totals, which it is not.
+  h+='<div class="sb-note" style="margin-bottom:8px">The last column shifts slightly between options because each '+
+    'weekday carries its own SKU mix.</div>';
   if(S.unpriced.length){
     h+='<div class="status status-warn" style="margin-bottom:8px">'+S.unpriced.length+' SKU'+
       (S.unpriced.length>1?'s are':' is')+' not in the Production Planner\u2019s recipe list, so anything we would '+
@@ -7402,9 +7403,9 @@ function hpCutScenarioHtml_(TH,TD){
   h+='<tr><th style="'+TH+';text-align:left">Option</th>'+
      '<th style="'+TH+';text-align:right">Labor<div style="font-size:9px;font-weight:400;text-transform:none;letter-spacing:0">assembly + processing</div></th>'+
      '<th style="'+TH+';text-align:right">Holiday pay</th>'+
-     '<th style="'+TH+';text-align:right">Total</th>'+
      '<th style="'+TH+';text-align:right" title="Labor and holiday pay this option stops spending once these SKUs come out.">Labor saved by cutting</th>'+
-     '<th style="'+TH+';text-align:right" title="Food, packaging and labels we would not buy at all. Not part of any total above.">F&amp;P we would not spend</th></tr>';
+     '<th style="'+TH+';text-align:right" title="Food, packaging and labels we would not buy at all. Not part of any total.">F&amp;P we would not spend</th>'+
+     '<th style="'+TH+';text-align:right">Total</th></tr>';
   order.forEach(function(r){
     var c=r.cost,dr=r.risksAfter-r.risksBefore;
     var tag=r.baseline?'<div style="font-size:9px;color:var(--muted)">everything else is measured against this</div>':'';
@@ -7416,9 +7417,9 @@ function hpCutScenarioHtml_(TH,TD){
     h+='<tr><td style="'+TD+'">'+escHtml(r.name)+risk+'</td>'+
        '<td style="'+TD+';text-align:right">'+sbMoney_(c.labor)+'</td>'+
        '<td style="'+TD+';text-align:right">'+(c.holiday>0?'<span style="color:var(--amber)">'+sbMoney_(c.holiday)+'</span>':'\u2014')+'</td>'+
-       '<td style="'+TD+';text-align:right"><b>'+sbMoney_(c.total)+'</b>'+vs+'</td>'+
        '<td style="'+TD+';text-align:right"><b style="color:var(--green)">'+sbMoney_(r.laborSaved)+'</b></td>'+
-       '<td style="'+TD+';text-align:right"><b style="color:var(--green)">'+sbMoney_(r.fpAvoided)+'</b></td></tr>';
+       '<td style="'+TD+';text-align:right"><b style="color:var(--green)">'+sbMoney_(r.fpAvoided)+'</b></td>'+
+       '<td style="'+TD+';text-align:right"><b>'+sbMoney_(c.total)+'</b>'+vs+'</td></tr>';
   });
   h+='</table></div></div>';
   return h;

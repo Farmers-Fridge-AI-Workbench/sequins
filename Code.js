@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.184 — 2026-10-21    (pairs with Index.html v0.5.252)
+ * Sequins ✨ — Code.js    v0.4.185 — 2026-10-21    (pairs with Index.html v0.5.253)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.184 No server change — paired with Index.html v0.5.252, which stops a pilot
- *          run setting a launch SKU's daily split.
+ * v0.4.185 No server change — paired with Index.html v0.5.253, which lines the two
+ *          holiday cost tables up column for column.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
