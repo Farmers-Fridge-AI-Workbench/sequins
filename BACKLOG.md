@@ -87,11 +87,6 @@ It was written and tested on 10/02, left unshipped at Cori’s request, and then
 lost when Code.js was rebuilt from v0.4.170 the same day. It is in the git
 history of that session if wanted. May be moot if Compiled has since filled W53.
 
-### Net column in the cuts table
-
-Added unasked on 2026-10-21 — F&P avoided less PV given up. Keep or drop is
-Cori’s call; it is one column and trivial either way.
-
 ### WRAP_SHAWARMA_CHICKPEA cannot be placed on any day
 
 Declares [soy, wheat, sesame] and cannot extend the compounding chain on LINE-2
