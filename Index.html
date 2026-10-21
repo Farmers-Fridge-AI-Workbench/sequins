@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.248 — 2026-10-21    (pairs with Code.js v0.4.180)
+  Sequins ✨ — Index.html    v0.5.249 — 2026-10-21    (pairs with Code.js v0.4.181)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.248 The cuts table gives each option a full week cost — labor, holiday,
-           processing, food and packaging — and measures it against baseline.
+  v0.5.249 Cutting a SKU now removes its food, packaging and processing too, and
+           the nightly costs actually reach the client.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -987,7 +987,7 @@ function admissibleLinesFor_(meta,day){
   var list=(isLateWeekDay_(day)&&meta.friSatOverride)?meta.admissibleLinesFriSat:meta.admissibleLines;
   return (list&&list.length)?list.slice():null;
 }
-var STATE={planEmail:{},demand:{},skuLibrary:{},lineConfig:null,planners:[],overrides:{},sequencingRules:null,publishedPlans:{},breakOverrides:{},floorViewers:[],finishBy:{},sandboxes:[]};
+var STATE={planEmail:{},demand:{},skuLibrary:{},lineConfig:null,planners:[],overrides:{},sequencingRules:null,publishedPlans:{},breakOverrides:{},floorViewers:[],finishBy:{},sandboxes:[],fpCosts:null};
 var CURRENT_USER=null,CURRENT_WEEK=null,CURRENT_DAY=null;
 var _pendingForecast=null,_pendingActuals=null,_pollInterval=null,_lastModified=null;
 // ─── UNSAVED-CONFIG GUARD (v0.5.155) ────────────────────────────────────────
@@ -4319,7 +4319,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.248';
+var APP_VERSION='v0.5.249';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4743,7 +4743,7 @@ function buildUnplacedOptions_(job,lineState,lines,rules,lcById,capMin){
   });
   return wrap;
 }
-function startPolling(){if(_pollInterval)return;_pollInterval=setInterval(function(){google.script.run.withSuccessHandler(function(ts){if(!ts||ts===_lastModified)return;_lastModified=ts;document.getElementById('syncIndicator').style.display='';google.script.run.withSuccessHandler(function(s){document.getElementById('syncIndicator').style.display='none';if(!s)return;if(s.demand)STATE.demand=s.demand;if(s.skuLibrary&&!_cfgDirty.sku)STATE.skuLibrary=s.skuLibrary;if(s.lineConfig&&!_cfgDirty.line)STATE.lineConfig=s.lineConfig;if(s.planners)STATE.planners=s.planners;if(s.overrides)STATE.overrides=s.overrides;if(s.sequencingRules&&!_cfgDirty.rules)STATE.sequencingRules=s.sequencingRules;if(s.breakOverrides)STATE.breakOverrides=s.breakOverrides;if(s.scenarios)STATE.scenarios=s.scenarios;if(s.floorViewers)STATE.floorViewers=s.floorViewers;renderSequence();}).withFailureHandler(function(){document.getElementById('syncIndicator').style.display='none';}).getState();}).withFailureHandler(function(){}).getLastModified();},8000);}
+function startPolling(){if(_pollInterval)return;_pollInterval=setInterval(function(){google.script.run.withSuccessHandler(function(ts){if(!ts||ts===_lastModified)return;_lastModified=ts;document.getElementById('syncIndicator').style.display='';google.script.run.withSuccessHandler(function(s){document.getElementById('syncIndicator').style.display='none';if(!s)return;if(s.demand)STATE.demand=s.demand;if(s.skuLibrary&&!_cfgDirty.sku)STATE.skuLibrary=s.skuLibrary;if(s.lineConfig&&!_cfgDirty.line)STATE.lineConfig=s.lineConfig;if(s.planners)STATE.planners=s.planners;if(s.overrides)STATE.overrides=s.overrides;if(s.sequencingRules&&!_cfgDirty.rules)STATE.sequencingRules=s.sequencingRules;if(s.breakOverrides)STATE.breakOverrides=s.breakOverrides;if(s.scenarios)STATE.scenarios=s.scenarios;if(s.floorViewers)STATE.floorViewers=s.floorViewers;if(s.fpCosts)STATE.fpCosts=s.fpCosts;renderSequence();}).withFailureHandler(function(){document.getElementById('syncIndicator').style.display='none';}).getState();}).withFailureHandler(function(){}).getLastModified();},8000);}
 
 function publishPlan(){
   var dayData=STATE.demand[CURRENT_WEEK]&&STATE.demand[CURRENT_WEEK][CURRENT_DAY];
@@ -7066,11 +7066,16 @@ var HP_CUTSCEN=null;
 // given day — a ham sandwich at 90 units costs the same changeover as one at
 // 900 (Cori, 2026-10-02). So the week total and the thinnest single day are both
 // kept, and either can put a SKU on the list.
-function hpWeekSkuTotals_(R){
+// `cut` is optional and was missing until v0.5.249, which made every caller that
+// priced a cut week quietly price the UNCUT one: the removed SKUs kept their food,
+// packaging and processing. The labor was right, because that comes from the
+// engine, so the error hid as a 'Saved by cutting' column that only ever showed
+// the labor delta.
+function hpWeekSkuTotals_(R,cut){
   var tot={},thin={};
   DAYS_ORDER.forEach(function(d,i){
     var r=R.days[i];if(!r||r.closed||!r.ok)return;
-    var sk=hpScaleSkus_(HP_WEEK,d,Math.round(R.split[d]));
+    var sk=hpScaleSkus_(HP_WEEK,d,Math.round(R.split[d]),cut);
     if(!sk)return;
     Object.keys(sk).forEach(function(k){
       tot[k]=(tot[k]||0)+sk[k];
@@ -7153,8 +7158,8 @@ function hpRunCuts_(R,total,even,wkMax,dayMax){
 // Baseline is whichever option is flagged as such — run all 7 days — priced in
 // the SAME cut world, so the comparison isolates the closures. Mixing a cut
 // option against an uncut baseline would credit the closure with the cuts.
-function hpWeekCost_(opt,procRate){
-  var w=hpWeekSkuTotals_(opt).tot,fp=0,units=0,unpriced={};
+function hpWeekCost_(opt,procRate,cut){
+  var w=hpWeekSkuTotals_(opt,cut).tot,fp=0,units=0,unpriced={};
   Object.keys(w).forEach(function(k){
     var u=w[k]||0,c=hpFpFor_(k);
     units+=u;
@@ -7173,7 +7178,11 @@ function hpRunCutScenarios_(rows,total,even){
   var out=[],base=null,unpriced={};
   HP_RESULT.forEach(function(R){
     var alt=hpRunOption_(HP_WEEK,{name:R.name,states:R._states||{},baseline:!!R.baseline},total,even,cut);
-    var after=hpWeekCost_(alt,procRate),before=hpWeekCost_(R,procRate);
+    // after: the cut world, priced without the cut SKUs.
+    // before: the same option as it stands today, everything included.
+    // Their difference is the whole value of the cuts — labor, processing and
+    // food and packaging — and it has to agree with the costing table above.
+    var after=hpWeekCost_(alt,procRate,cut),before=hpWeekCost_(R,procRate,null);
     after.unpriced.forEach(function(k){unpriced[k]=true;});
     var row={name:R.name,baseline:!!R.baseline,cost:after,costBefore:before,
       cutSaved:before.total-after.total,
@@ -7309,6 +7318,9 @@ function hpCutScenarioHtml_(TH,TD){
     ' removed together, then priced in full: assembly labor and holiday pay from the engine, plus processing and '+
     'food &amp; packaging across every SKU that still runs. <b>Total</b> is the cost of the whole week, and savings are '+
     'measured against running all seven days.</div>';
+  h+='<div class="sb-note" style="margin-bottom:8px">Food &amp; packaging moves between options because each weekday '+
+    'carries its own SKU mix. Closing a day pushes its volume onto the days that stay open, and they build a different '+
+    'mix at a different cost per unit \u2014 so the same week total is not the same money.</div>';
   if(S.unpriced.length){
     h+='<div class="status status-warn" style="margin-bottom:8px">'+S.unpriced.length+' SKU'+
       (S.unpriced.length>1?'s are':' is')+' not in the Production Planner\u2019s recipe list, so '+
@@ -9016,6 +9028,9 @@ window.onload=function(){
       if(s.floorViewers)STATE.floorViewers=s.floorViewers;
       if(s.finishBy)STATE.finishBy=s.finishBy;
       if(s.planEmail)STATE.planEmail=s.planEmail;
+      // Without this line the server sends the nightly food and packaging costs
+      // and the client silently discards them.
+      if(s.fpCosts)STATE.fpCosts=s.fpCosts;
       // v0.5.73 BUGFIX: sandboxes were written but never read back. This
       // assignment was missing, so every page load left STATE.sandboxes as the
       // empty init value, and the next newSandbox() persisted a one-item list
