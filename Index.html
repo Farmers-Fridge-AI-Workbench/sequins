@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.265 — 2026-10-21    (pairs with Code.js v0.4.197)
+  Sequins ✨ — Index.html    v0.5.267 — 2026-10-21    (pairs with Code.js v0.4.199)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.265 A curfew the labor-share sync just set shows up without a second
-           refresh.
+  v0.5.267 Holiday Planning inherits the labor-share curfew; Sandbox offers it as
+           a button rather than taking it.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4319,7 +4319,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.265';
+var APP_VERSION='v0.5.267';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -5115,6 +5115,35 @@ function renderSandboxFinishBy(){
     tb.appendChild(tr);
   });
   tbl.appendChild(tb);el.appendChild(tbl);
+
+  // Labor share as an OPTION, not an inheritance. Holiday Planning applies it
+  // automatically because a holiday week is the real week and Pick Pack really
+  // does need those bodies. A sandbox is a what-if about a week that may never
+  // happen, so it offers the times and lets her take them or not — and once
+  // taken they are ordinary finish-by values she can edit or clear.
+  var ls=hpLaborShare_(CURRENT_WEEK);
+  var lsDays=Object.keys(ls).filter(function(d){return days.indexOf(d)!==-1;});
+  if(lsDays.length){
+    var wrap=document.createElement('div');wrap.style.marginTop='8px';
+    var already=lsDays.every(function(d){return (c.finishBy&&c.finishBy[d])===ls[d];});
+    var btn=document.createElement('button');
+    btn.className='btn btn-sm';btn.style.marginRight='8px';
+    btn.appendChild(document.createTextNode(already?'\u2713 Using Pick Pack\u2019s times':'Use Pick Pack\u2019s times'));
+    btn.disabled=!!already;
+    btn.addEventListener('click',function(){
+      if(!c.finishBy)c.finishBy={};
+      lsDays.forEach(function(d){c.finishBy[d]=ls[d];});
+      sbPersist();renderSandboxFinishBy();
+    });
+    wrap.appendChild(btn);
+    var note=document.createElement('span');note.className='sb-note';
+    note.appendChild(document.createTextNode(
+      'Pick Pack is borrowing assembly on '+lsDays.map(function(d){
+        return (DAY_SHORT[d]||d)+' (out by '+ls[d]+')';
+      }).join(', ')+'.'));
+    wrap.appendChild(note);
+    el.appendChild(wrap);
+  }
 }
 // v0.5.132: no SKU in the real library has ever heard of a sandbox-only line,
 // so every one of them carries an admissibleLines list that excludes it. Without
@@ -6674,8 +6703,33 @@ function hpHolidayCost_(dayRun,iso,touched){
 
 // ── OPTIONS ──────────────────────────────────────────────────────────────────
 // A day state is: open, closed, or open with an early finish and/or late start.
-function hpState_(o){
-  return{open:o.open!==false,earlyFinish:o.earlyFinish||'',lateStart:o.lateStart||0};
+// Curfews Pick Tock set for this week, by day. Only its own: a curfew somebody
+// typed is theirs and has no source, and the holiday model should not inherit a
+// one-off somebody set while looking at a normal week.
+function hpLaborShare_(label){
+  var all=(STATE.finishBy&&STATE.finishBy[label])||{},out={};
+  Object.keys(all).forEach(function(d){
+    var f=all[d];
+    if(f&&f.enabled&&f.time&&f.source==='labor-share')out[d]=f.time;
+  });
+  return out;
+}
+// The TIGHTER of two finish times wins. An option asking for 3pm and Pick Pack
+// wanting bodies at 2:05 are not alternatives — you cannot hand people over at
+// 2:05 and still be running at 3.
+function hpTighter_(a,b){
+  var ma=curfewToMin_(a||''),mb=curfewToMin_(b||'');
+  if(ma===null)return b||'';
+  if(mb===null)return a||'';
+  return ma<=mb?a:b;
+}
+function hpState_(o,lsFinish){
+  var st={open:o.open!==false,earlyFinish:o.earlyFinish||'',lateStart:o.lateStart||0};
+  if(st.open&&lsFinish){
+    st.earlyFinish=hpTighter_(st.earlyFinish,lsFinish);
+    st.fromLaborShare=(st.earlyFinish===lsFinish);
+  }
+  return st;
 }
 // Her three standing preferences, by the holiday the week contains.
 // Cori’s standing preference per holiday, built from the two time controls so
@@ -6774,7 +6828,10 @@ function hpBuildOptions_(label){
 function hpRunOption_(label,opt,total,even,cut){
   var shape=hpDayShape_(label,even);
   var st={};
-  DAYS_ORDER.forEach(function(d){st[d]=hpState_(opt.states[d]||{});});
+  // Labor share is a fact about the week, not a choice between options — if
+  // Pick Pack needs bodies on Monday they need them whichever days we close.
+  var ls=hpLaborShare_(HP_WEEK);
+  DAYS_ORDER.forEach(function(d){st[d]=hpState_(opt.states[d]||{},ls[d]);});
   var open=DAYS_ORDER.filter(function(d){return st[d].open;});
   var split=hpDistribute_(total,shape.shares,function(d){return st[d].open;});
   var runs={},moved=0,unfit=0,passes=0;
@@ -7042,6 +7099,14 @@ function hpRenderResult(){
   var TH="padding:6px 8px;border:1px solid var(--border);background:var(--surface2);font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)";
   var TD="padding:6px 8px;border:1px solid var(--border);font-size:11px";
   var h="";
+  var _ls=hpLaborShare_(HP_WEEK),_lsd=Object.keys(_ls);
+  if(_lsd.length){
+    _lsd.sort(function(a,b){return DAYS_ORDER.indexOf(a)-DAYS_ORDER.indexOf(b);});
+    h+="<div class=\"sb-note\" style=\"margin-bottom:8px\">Pick Pack is borrowing assembly on "+
+      escHtml(_lsd.map(function(d){return (DAY_SHORT[d]||d)+" (out by "+_ls[d]+")";}).join(", "))+
+      ". Every option below finishes by then on "+(_lsd.length>1?"those days":"that day")+" \u2014 it is not a "+
+      "choice between options, and an option asking for a later finish is overridden by it.</div>";
+  }
   var _pil=Object.keys(hpPilotSkus_(HP_WEEK)||{}).sort();
   if(_pil.length)h+="<div class=\"sb-note\" style=\"margin-bottom:8px\">"+_pil.length+" SKU"+(_pil.length>1?"s":"")+
     " ran at pilot volume, or not at all, in those weeks, so "+(_pil.length>1?"they are":"it is")+

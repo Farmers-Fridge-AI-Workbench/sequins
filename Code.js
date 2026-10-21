@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.197 — 2026-10-21    (pairs with Index.html v0.5.265)
+ * Sequins ✨ — Code.js    v0.4.199 — 2026-10-21    (pairs with Index.html v0.5.267)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.197 No server change — paired with Index.html v0.5.265, which re-reads state
- *          after the labor-share sync changes a curfew.
+ * v0.4.199 No server change — paired with Index.html v0.5.267, which offers the
+ *          labor-share times in Sandbox too.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────

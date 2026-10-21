@@ -10,36 +10,6 @@ Opened 2026-08-19. Last refreshed 2026-10-21.
 
 ## Ready to build
 
-### Wire labor share into Holiday Planning
-
-The mechanism exists and works as of 2026-10-21: ticking "doing it" in Pick Tock
-writes a Labor Share row, Sequins sets that day’s curfew to assembly start minus
-five, and Pick Tock shows a dot when they agree. See CLAUDE.md, "Labor share".
-
-What is not wired is Holiday Planning. Its early-finish field is still whatever
-hour someone types, with no idea whether Pick Pack needs the people that day —
-the original complaint. The seam is `hpState_`: a day already carries
-`earlyFinish`, so a holiday week would read the same Labor Share rows rather than
-gaining a new lever.
-
-Cori, 2026-10-21: "It will touch holiday planning yes but I'm not quite ready to
-push that into the holiday planner yet." So this waits for her, not for code.
-### A forecast week that is dated but not filled in
-
-Written and tested on 2026-10-02, deliberately left unshipped — Cori: "we can
-just wait a few days" — and then LOST when Code.js was rebuilt from v0.4.170
-later the same day. It is in that session’s git history, not in the tree.
-
-`fetchForecastWeekData` only creates a day when it finds a positive quantity, so
-a week the forecast has dated and not yet filled comes back empty: nothing to
-preview, nothing stored, and it never reaches the Holiday picker. That is the
-New Year week today — Compiled carries seven placeholder cells for Dec 28 – Jan 3
-against 427 for Wk 48.
-
-One line seeds the day from the date columns instead. Worth shipping only if
-Compiled still has not filled that week in when she wants to plan it — 19 days on,
-it may well have, which would make this unnecessary.
-
 ### Finish the tablet pass on My Line
 
 **Three of the four items were already done — checked 2026-10-21.** The numeric
@@ -55,42 +25,6 @@ What is left needs the hardware:
   the 900px breakpoint and it was verified on her Galaxy Fold at 766px. A
   10-inch tablet is nearer 1024 landscape, so the layout should hold, but the
   run sheet and the entry panel want a real look before the floor relies on it.
-## Small, mine to do
-
-### WRAP_SHAWARMA_CHICKPEA cannot be placed on any day
-
-**Cause found 2026-10-21. Needs a Line Config decision, not code.** 437 units a
-day (Wk 41), its allergen data complete.
-
-It declares [soy, wheat, sesame] and is blocked at BOTH ends of the wrap chain:
-
-- No milk. The greedy chain starts with ITALIAN_WRAP_202502 [milk, wheat], the
-  smallest set among the wraps, so milk is in the accumulated set from slot 1
-  and this wrap can never join.
-- Yes sesame, which no other FC-W wrap carries. So it cannot go first either —
-  nothing could follow it.
-
-It is the only no-milk, yes-sesame SKU on a line where every other SKU is the
-reverse. Moving it to the sandwich line does not help: TURKEY_CLUB_SANDWICH puts
-milk in at slot 1 there too (simulated).
-
-What works: **seed an FC line with it.** Its food-contact block is then itself
-alone — about 36 minutes at UPM 12.3 — and non-FC runs after it, which the
-two-block rule allows. The other wraps go on the remaining two FC lines. Both the
-seed and the line assignment are config and Cori’s to set.
-
-NAPA_CHICKPEA_WRAP [soy, wheat] has the same no-milk problem but zero volume —
-in the library, not on the menu — so it never reaches the engine. If it comes
-back it would place immediately before the shawarma wrap, and the pair would make
-a clean two-SKU FC block.
-
-It published fine for 59 days across 87 archived rows, always LINE-2, never
-overridden — consistent with the menu since adding milk to nearly every wrap.
-Cori’s 10-minute-clean argument (see CLAUDE.md, allergen compounding) would
-dissolve it entirely if Samad reopened that rule.
-
----
-
 ## Blocked on someone else
 
 ### Push run-sheet actuals into the internal system the floor already types into
@@ -148,6 +82,43 @@ private/internal. Prevents recurrence better than auditing repos one at a time.
 ---
 
 ## Known gaps, not bugs
+
+### WRAP_SHAWARMA_CHICKPEA cannot be placed on any day
+
+**Not currently bothering anyone — moved here 2026-10-21.** Cause is known and
+the fix is a Line Config decision, not code. Raised four times without anyone
+saying it matters, so it is recorded rather than queued. 437 units a
+day (Wk 41), its allergen data complete.
+
+It declares [soy, wheat, sesame] and is blocked at BOTH ends of the wrap chain:
+
+- No milk. The greedy chain starts with ITALIAN_WRAP_202502 [milk, wheat], the
+  smallest set among the wraps, so milk is in the accumulated set from slot 1
+  and this wrap can never join.
+- Yes sesame, which no other FC-W wrap carries. So it cannot go first either —
+  nothing could follow it.
+
+It is the only no-milk, yes-sesame SKU on a line where every other SKU is the
+reverse. Moving it to the sandwich line does not help: TURKEY_CLUB_SANDWICH puts
+milk in at slot 1 there too (simulated).
+
+What works: **seed an FC line with it.** Its food-contact block is then itself
+alone — about 36 minutes at UPM 12.3 — and non-FC runs after it, which the
+two-block rule allows. The other wraps go on the remaining two FC lines. Both the
+seed and the line assignment are config and Cori’s to set.
+
+NAPA_CHICKPEA_WRAP [soy, wheat] has the same no-milk problem but zero volume —
+in the library, not on the menu — so it never reaches the engine. If it comes
+back it would place immediately before the shawarma wrap, and the pair would make
+a clean two-SKU FC block.
+
+It published fine for 59 days across 87 archived rows, always LINE-2, never
+overridden — consistent with the menu since adding milk to nearly every wrap.
+Cori’s 10-minute-clean argument (see CLAUDE.md, allergen compounding) would
+dissolve it entirely if Samad reopened that rule.
+
+---
+
 
 ### Off-capper moves read optimistic — NO LONGER BLOCKED
 
