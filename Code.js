@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.191 — 2026-10-21    (pairs with Index.html v0.5.259)
+ * Sequins ✨ — Code.js    v0.4.192 — 2026-10-21    (pairs with Index.html v0.5.260)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.191 The weekly UPM refresh rides on the demand trigger, which actually
- *          fires, instead of waiting for someone to open the SKU Library.
+ * v0.4.192 The last two trigger installers survive being run from the editor,
+ *          where Session.getActiveUser throws.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -1688,7 +1688,8 @@ function pushedDemandTrigger() {
 // Session.getActiveUser() returns the real email when these are run from the
 // Apps Script editor too, so the owner's own maintenance runs still pass.
 function installPushedDemandTrigger() {
-  if (!getCurrentUser().isAdmin) throw new Error('Not authorized');
+  // Editor-run. getCurrentUser() throws there without the userinfo.email scope.
+  assertAdminOrScheduled_();
   const EVERY_MINUTES = 15;
   const existing = ScriptApp.getProjectTriggers().filter(function(t) {
     return t.getHandlerFunction() === 'pushedDemandTrigger';
@@ -3097,7 +3098,8 @@ function allergenSyncTrigger() {
 }
 // Run ONCE from the editor. Idempotent - checks first, so it cannot duplicate.
 function installAllergenSyncTrigger() {
-  if (!getCurrentUser().isAdmin) throw new Error('Not authorized');
+  // Editor-run. getCurrentUser() throws there without the userinfo.email scope.
+  assertAdminOrScheduled_();
   const existing = ScriptApp.getProjectTriggers().filter(function(t) {
     return t.getHandlerFunction() === 'allergenSyncTrigger';
   });

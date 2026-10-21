@@ -110,35 +110,6 @@ then it is labelled as the worst case.
 
 ## Blocked on Cori
 
-### CAESAR_PASTA_BOWL has no UPM
-
-**Probably resolved on 2026-10-21 — needs one look to confirm and then delete.**
-The weekly UPM refresh had not run for 19 days; when it did it updated 47 UPMs
-from 3,898 runs over 90 days. This SKU has been building since 10/12, so it very
-likely picked up a measured rate in that batch. Check the SKU Library row: if the
-UPM field has a number rather than amber text, this entry is done.
-
-Launches 2026-10-12 taking part of CRUNCHY_THAI_BOWL’s volume — 49,412 units from
-Wk 42 on. Nothing had a rate for it: not the Master Document, and no runs in the
-Data Drop. The engine falls back to the 16oz jar average, currently about 19,
-and the SKU Library row says so in amber.
-
-Comparable 16oz jars measured over 90 days: PESTO_PASTA_BOWL 23.1 (the other
-pasta bowl, closest build), CRUNCHY_THAI_BOWL 14.0 (the one it replaces). Nine
-units a minute apart is about 32 hours of line time on that volume. Samad or
-Menu to call it.
-
-BUFFALO_CHICKEN_WRAP is the same question with a worse sample: 7.8 measured from
-two days and 359 units, against 91,066 units from Wk 42. The weekly job will
-replace it with a real average once it has run; Cori accepted that rather than a
-minimum sample size — "we’re okay keeping up with ourselves."
-
-Dropped 2026-08-31: the **go-live date for sandbox-only lines**. Cori: "for now
-we will just turn it on when it's time." The manual `sandboxOnly` checkbox is
-enough. Restate it here if flipping it by hand ever gets missed.
-
----
-
 ## Blocked on someone else
 
 ### Push run-sheet actuals into the internal system the floor already types into
