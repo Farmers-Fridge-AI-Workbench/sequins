@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.185 — 2026-10-21    (pairs with Index.html v0.5.253)
+ * Sequins ✨ — Code.js    v0.4.187 — 2026-10-21    (pairs with Index.html v0.5.255)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.185 No server change — paired with Index.html v0.5.253, which lines the two
- *          holiday cost tables up column for column.
+ * v0.4.186 The nightly cost sync also brings back sale price per SKU, so a cut can
+ *          say what sales it gives up as well as what it saves.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -37,6 +37,19 @@ const RECIPE_MASTER_TAB     = 'Recipe Master (Buyer - Demand 1)';
 const RECIPE_SKU_COL        = 3;   // C  SKU
 const RECIPE_ITEM_COL       = 4;   // D  Ingredient Item Number — E / P / L
 const RECIPE_COST_COL       = 116; // DL Standard Cost
+
+// Sale price per unit — PV, what we sell the item for. Lives on its own tab in
+// the same workbook, one row per SKU, already summed. (The tab name's spelling is
+// theirs; do not 'fix' it or the lookup breaks.)
+//
+// Food and packaging deliberately do NOT come from here even though this tab
+// carries them too. Recipe Master is the live explosion for the planning day, so
+// it moves with ingredient prices, and it covers 62 of the 63 SKUs in the library
+// against this tab's 55. The two agree where both have a SKU — CHEDDAR_CHEESE
+// $0.33/$0.16 and CHIPS_GUAC $0.79/$0.27 — which is how this tab was validated.
+const PLANNER_COST_TAB      = 'Crrent Food & Pkg Cost';
+const PCOST_NAME_COL        = 2;   // B  Item Name
+const PCOST_PV_COL          = 4;   // D  Sale Price (PV)
 
 const PROCESSING_SHEET_ID   = '1v_C2ZUR9_PjTqCO4XU16x2oRTvmvpdT43cs0d3tyh54'; // FPLModel Engine
 const PROCESSING_TAB        = 'Processing Complexity'; // B=SKU Name, E=90 Day Duration/Unit
@@ -2286,6 +2299,32 @@ function recipeMasterCosts_(wantedKeys) {
       pkg:  Math.round((pkg[key]  || 0) * 10000) / 10000
     };
   });
+
+  // Sale price, from the tab that keeps one row per SKU. A SKU with no row keeps
+  // no pv at all rather than a zero — zero would read as 'we sell it for nothing'
+  // and quietly make cutting it look free.
+  try {
+    const pc = SpreadsheetApp.openById(PLANNER_SHEET_ID).getSheetByName(PLANNER_COST_TAB);
+    if (pc) {
+      const pLast = pc.getLastRow();
+      if (pLast > 1) {
+        const prows = pc.getRange(2, PCOST_NAME_COL, pLast - 1, PCOST_PV_COL - PCOST_NAME_COL + 1).getValues();
+        let nPv = 0;
+        prows.forEach(row => {
+          const nm = String(row[0] || '').trim();
+          if (!nm) return;
+          const key = normalizeSku_(nm);
+          if (wantedKeys && !wantedKeys.has(key)) return;
+          const pv = parseFloat(String(row[PCOST_PV_COL - PCOST_NAME_COL]).replace(/[$,\s]/g, ''));
+          if (!isFinite(pv) || pv <= 0) return;
+          if (!costs[key]) costs[key] = { food: 0, pkg: 0 };
+          costs[key].pv = Math.round(pv * 100) / 100;
+          nPv++;
+        });
+        Logger.log('plannerCosts_: ' + nPv + ' SKU(s) carry a sale price');
+      }
+    }
+  } catch(e) { Logger.log('Sale price fetch failed: ' + e.message); }
   Logger.log('recipeMasterCosts_: priced ' + Object.keys(costs).length + ' SKU(s) from ' + (day || 'an undated tab'));
   return { costs: costs, day: day, n: Object.keys(costs).length };
 }

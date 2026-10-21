@@ -1,8 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.253 — 2026-10-21    (pairs with Code.js v0.4.185)
+  Sequins ✨ — Index.html    v0.5.255 — 2026-10-21    (pairs with Code.js v0.4.187)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.253 The cuts table ends on Total, the way the options table above it does.
+  v0.5.255 What we give up by cutting is its own table: F&P we would not spend,
+           PV we would not make, and the net of the two.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4318,7 +4319,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.253';
+var APP_VERSION='v0.5.255';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -7152,12 +7153,13 @@ function hpFpFor_(sku){
   var nk=String(sku).toUpperCase().replace(/[^A-Z0-9]/g,'');
   var store=(STATE.fpCosts&&STATE.fpCosts.costs)||{};
   if(store[nk])return{priced:true,food:store[nk].food||0,pkg:store[nk].pkg||0,
+    pv:(store[nk].pv>0?store[nk].pv:0),hasPv:!!(store[nk].pv>0),
     day:(STATE.fpCosts&&STATE.fpCosts.day)||''};
   // Then whatever an attribute pull happened to leave on the row.
   var m=(STATE.skuLibrary||{})[String(sku).toUpperCase()]||{};
   var f=parseFloat(m.foodCost),g=parseFloat(m.pkgCost);
-  if(!isFinite(f)&&!isFinite(g))return{priced:false,food:0,pkg:0,day:''};
-  return{priced:true,food:isFinite(f)?f:0,pkg:isFinite(g)?g:0,day:m.fpCostDay||''};
+  if(!isFinite(f)&&!isFinite(g))return{priced:false,food:0,pkg:0,pv:0,hasPv:false,day:''};
+  return{priced:true,food:isFinite(f)?f:0,pkg:isFinite(g)?g:0,pv:0,hasPv:false,day:m.fpCostDay||''};
 }
 function hpRunCuts_(R,total,even,wkMax,dayMax){
   var w=hpWeekSkuTotals_(R),weekSku=w.tot,thin=w.thin,out=[];
@@ -7224,24 +7226,25 @@ function hpRunCuts_(R,total,even,wkMax,dayMax){
 // Falls back to the closure cost if an option has not been priced yet.
 function hpCostOf_(R){return (R&&R.cost)?R.cost:{labor:(R?R.labor+R.ot:0),holiday:(R?R.holiday:0),total:(R?R.total:0),proc:0,fp:0,unpriced:[]};}
 function hpWeekCost_(opt,procRate,cut){
-  var w=hpWeekSkuTotals_(opt,cut).tot,fp=0,units=0,unpriced={};
+  var w=hpWeekSkuTotals_(opt,cut).tot,fp=0,pv=0,units=0,unpriced={},noPv={};
   Object.keys(w).forEach(function(k){
     var u=w[k]||0,c=hpFpFor_(k);
     units+=u;
     if(c.priced)fp+=u*(c.food+c.pkg);else if(u>0)unpriced[k]=true;
+    if(c.hasPv)pv+=u*c.pv;else if(u>0)noPv[k]=true;
   });
   var proc=units*procRate;
   return{labor:opt.labor+opt.ot+proc,  // assembly + OT + processing
     assembly:opt.labor,ot:opt.ot,proc:proc,holiday:opt.holiday,
-    total:opt.total+proc,              // labor + holiday. No food, no packaging.
-    fp:fp,units:units,unpriced:Object.keys(unpriced)};
+    total:opt.total+proc,              // labor + holiday. No food, packaging or PV.
+    fp:fp,pv:pv,units:units,unpriced:Object.keys(unpriced),noPv:Object.keys(noPv)};
 }
 function hpRunCutScenarios_(rows,total,even){
   if(!HP_RESULT||!HP_RESULT.length||!rows||!rows.length)return null;
   var cut={},skus=[];
   rows.forEach(function(r){cut[r.sku]=true;skus.push(r.sku);});
   var procRate=ruleNum_(getRules(),'processingStaticPerUnit')||0;
-  var out=[],base=null,unpriced={};
+  var out=[],base=null,unpriced={},noPv={};
   HP_RESULT.forEach(function(R){
     var alt=hpRunOption_(HP_WEEK,{name:R.name,states:R._states||{},baseline:!!R.baseline},total,even,cut);
     // after: the cut world, priced without the cut SKUs.
@@ -7250,9 +7253,11 @@ function hpRunCutScenarios_(rows,total,even){
     // food and packaging — and it has to agree with the costing table above.
     var after=hpWeekCost_(alt,procRate,cut),before=hpWeekCost_(R,procRate,null);
     after.unpriced.forEach(function(k){unpriced[k]=true;});
+    (before.noPv||[]).forEach(function(k){if(cut[k])noPv[k]=true;});
     var row={name:R.name,baseline:!!R.baseline,cost:after,costBefore:before,
       laborSaved:before.total-after.total,   // labor + holiday, the cost side
       fpAvoided:before.fp-after.fp,          // never a cost here, only avoided
+      pvLost:before.pv-after.pv,             // sales we would not make
       risksBefore:R.risks,risksAfter:alt.risks,unfit:alt.unfit};
     if(row.baseline)base=row;
     out.push(row);
@@ -7261,7 +7266,7 @@ function hpRunCutScenarios_(rows,total,even){
   out.forEach(function(r){r.vsBase=base?(base.cost.total-r.cost.total):0;});
   // The F&P avoided is the same money whichever option runs, give or take the
   // mix shift, so it is reported once rather than raced between options.
-  return{rows:out,skus:skus,unpriced:Object.keys(unpriced),hasBase:!!base};
+  return{rows:out,skus:skus,unpriced:Object.keys(unpriced),noPv:Object.keys(noPv),hasBase:!!base};
 }
 function hpCutThreshold_(){
   var v=parseFloat((document.getElementById('hpCutMax')||{}).value);
@@ -7374,6 +7379,18 @@ function hpRenderCuts_(best){
 }
 // Goes BELOW the costing, because it only means anything once you have seen what
 // the cuts are worth.
+// Two tables, side by side, because they answer different questions and mixing
+// them made the arithmetic unreadable: a Total with savings columns beside it
+// looked like it had forgotten to subtract them.
+//
+// LEFT is the cost of running the week, and reads as the sum it is — labor and
+// holiday as the option stands today, less what cutting takes out, equals Total.
+// Labor is the before figure on purpose, so it matches the options table above
+// row for row.
+//
+// RIGHT is what we give up by cutting, and is deliberately outside every total:
+// the week builds the same units whichever days close, so that money is not part
+// of the closure decision at all.
 function hpCutScenarioHtml_(TH,TD){
   var S=HP_CUTSCEN;if(!S||!S.rows.length)return '';
   var base=null;S.rows.forEach(function(r){if(r.baseline)base=r;});
@@ -7383,31 +7400,27 @@ function hpCutScenarioHtml_(TH,TD){
   var order=(base?[base]:[]).concat(rest);
   var h='<div style="margin-top:18px">';
   h+='<div class="card-title" style="margin-bottom:6px">What each option costs if we cut all '+S.skus.length+'</div>';
-  h+='<div class="sb-note" style="margin-bottom:8px">Every option re-sequenced with all '+S.skus.length+
-    ' removed together. <b>Total</b> is labor \u2014 assembly and processing \u2014 plus holiday pay, and savings under it are '+
-    'measured against running all seven days. <b>Food &amp; packaging is deliberately not in any total</b>: the week builds '+
-    'the same units whichever days close, so that spend happens either way. The last column is the part we would not '+
-    'buy at all once these SKUs come out.</div>';
-  // Left over from when food and packaging sat inside the total. It now explains
-  // only why the LAST column wobbles by a few dollars between options, and said
-  // at that length it reads as a caveat on the totals, which it is not.
-  h+='<div class="sb-note" style="margin-bottom:8px">The last column shifts slightly between options because each '+
-    'weekday carries its own SKU mix.</div>';
+  h+='<div class="sb-note" style="margin-bottom:10px">Every option re-sequenced with all '+S.skus.length+
+    ' removed together. Read the left table across: labor and holiday pay as the option stands <b>today</b>, less what '+
+    'cutting takes out of them, equals <b>Total</b>. Savings under Total are measured against running all seven days.</div>';
   if(S.unpriced.length){
     h+='<div class="status status-warn" style="margin-bottom:8px">'+S.unpriced.length+' SKU'+
       (S.unpriced.length>1?'s are':' is')+' not in the Production Planner\u2019s recipe list, so anything we would '+
-      'avoid spending on '+(S.unpriced.length>1?'them':'it')+' is missing from the last column: '+
-      escHtml(S.unpriced.slice(0,6).join(', '))+(S.unpriced.length>6?'\u2026':'')+'. The cost columns are unaffected.</div>';
+      'avoid spending on '+(S.unpriced.length>1?'them':'it')+' is missing from the right-hand table: '+
+      escHtml(S.unpriced.slice(0,6).join(', '))+(S.unpriced.length>6?'\u2026':'')+'. The cost table is unaffected.</div>';
   }
-  h+='<div style="overflow-x:auto"><table style="border-collapse:collapse;width:100%">';
+  h+='<div style="display:flex;gap:18px;align-items:flex-start;flex-wrap:wrap">';
+
+  // ── left: what the week costs ───────────────────────────────────────────
+  h+='<div style="flex:1 1 560px;min-width:0;overflow-x:auto">';
+  h+='<table style="border-collapse:collapse;width:100%">';
   h+='<tr><th style="'+TH+';text-align:left">Option</th>'+
-     '<th style="'+TH+';text-align:right">Labor<div style="font-size:9px;font-weight:400;text-transform:none;letter-spacing:0">assembly + processing</div></th>'+
+     '<th style="'+TH+';text-align:right">Labor<div style="font-size:9px;font-weight:400;text-transform:none;letter-spacing:0">assembly + processing, today</div></th>'+
      '<th style="'+TH+';text-align:right">Holiday pay</th>'+
-     '<th style="'+TH+';text-align:right" title="Labor and holiday pay this option stops spending once these SKUs come out.">Labor saved by cutting</th>'+
-     '<th style="'+TH+';text-align:right" title="Food, packaging and labels we would not buy at all. Not part of any total.">F&amp;P we would not spend</th>'+
+     '<th style="'+TH+';text-align:right" title="Labor and holiday pay this option stops spending once these SKUs come out. Already taken off Total.">Less: saved by cutting</th>'+
      '<th style="'+TH+';text-align:right">Total</th></tr>';
   order.forEach(function(r){
-    var c=r.cost,dr=r.risksAfter-r.risksBefore;
+    var c=r.cost,b=r.costBefore,dr=r.risksAfter-r.risksBefore;
     var tag=r.baseline?'<div style="font-size:9px;color:var(--muted)">everything else is measured against this</div>':'';
     var risk=dr<0?'<div style="font-size:9px;color:var(--green)">clears '+(-dr)+'</div>'
       :dr>0?'<div style="font-size:9px;color:var(--amber)">'+dr+' more to look at</div>':'';
@@ -7415,13 +7428,39 @@ function hpCutScenarioHtml_(TH,TD){
       :'<div style="font-size:9px;color:var('+(r.vsBase>0?'--green':'--red')+')">'+
        (r.vsBase>0?'saves ':'costs ')+sbMoney_(Math.abs(r.vsBase))+(r.vsBase>0?'':' more')+'</div>';
     h+='<tr><td style="'+TD+'">'+escHtml(r.name)+risk+'</td>'+
-       '<td style="'+TD+';text-align:right">'+sbMoney_(c.labor)+'</td>'+
-       '<td style="'+TD+';text-align:right">'+(c.holiday>0?'<span style="color:var(--amber)">'+sbMoney_(c.holiday)+'</span>':'\u2014')+'</td>'+
-       '<td style="'+TD+';text-align:right"><b style="color:var(--green)">'+sbMoney_(r.laborSaved)+'</b></td>'+
-       '<td style="'+TD+';text-align:right"><b style="color:var(--green)">'+sbMoney_(r.fpAvoided)+'</b></td>'+
+       '<td style="'+TD+';text-align:right">'+sbMoney_(b.labor)+'</td>'+
+       '<td style="'+TD+';text-align:right">'+(b.holiday>0?'<span style="color:var(--amber)">'+sbMoney_(b.holiday)+'</span>':'\u2014')+'</td>'+
+       '<td style="'+TD+';text-align:right"><span style="color:var(--green)">\u2212'+sbMoney_(r.laborSaved)+'</span></td>'+
        '<td style="'+TD+';text-align:right"><b>'+sbMoney_(c.total)+'</b>'+vs+'</td></tr>';
   });
-  h+='</table></div></div>';
+  h+='</table></div>';
+
+  // ── right: what cutting gives up ────────────────────────────────────────
+  h+='<div style="flex:0 1 auto;min-width:420px;overflow-x:auto">';
+  h+='<table style="border-collapse:collapse;width:100%">';
+  h+='<tr><th style="'+TH+';text-align:left" colspan="4">If we cut '+S.skus.length+
+     ' <div style="font-size:9px;font-weight:400;text-transform:none;letter-spacing:0">none of this is in the cost table</div></th></tr>';
+  h+='<tr><th style="'+TH+';text-align:left">Option</th>'+
+     '<th style="'+TH+';text-align:right" title="Food, packaging and labels we would not buy at all.">F&amp;P we would not spend</th>'+
+     '<th style="'+TH+';text-align:right" title="Sale price times the units we would not build.">PV we would not make</th>'+
+     '<th style="'+TH+';text-align:right" title="Sales given up, less the food and packaging we would not buy. What the cut costs before any labor saving.">Net</th></tr>';
+  order.forEach(function(r){
+    var net=r.fpAvoided-r.pvLost;
+    h+='<tr><td style="'+TD+'">'+escHtml(r.name)+'</td>'+
+       '<td style="'+TD+';text-align:right"><b style="color:var(--green)">'+sbMoney_(r.fpAvoided)+'</b></td>'+
+       '<td style="'+TD+';text-align:right"><b style="color:var(--red)">\u2212'+sbMoney_(r.pvLost)+'</b></td>'+
+       '<td style="'+TD+';text-align:right"><b style="color:var('+(net>=0?'--green':'--red')+')">'+
+       (net<0?'\u2212':'')+sbMoney_(Math.abs(net))+'</b></td></tr>';
+  });
+  h+='</table>';
+  if(S.noPv&&S.noPv.length){
+    h+='<div class="status status-warn" style="margin-top:6px">No sale price for '+escHtml(S.noPv.join(', '))+
+      ', so the PV given up is understated.</div>';
+  }
+  h+='<div class="sb-note" style="margin-top:6px">Shifts slightly between options because each weekday carries its own SKU mix.</div>';
+  h+='</div>';
+
+  h+='</div></div>';
   return h;
 }
 // Export. The ask that leaves the app — the comparison, and underneath it the
