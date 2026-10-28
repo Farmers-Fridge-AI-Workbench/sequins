@@ -1,9 +1,10 @@
 /**
- * Sequins ✨ — Code.js    v0.4.199 — 2026-10-21    (pairs with Index.html v0.5.267)
+ * Sequins ✨ — Code.js    v0.4.200 — 2026-10-28    (pairs with Index.html v0.5.268)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.199 No server change — paired with Index.html v0.5.267, which offers the
- *          labor-share times in Sandbox too.
+ * v0.4.200 diagLaborShare(weekLabel): why a labor share curfew did or did not land.
+ *          Reads the same store the app and the sync use, and prints it beside
+ *          what the Labor Share tab asked for. Surfaced as a button in Admin.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -1678,6 +1679,72 @@ function minToHHMM_(min) {
 // Reads what Pick Tock asked for, applies what it can, and writes the answer
 // back into the same rows. Never throws into its caller — a curfew that did not
 // get set must not take down a demand import riding on the same trigger.
+
+// Why the labor share curfew did or did not land, for one week. Returns text; the admin
+// panel renders it. Cori 2026-10-28: the Labor Share tab said "ok" for a day whose curfew was
+// not on, and "ok" only means a matching curfew was already there, not that this sync set one.
+// Reads the same stateStoreGet_ the app and the sync both use, so what it prints is what they
+// see.
+function diagLaborShare(weekLabel) {
+  const out = [];
+  const fbAll = stateStoreGet_('finishBy');
+  const wk = weekLabel || '';
+  out.push('Curfew store (stateStoreGet_ "finishBy")');
+  const weeks = Object.keys(fbAll).sort();
+  if (!weeks.length) out.push('  the store is EMPTY, no week has a curfew');
+  else out.push('  weeks held: ' + weeks.join(', '));
+  const forWeek = wk ? (fbAll[wk] || null) : null;
+  if (wk) {
+    if (!forWeek) out.push('  "' + wk + '" is NOT in the store');
+    else {
+      out.push('  "' + wk + '" holds:');
+      Object.keys(forWeek).forEach(function (d) {
+        const e = forWeek[d] || {};
+        out.push('    ' + d + ': enabled=' + (!!e.enabled) + '  time=' + (e.time || '(none)')
+          + '  source=' + (e.source || '(set by hand)') + '  setAt=' + (e.setAt || '-'));
+      });
+    }
+  }
+
+  out.push('');
+  out.push('Labor Share tab, and what each date resolves to');
+  let map = {};
+  try { map = forecastDateMap_(); }
+  catch (e) { out.push('  could not read the Compiled Forecast: ' + e.message); }
+  const ss = SpreadsheetApp.openById(PLAN_ARCHIVE_SHEET_ID);
+  const tab = ss.getSheetByName(LABOR_SHARE_TAB);
+  if (!tab) { out.push('  no Labor Share tab'); return out.join('\n'); }
+  const last = tab.getLastRow();
+  if (last < 2) { out.push('  the tab is empty'); return out.join('\n'); }
+  const rng  = tab.getRange(2, 1, last - 1, LABOR_SHARE_HEADER.length);
+  const vals = rng.getValues(), disp = rng.getDisplayValues();
+  out.push('  rows: ' + (last - 1) + '   (sheet lastRow ' + last + ')');
+  vals.forEach(function (r, i) {
+    const dateStr = normalizePushedDate_(disp[i][0], r[0], Session.getScriptTimeZone());
+    const loc = dateStr ? map[dateStr] : null;
+    if (wk && loc && loc.weekLabel !== wk) return;
+    if (wk && !loc) return;
+    const sharing = /^(y|yes|true|1)$/i.test(String(r[1] || '').trim());
+    const startMin = laborShareMin_(disp[i][2], r[2]);
+    const want = (sharing && startMin !== null)
+      ? minToHHMM_(Math.max(0, startMin - LABOR_SHARE_LEAD_MIN)) : '';
+    const cur = (loc && fbAll[loc.weekLabel] && fbAll[loc.weekLabel][loc.day]) || null;
+    out.push('  row ' + (i + 2) + '  ' + (dateStr || '(no date)')
+      + '  -> ' + (loc ? loc.weekLabel + ' ' + loc.day : 'NOT IN THE FORECAST'));
+    out.push('      sheet says: sharing=' + (sharing ? 'yes' : 'no')
+      + '  start=' + (disp[i][2] || '-') + '  curfew col G=' + (disp[i][6] || '-')
+      + '  status=' + (disp[i][8] || '-'));
+    out.push('      we would want: ' + (want || '(nothing)')
+      + '   store has: ' + (cur ? ('enabled=' + !!cur.enabled + ' time=' + (cur.time || '-')
+        + ' source=' + (cur.source || 'by hand')) : 'NOTHING'));
+    if (want && !cur) out.push('      >>> the sheet claims a curfew but the store has none');
+    if (want && cur && cur.enabled && cur.time !== want) {
+      out.push('      >>> store disagrees with what the sheet asked for');
+    }
+    if (want && cur && !cur.enabled) out.push('      >>> store has it switched OFF');
+  });
+  return out.join('\n');
+}
 function applyLaborShare_() {
   const ss  = SpreadsheetApp.openById(PLAN_ARCHIVE_SHEET_ID);
   const tab = ss.getSheetByName(LABOR_SHARE_TAB);

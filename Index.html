@@ -1,9 +1,8 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.267 — 2026-10-21    (pairs with Code.js v0.4.199)
+  Sequins ✨ — Index.html    v0.5.268 — 2026-10-28    (pairs with Code.js v0.4.200)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.267 Holiday Planning inherits the labor-share curfew; Sandbox offers it as
-           a button rather than taking it.
+  v0.5.268 Admin card for the labor share curfew diagnostic.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -933,6 +932,15 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         </div>
       </div>
       <div class="card-grid">
+        <div class="card">
+          <div class="card-title">Labor share curfew <span style="color:var(--amber)">(why a curfew did or did not land)</span></div>
+          <div style="color:var(--muted);font-size:11px;line-height:1.5;margin-bottom:10px;max-width:560px">Shows what the curfew store actually holds for a week, what Pick Tock asked for in the Labor Share tab, and what each date resolves to. Use it when the dot in Pick Tock says the curfew matches but Sequins does not have it.</div>
+          <div style="display:flex;gap:8px;margin-bottom:8px">
+            <input type="text" class="form-input" id="diagLsWeek" placeholder="Wk 45 &middot; 2026" style="flex:1">
+            <button class="btn btn-teal btn-sm" onclick="runDiagLaborShare()">Check</button>
+          </div>
+          <pre id="diagLsOut" style="white-space:pre-wrap;font-family:var(--mono);font-size:10px;color:var(--muted);margin:0;max-height:340px;overflow:auto"></pre>
+        </div>
         <div class="card">
           <div class="card-title">Admins <span style="color:var(--teal)">(full access)</span></div>
           <div id="adminList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"></div>
@@ -4319,7 +4327,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.267';
+var APP_VERSION='v0.5.268';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4423,6 +4431,18 @@ function removeSlackHook(){
   google.script.run.withSuccessHandler(renderSlackCard).withFailureHandler(function(){}).clearSlackWebhook();
 }
 function renderUsers(){google.script.run.withSuccessHandler(function(list){document.getElementById('adminList').innerHTML=list.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removeAdmin(\''+email+'\')">✕</button></div>';}).join('');}).withFailureHandler(function(){}).getAdminListForClient();var planners=STATE.planners||[];document.getElementById('plannerList').innerHTML=planners.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removePlanner(\''+email+'\')">✕</button></div>';}).join('');var floorViewers=STATE.floorViewers||[];document.getElementById('floorViewerList').innerHTML=floorViewers.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removeFloorViewer(\''+email+'\')">✕</button></div>';}).join('');renderExternalViewers();renderPlanEmailSettings();}
+
+// ES5 here, per the house rule: var, never const/let.
+function runDiagLaborShare(){
+  var wk=(document.getElementById("diagLsWeek")||{}).value||"";
+  var out=document.getElementById("diagLsOut");
+  if(!out)return;
+  out.textContent="checking...";
+  google.script.run
+    .withSuccessHandler(function(t){out.textContent=t||"(nothing came back)";})
+    .withFailureHandler(function(e){out.textContent="failed: "+(e&&e.message?e.message:e);})
+    .diagLaborShare(wk);
+}
 function addAdmin(){var email=document.getElementById('newAdminEmail').value.trim().toLowerCase(),el=document.getElementById('adminStatus');if(email.indexOf('@')===-1)return;google.script.run.withSuccessHandler(function(){document.getElementById('newAdminEmail').value='';renderUsers();el.innerHTML='<div class="status status-ok">✓ Added '+email+'</div>';setTimeout(function(){el.innerHTML='';},3000);}).withFailureHandler(function(err){el.innerHTML='<div class="status status-err">'+err.message+'</div>';}).addAdmin(email);}
 function removeAdmin(email){google.script.run.withSuccessHandler(renderUsers).withFailureHandler(function(){}).removeAdmin(email);}
 function addPlanner(){var email=document.getElementById('newPlannerEmail').value.trim().toLowerCase();if(email.indexOf('@')===-1)return;if(STATE.planners.indexOf(email)===-1)STATE.planners.push(email);google.script.run.withSuccessHandler(function(){document.getElementById('newPlannerEmail').value='';renderUsers();}).withFailureHandler(function(){}).savePlanners(STATE.planners);}
