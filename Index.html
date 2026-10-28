@@ -1,8 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.268 — 2026-10-28    (pairs with Code.js v0.4.200)
+  Sequins ✨ — Index.html    v0.5.269 — 2026-10-28    (pairs with Code.js v0.4.201)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.268 Admin card for the labor share curfew diagnostic.
+  v0.5.269 The poll carries finishBy, so a curfew applied by the labor-share sync
+           shows without a reload. Guarded against reverting an in-flight save.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4327,7 +4328,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.268';
+var APP_VERSION='v0.5.269';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4763,7 +4764,7 @@ function buildUnplacedOptions_(job,lineState,lines,rules,lcById,capMin){
   });
   return wrap;
 }
-function startPolling(){if(_pollInterval)return;_pollInterval=setInterval(function(){google.script.run.withSuccessHandler(function(ts){if(!ts||ts===_lastModified)return;_lastModified=ts;document.getElementById('syncIndicator').style.display='';google.script.run.withSuccessHandler(function(s){document.getElementById('syncIndicator').style.display='none';if(!s)return;if(s.demand)STATE.demand=s.demand;if(s.skuLibrary&&!_cfgDirty.sku)STATE.skuLibrary=s.skuLibrary;if(s.lineConfig&&!_cfgDirty.line)STATE.lineConfig=s.lineConfig;if(s.planners)STATE.planners=s.planners;if(s.overrides)STATE.overrides=s.overrides;if(s.sequencingRules&&!_cfgDirty.rules)STATE.sequencingRules=s.sequencingRules;if(s.breakOverrides)STATE.breakOverrides=s.breakOverrides;if(s.scenarios)STATE.scenarios=s.scenarios;if(s.floorViewers)STATE.floorViewers=s.floorViewers;if(s.fpCosts)STATE.fpCosts=s.fpCosts;renderSequence();}).withFailureHandler(function(){document.getElementById('syncIndicator').style.display='none';}).getState();}).withFailureHandler(function(){}).getLastModified();},8000);}
+function startPolling(){if(_pollInterval)return;_pollInterval=setInterval(function(){google.script.run.withSuccessHandler(function(ts){if(!ts||ts===_lastModified)return;_lastModified=ts;document.getElementById('syncIndicator').style.display='';google.script.run.withSuccessHandler(function(s){document.getElementById('syncIndicator').style.display='none';if(!s)return;if(s.demand)STATE.demand=s.demand;if(s.skuLibrary&&!_cfgDirty.sku)STATE.skuLibrary=s.skuLibrary;if(s.lineConfig&&!_cfgDirty.line)STATE.lineConfig=s.lineConfig;if(s.planners)STATE.planners=s.planners;if(s.overrides)STATE.overrides=s.overrides;if(s.sequencingRules&&!_cfgDirty.rules)STATE.sequencingRules=s.sequencingRules;if(s.breakOverrides)STATE.breakOverrides=s.breakOverrides;if(s.scenarios)STATE.scenarios=s.scenarios;if(s.floorViewers)STATE.floorViewers=s.floorViewers;if(s.fpCosts)STATE.fpCosts=s.fpCosts;if(s.finishBy&&!_fbPending)STATE.finishBy=s.finishBy;renderSequence();_fbRedraw();}).withFailureHandler(function(){document.getElementById('syncIndicator').style.display='none';}).getState();}).withFailureHandler(function(){}).getLastModified();},8000);}
 
 function publishPlan(){
   var dayData=STATE.demand[CURRENT_WEEK]&&STATE.demand[CURRENT_WEEK][CURRENT_DAY];
@@ -8518,12 +8519,26 @@ function lineOverCurfew_(line,ls){
   var end=ls.startMin+ls.totalMin;
   return end>CURFEW_MIN?(end-CURFEW_MIN):0;
 }
+
+// A curfew save of our own that has not come back yet. The 8 second poll replaces
+// STATE.finishBy wholesale, so without this a poll landing mid-save reverts what somebody
+// just set. Same shape as Pick Tock’s pending-lever guard.
+var _fbPending=false;
+
+// Redraw whichever curfew control is on screen. Both ids are safe to call blind —
+// renderFinishByControl returns immediately when the container is not there.
+function _fbRedraw(){
+  try{renderFinishByControl("seqFinishBy");}catch(e){}
+  try{renderFinishByControl("wbFinishBy");}catch(e){}
+}
 function saveFinishBy_(enabled,time){
   if(!STATE.finishBy)STATE.finishBy={};
   if(!STATE.finishBy[CURRENT_WEEK])STATE.finishBy[CURRENT_WEEK]={};
   STATE.finishBy[CURRENT_WEEK][CURRENT_DAY]={enabled:!!enabled,time:time||''};
   var wk=CURRENT_WEEK,dy=CURRENT_DAY;
-  google.script.run.withFailureHandler(function(err){
+  _fbPending=true;
+  google.script.run.withSuccessHandler(function(){_fbPending=false;}).withFailureHandler(function(err){
+    _fbPending=false;
     alert('Could not save the finish-by time: '+err.message);
   }).saveFinishBy(wk,dy,{enabled:!!enabled,time:time||''});
   renderSequence();renderWorkbench();

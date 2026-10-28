@@ -1,10 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.200 — 2026-10-28    (pairs with Index.html v0.5.268)
+ * Sequins ✨ — Code.js    v0.4.201 — 2026-10-28    (pairs with Index.html v0.5.269)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.200 diagLaborShare(weekLabel): why a labor share curfew did or did not land.
- *          Reads the same store the app and the sync use, and prints it beside
- *          what the Labor Share tab asked for. Surfaced as a button in Admin.
+ * v0.4.201 No server change — paired with Index.html v0.5.269, which carries
+ *          finishBy on the poll so an applied curfew shows without a reload.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
