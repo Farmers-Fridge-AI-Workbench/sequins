@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.269 — 2026-10-28    (pairs with Code.js v0.4.201)
+  Sequins ✨ — Index.html    v0.5.270 — 2026-11-04    (pairs with Code.js v0.4.202)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.269 The poll carries finishBy, so a curfew applied by the labor-share sync
-           shows without a reload. Guarded against reverting an in-flight save.
+  v0.5.270 A Sandbox Only role, set in Users: full Sandbox and nothing else to
+           edit.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -955,6 +955,13 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           <div id="plannerStatus" style="margin-top:8px"></div>
         </div>
         <div class="card">
+          <div class="card-title">Sandbox Only <span style="color:var(--teal)">(Sandbox, and the live plan everyone sees)</span></div>
+          <div style="color:var(--muted);font-size:11px;line-height:1.5;margin-bottom:10px;max-width:560px">Full use of Sandbox, including Holiday Planning and the export. Nothing else is editable &#8212; no Workbench, no SKU Library, no Line Config, no Users. Line Sequence stays visible because it is visible to anyone who can open Sequins at all.</div>
+          <div id="sandboxUserList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"></div>
+          <div style="display:flex;gap:8px"><input type="text" class="form-input" id="newSandboxUserEmail" placeholder="email@farmersfridge.com" style="flex:1"><button class="btn btn-teal btn-sm" onclick="addSandboxUser()">Add</button></div>
+          <div id="sandboxUserStatus" style="margin-top:8px"></div>
+        </div>
+        <div class="card">
           <div class="card-title">Floor Viewers <span style="color:var(--teal)">(My Line tablet access)</span></div>
           <div id="floorViewerList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"></div>
           <div style="display:flex;gap:8px"><input type="text" class="form-input" id="newFloorViewerEmail" placeholder="email@farmersfridge.com" style="flex:1"><button class="btn btn-teal btn-sm" onclick="addFloorViewer()">Add</button></div>
@@ -996,7 +1003,7 @@ function admissibleLinesFor_(meta,day){
   var list=(isLateWeekDay_(day)&&meta.friSatOverride)?meta.admissibleLinesFriSat:meta.admissibleLines;
   return (list&&list.length)?list.slice():null;
 }
-var STATE={planEmail:{},demand:{},skuLibrary:{},lineConfig:null,planners:[],overrides:{},sequencingRules:null,publishedPlans:{},breakOverrides:{},floorViewers:[],finishBy:{},sandboxes:[],fpCosts:null};
+var STATE={planEmail:{},demand:{},skuLibrary:{},lineConfig:null,planners:[],overrides:{},sequencingRules:null,publishedPlans:{},breakOverrides:{},floorViewers:[],sandboxUsers:[],finishBy:{},sandboxes:[],fpCosts:null};
 var CURRENT_USER=null,CURRENT_WEEK=null,CURRENT_DAY=null;
 var _pendingForecast=null,_pendingActuals=null,_pollInterval=null,_lastModified=null;
 // ─── UNSAVED-CONFIG GUARD (v0.5.155) ────────────────────────────────────────
@@ -4328,7 +4335,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.269';
+var APP_VERSION='v0.5.270';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4431,7 +4438,7 @@ function removeSlackHook(){
   if(!confirm('Remove the webhook? Nobody will be told when demand lands.'))return;
   google.script.run.withSuccessHandler(renderSlackCard).withFailureHandler(function(){}).clearSlackWebhook();
 }
-function renderUsers(){google.script.run.withSuccessHandler(function(list){document.getElementById('adminList').innerHTML=list.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removeAdmin(\''+email+'\')">✕</button></div>';}).join('');}).withFailureHandler(function(){}).getAdminListForClient();var planners=STATE.planners||[];document.getElementById('plannerList').innerHTML=planners.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removePlanner(\''+email+'\')">✕</button></div>';}).join('');var floorViewers=STATE.floorViewers||[];document.getElementById('floorViewerList').innerHTML=floorViewers.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removeFloorViewer(\''+email+'\')">✕</button></div>';}).join('');renderExternalViewers();renderPlanEmailSettings();}
+function renderUsers(){google.script.run.withSuccessHandler(function(list){document.getElementById('adminList').innerHTML=list.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removeAdmin(\''+email+'\')">✕</button></div>';}).join('');}).withFailureHandler(function(){}).getAdminListForClient();var planners=STATE.planners||[];document.getElementById('plannerList').innerHTML=planners.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removePlanner(\''+email+'\')">✕</button></div>';}).join('');var floorViewers=STATE.floorViewers||[];document.getElementById('floorViewerList').innerHTML=floorViewers.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removeFloorViewer(\''+email+'\')">✕</button></div>';}).join('');var sandboxUsers=STATE.sandboxUsers||[];document.getElementById('sandboxUserList').innerHTML=sandboxUsers.length?sandboxUsers.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removeSandboxUser(\''+email+'\')">✕</button></div>';}).join(''):'<div class="sb-note">Nobody yet.</div>';renderExternalViewers();renderPlanEmailSettings();}
 
 // ES5 here, per the house rule: var, never const/let.
 function runDiagLaborShare(){
@@ -4521,6 +4528,8 @@ function turnOffExternalLink(){
 }
 function addFloorViewer(){var email=document.getElementById('newFloorViewerEmail').value.trim().toLowerCase();if(email.indexOf('@')===-1)return;if(!STATE.floorViewers)STATE.floorViewers=[];if(STATE.floorViewers.indexOf(email)===-1)STATE.floorViewers.push(email);google.script.run.withSuccessHandler(function(){document.getElementById('newFloorViewerEmail').value='';renderUsers();}).withFailureHandler(function(){}).saveFloorViewers(STATE.floorViewers);}
 function removeFloorViewer(email){STATE.floorViewers=(STATE.floorViewers||[]).filter(function(e){return e!==email;});google.script.run.withSuccessHandler(renderUsers).withFailureHandler(function(){}).saveFloorViewers(STATE.floorViewers);}
+function addSandboxUser(){var el=document.getElementById('sandboxUserStatus');var email=document.getElementById('newSandboxUserEmail').value.trim().toLowerCase();if(email.indexOf('@')===-1){if(el)el.innerHTML='<div class="status status-warn">That does not look like an email address.</div>';return;}if(!STATE.sandboxUsers)STATE.sandboxUsers=[];if(STATE.sandboxUsers.indexOf(email)===-1)STATE.sandboxUsers.push(email);google.script.run.withSuccessHandler(function(){document.getElementById('newSandboxUserEmail').value='';renderUsers();if(el){el.innerHTML='<div class="status status-ok">\u2713 Added '+escHtml(email)+'</div>';setTimeout(function(){el.innerHTML='';},3000);}}).withFailureHandler(function(err){if(el)el.innerHTML='<div class="status status-err">'+escHtml(err.message||String(err))+'</div>';}).saveSandboxUsers(STATE.sandboxUsers);}
+function removeSandboxUser(email){STATE.sandboxUsers=(STATE.sandboxUsers||[]).filter(function(e){return e!==email;});google.script.run.withSuccessHandler(renderUsers).withFailureHandler(function(){}).saveSandboxUsers(STATE.sandboxUsers);}
 
 // ─── PUSHED DEMAND ────────────────────────────────────────────────────────────
 // Room Zoom feels automatic because getPlans() runs inside doGet — it re-reads
@@ -7708,7 +7717,7 @@ function viewAllowed_(name){
   var u=CURRENT_USER||{};
   switch(name){
     case 'workbench': return !!(u.isAdmin||u.isPlanner||u.canEditRules);
-    case 'sandbox':   return !!(u.isAdmin||u.canEditRules);
+    case 'sandbox':   return !!(u.isAdmin||u.canEditRules||u.isSandboxUser);
     case 'lineplanner': return !!(u.isAdmin||u.canEditRules);
     case 'myline':    return !!(u.isAdmin||u.isFloorViewer);
     case 'demand': case 'skus': case 'lines': case 'users':
@@ -9249,7 +9258,7 @@ function setPreviewRole(role){
   window._canPublish=!!(CURRENT_USER.isAdmin||CURRENT_USER.isPlanner);renderPlanEmailPill();
   document.getElementById('adminNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.isPlanner||CURRENT_USER.canEditRules)?'':'none';
   document.getElementById('workbenchNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.isPlanner||CURRENT_USER.canEditRules)?'':'none';
-  document.getElementById('sandboxNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.canEditRules)?'':'none';
+  document.getElementById('sandboxNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.canEditRules||CURRENT_USER.isSandboxUser)?'':'none';
   document.getElementById('linePlannerNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.canEditRules)?'':'none';
   document.getElementById('linePlannerNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.canEditRules)?'':'none';
   document.getElementById('myLineNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.isFloorViewer)?'':'none';
@@ -9268,7 +9277,7 @@ function exitPreviewRole(){
   window._canPublish=!!(CURRENT_USER.isAdmin||CURRENT_USER.isPlanner);renderPlanEmailPill();
   document.getElementById('adminNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.isPlanner||CURRENT_USER.canEditRules)?'':'none';
   document.getElementById('workbenchNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.isPlanner||CURRENT_USER.canEditRules)?'':'none';
-  document.getElementById('sandboxNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.canEditRules)?'':'none';
+  document.getElementById('sandboxNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.canEditRules||CURRENT_USER.isSandboxUser)?'':'none';
   document.getElementById('myLineNav').style.display=(CURRENT_USER.isAdmin||CURRENT_USER.isFloorViewer)?'':'none';
   var sel=document.getElementById('previewRoleSel');if(sel)sel.value='';
   renderRulesAccess();
@@ -9292,7 +9301,7 @@ window.onload=function(){
     document.getElementById('userDisplay').textContent=user.name;
     if(user.isAdmin||user.isPlanner||user.canEditRules)document.getElementById('adminNav').style.display='';
     if(user.isAdmin||user.isPlanner||user.canEditRules)document.getElementById('workbenchNav').style.display='';
-    if(user.isAdmin||user.canEditRules)document.getElementById('sandboxNav').style.display='';
+    if(user.isAdmin||user.canEditRules||user.isSandboxUser)document.getElementById('sandboxNav').style.display='';
     if(user.isAdmin||user.canEditRules)document.getElementById('linePlannerNav').style.display='';
     if(user.isAdmin||user.isFloorViewer)document.getElementById('myLineNav').style.display='';
     applyFloorOnlyChrome_();
@@ -9314,6 +9323,7 @@ window.onload=function(){
       if(s.breakOverrides)STATE.breakOverrides=s.breakOverrides;
       if(s.scenarios)STATE.scenarios=s.scenarios;
       if(s.floorViewers)STATE.floorViewers=s.floorViewers;
+      if(s.sandboxUsers)STATE.sandboxUsers=s.sandboxUsers;
       if(s.finishBy)STATE.finishBy=s.finishBy;
       if(s.planEmail)STATE.planEmail=s.planEmail;
       // Without this line the server sends the nightly food and packaging costs

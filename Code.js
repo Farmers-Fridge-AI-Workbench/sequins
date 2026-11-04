@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.201 — 2026-10-28    (pairs with Index.html v0.5.269)
+ * Sequins ✨ — Code.js    v0.4.202 — 2026-11-04    (pairs with Index.html v0.5.270)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.201 No server change — paired with Index.html v0.5.269, which carries
- *          finishBy on the poll so an applied curfew shows without a reload.
+ * v0.4.202 A sandbox-only role: full Sandbox, nothing else to edit. Every call the
+ *          Sandbox makes lets it through, so the view cannot open and then fail.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -153,6 +153,9 @@ const STATE_KEYS = {
   scenarios:       'sequins_scenarios',
   sandboxes:       'sequins_sandboxes',
   floorViewers:    'sequins_floor_viewers',
+  // Sandbox and nothing else. Narrower than every other role: it is for someone
+  // who needs to model a week without being handed the live plan to edit.
+  sandboxUsers:    'sequins_sandbox_users',
   // Food and packaging cost per unit, refreshed nightly. Sized by the menu, not
   // by the calendar, so it belongs in Script Properties: ~60 SKUs x two numbers.
   fpCosts:         'sequins_fp_costs'
@@ -388,7 +391,10 @@ function getCurrentUser() {
   const canEditRules = isAdmin || rulesEditors.map(r => r.toLowerCase()).includes(email.toLowerCase());
   const floorViewers = getSection_(STATE_KEYS.floorViewers) || [];
   const isFloorViewer = floorViewers.map(f => f.toLowerCase()).includes(email.toLowerCase());
-  return { email, isAdmin, isPlanner, canEditRules, isFloorViewer, name: email.split('@')[0] };
+  const sandboxUsers = getSection_(STATE_KEYS.sandboxUsers) || [];
+  const isSandboxUser = sandboxUsers.map(s => s.toLowerCase()).includes(email.toLowerCase());
+  return { email, isAdmin, isPlanner, canEditRules, isFloorViewer, isSandboxUser,
+           name: email.split('@')[0] };
 }
 
 // v0.4.133: for functions a SCHEDULER calls but a browser must not.
@@ -903,6 +909,7 @@ function getState() {
     planEmail:       planEmailAll_(),
     sandboxes:       getSection_(STATE_KEYS.sandboxes) || [],
     floorViewers:    getSection_(STATE_KEYS.floorViewers) || [],
+    sandboxUsers:    getSection_(STATE_KEYS.sandboxUsers) || [],
     sequencingRules: getSection_(STATE_KEYS.sequencingRules),
     fpCosts:         getSection_(STATE_KEYS.fpCosts) || null,
     lastModified:    meta.lastModified || null
@@ -2648,7 +2655,7 @@ function runFpCostSyncNow() {
 // that job owns. Nothing of anyone's is touched.
 function fetchFpCosts(skuNames) {
   const user = getCurrentUser();
-  if (!user.isAdmin && !user.canEditRules && !user.isPlanner) throw new Error('Not authorized');
+  if (!user.isAdmin && !user.canEditRules && !user.isPlanner && !user.isSandboxUser) throw new Error('Not authorized');
   const stored = getSection_(STATE_KEYS.fpCosts);
   if (stored && stored.costs && (stored.v || 0) >= FP_COST_VERSION) return stored;
   // Stale or missing — refresh the whole set, not just the SKUs asked for, so
@@ -3526,6 +3533,15 @@ function saveFloorViewers(list) {
   return { ok: true };
 }
 
+// Sandbox-only access. Admin sets it, same as every other list.
+function saveSandboxUsers(list) {
+  const user = getCurrentUser();
+  if (!user.isAdmin) throw new Error('Not authorized');
+  setSection_(STATE_KEYS.sandboxUsers, list);
+  writeAuditLog_(user.email, 'save_sandbox_users', '', '', (list || []).length + ' on the list');
+  return { ok: true };
+}
+
 
 // ─── STAFFING SCENARIOS (per week/day) ────────────────────────────────────────
 // A scenario is just a named subset of that day's normally-available lines
@@ -3609,7 +3625,7 @@ function migrateSandboxesToSheet_() {
 }
 function getSandboxes() {
   const user = getCurrentUser();
-  if (!user.isAdmin && !user.canEditRules) throw new Error('Not authorized');
+  if (!user.isAdmin && !user.canEditRules && !user.isSandboxUser) throw new Error('Not authorized');
   migrateSandboxesToSheet_();
   const list = readSandboxRows_().list.map(function(sb) { delete sb.__row; return sb; });
   Logger.log('getSandboxes: returning ' + list.length);
@@ -3617,7 +3633,7 @@ function getSandboxes() {
 }
 function saveSandbox(sb) {
   const user = getCurrentUser();
-  if (!user.isAdmin && !user.canEditRules) throw new Error('Not authorized');
+  if (!user.isAdmin && !user.canEditRules && !user.isSandboxUser) throw new Error('Not authorized');
   if (!sb || !sb.id) throw new Error('Sandbox needs an id');
   migrateSandboxesToSheet_();
   const cur = readSandboxRows_();
@@ -3637,7 +3653,7 @@ function saveSandbox(sb) {
 // The ONLY path that removes a sandbox. Named id, one row, audited.
 function deleteSandboxById(id) {
   const user = getCurrentUser();
-  if (!user.isAdmin && !user.canEditRules) throw new Error('Not authorized');
+  if (!user.isAdmin && !user.canEditRules && !user.isSandboxUser) throw new Error('Not authorized');
   if (!id) throw new Error('No sandbox id given');
   const cur = readSandboxRows_();
   let target = null;
@@ -4613,7 +4629,7 @@ function _wrColName_(n) {
 // finished rows and only writes them. It invents no numbers of its own.
 function exportHolidayPlan(payload) {
   const user = getCurrentUser();
-  if (!user.isAdmin && !user.canEditRules) throw new Error('Not authorized');
+  if (!user.isAdmin && !user.canEditRules && !user.isSandboxUser) throw new Error('Not authorized');
   const p = (typeof payload === 'string') ? JSON.parse(payload) : (payload || {});
   if (!p.week || !p.options || !p.options.length) throw new Error('Nothing to export — run the options first.');
 
