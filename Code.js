@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.202 — 2026-11-04    (pairs with Index.html v0.5.270)
+ * Sequins ✨ — Code.js    v0.4.203 — 2026-11-06    (pairs with Index.html v0.5.271)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.202 A sandbox-only role: full Sandbox, nothing else to edit. Every call the
- *          Sandbox makes lets it through, so the view cannot open and then fail.
+ * v0.4.203 A day the forecast takes to zero is cleared on refresh instead of
+ *          keeping the units it had before. Thanksgiving was showing 26,934.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -1108,7 +1108,14 @@ function fetchForecastWeekData(weekLabel) {
 
   const skuData = {};
   const dates   = {};
-  weekCols.forEach(function(wc) { dates[wc.day] = wc.date; });
+  // A dated column is a day, even when every SKU on it is zero. Without this a
+  // day the forecast has taken to zero simply vanishes from the payload, and
+  // publishForecastWeek only walks what it is given, so the OLD day survives the
+  // refresh untouched. That is what happened to Wk 48 Thursday: Thanksgiving
+  // went to zero in Compiled on 2026-11-06 and Sequins carried on showing the
+  // 26,934 units published on 10-01, which is a plan for a day the plant is
+  // closed.
+  weekCols.forEach(function(wc) { dates[wc.day] = wc.date; skuData[wc.day] = {}; });
 
   // SKU names are in col C (index 2), starting row 16 (index 15).
   // Non-assembly SKUs (beverages, packaged CPG) are excluded here, at the door —
@@ -1125,7 +1132,6 @@ function fetchForecastWeekData(weekLabel) {
     weekCols.forEach(function(wc) {
       const qty = Math.round(parseFloat(allData[r][wc.col]) || 0);
       if (qty <= 0) return;
-      if (!skuData[wc.day]) skuData[wc.day] = {};
       skuData[wc.day][skuName] = qty;
     });
   }
@@ -1254,21 +1260,38 @@ function publishForecastWeek(weekLabel, skuData, dates) {
   if (!user.isAdmin) throw new Error('Not authorized');
 
   const weekData = getDemandWeek_(weekLabel);
-  let daysLoaded = 0;
+  let daysLoaded = 0, daysCleared = 0;
+
+  // An empty day is ambiguous, so the week decides which it is. If SOME day has
+  // numbers then a zero day is a real zero and the stored day is cleared; if
+  // NOTHING in the week has numbers then Compiled has simply not been filled in
+  // yet, and wiping seven days of stored demand over that would be a disaster.
+  //
+  // Clearing stored demand is deletion, which this project does not do without
+  // being asked. Cori signed this off on 2026-11-06, for this case only: a day
+  // the forecast now says is zero. Never an actual — the guard below still
+  // leaves those alone.
+  const weekHasData = Object.keys(skuData).some(function(d) {
+    return Object.keys(skuData[d] || {}).length > 0;
+  });
 
   Object.entries(skuData).forEach(([day, skus]) => {
     const existing = weekData[day];
     if (existing && existing.mode === 'actual') return;
+    const isEmpty = Object.keys(skus || {}).length === 0;
+    if (isEmpty && !weekHasData) return;              // week not filled in yet
+    if (isEmpty && !existing) return;                 // nothing stored, nothing to clear
     const newDay = {
       skus, mode: 'forecast', date: dates[day] || '',
       publishedBy: user.email, publishedAt: new Date().toISOString()
     };
     setDemandDay_(weekLabel, day, newDay, existing);
-    daysLoaded++;
+    if (isEmpty) daysCleared++; else daysLoaded++;
   });
 
-  writeAuditLog_(user.email, 'publish_forecast', weekLabel, '', daysLoaded + ' days');
-  return { ok: true, weekLabel, daysLoaded };
+  writeAuditLog_(user.email, 'publish_forecast', weekLabel, '',
+    daysLoaded + ' days' + (daysCleared ? (', ' + daysCleared + ' cleared to zero') : ''));
+  return { ok: true, weekLabel, daysLoaded, daysCleared };
 }
 
 function publishActualDays(entries) {

@@ -454,6 +454,14 @@ project, not this repo.
 
 ## Working with Cori
 
+- **No em dashes.** Cori 2026-11-05: "Did I mention I don't like those??" Applies to anything she
+  or her team reads: chat replies, drafted emails, docs, README and CLAUDE.md text, commit
+  messages, UI copy. Use the mark the sentence actually wants: a colon when the second half
+  explains the first, a full stop when it is two sentences, a comma for an aside, "because" for
+  a reason. Do not bulk-replace them with commas. En dashes in ranges (03:00–04:00) and minus
+  signs are fine.
+- **Short beats complete.** She cuts drafts hard. Give the short version first and the long one
+  only if she asks; if something genuinely needs detail, it goes in a doc, not in the message.
 Brief, direct answers — lead with the answer, not the explanation. She
 pushes back decisively on long explanations, unasked-for assumptions, and
 proposals beyond what was requested.
