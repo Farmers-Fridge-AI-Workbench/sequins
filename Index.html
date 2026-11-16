@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.271 — 2026-11-06    (pairs with Code.js v0.4.203)
+  Sequins ✨ — Index.html    v0.5.272 — 2026-11-16    (pairs with Code.js v0.4.204)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.271 The forecast preview shows a day the forecast has taken to zero, so a
-           closure is visible before it is published.
+  v0.5.272 The curfew warning no longer survives onto a day that has no plan.
+           An unpublished day was showing the previous day's breached lines.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -3276,6 +3276,13 @@ function renderSequence(){
   var weeks=getWeeks(),hasDemand=weeks.length>0;
   document.getElementById('seqNoData').style.display=hasDemand?'none':'';
   document.getElementById('seqContent').style.display=hasDemand?'':'none';
+  // Cleared UP FRONT, not on the way past. The strip is only written where
+  // there is a plan to flag, so clearing it anywhere else means every early
+  // return below has to remember to do it, and the !pub branch did not.
+  // Here it covers all of them, and the render that has something to say
+  // puts it straight back a few lines later.
+  document.getElementById('seqCurfewBanner').innerHTML='';
+  CURFEW_MIN=null;
   if(!hasDemand)return;
   renderDayStrip('seqDayStrip');renderWeekDropdowns();renderFloatingTeamControl('seqFloatingTeam');
   var days=getDays(CURRENT_WEEK);if(!CURRENT_DAY||days.indexOf(CURRENT_DAY)===-1)CURRENT_DAY=days[0];
@@ -3338,6 +3345,13 @@ function renderWorkbench(){
   var weeks=getWeeks(),hasDemand=weeks.length>0;
   document.getElementById('wbNoData').style.display=hasDemand?'none':'';
   document.getElementById('wbContent').style.display=hasDemand?'':'none';
+  // Same as Line Sequence. Workbench has TWO early returns under this one
+  // (no demand, and the sequencer handing back nothing), and the finish-by
+  // summary goes stale the same way: it clears itself when the cap is off,
+  // but only if something calls it.
+  document.getElementById('wbCurfewBanner').innerHTML='';
+  var _fbs=document.getElementById('wbFinishBySummary');if(_fbs)_fbs.innerHTML='';
+  CURFEW_MIN=null;
   if(!hasDemand)return;
   renderDayStrip('wbDayStrip');renderWeekDropdowns();renderFloatingTeamControl('wbFloatingTeam');
   renderScenarioBar('wbScenarioBar');renderFinishByControl('wbFinishBy');
@@ -4335,7 +4349,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.271';
+var APP_VERSION='v0.5.272';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;

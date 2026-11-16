@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.203 — 2026-11-06    (pairs with Index.html v0.5.271)
+ * Sequins ✨ — Code.js    v0.4.204 — 2026-11-16    (pairs with Index.html v0.5.272)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.203 A day the forecast takes to zero is cleared on refresh instead of
- *          keeping the units it had before. Thanksgiving was showing 26,934.
+ * v0.4.204 No server change. Paired with Index.html v0.5.272, which stops a
+ *          curfew warning carrying over onto a day that has no plan.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
