@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.206 — 2026-11-20    (pairs with Index.html v0.5.274)
+ * Sequins ✨ — Code.js    v0.4.207 — 2026-11-20    (pairs with Index.html v0.5.275)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.206 No server change. Paired with Index.html v0.5.274, which actually
- *          shows the card Pull from Planner lives on.
+ * v0.4.207 Pull from Planner works off a pasted link, so it needs no Drive
+ *          permission. The folder search switches on by itself if Drive lands.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -1587,10 +1587,7 @@ function findPlannerCopy_(dateStr) {
   // say what it actually needs instead.
   let it;
   try { it = DriveApp.getFolderById(PLANNER_DAILY_FOLDER).getFiles(); }
-  catch (e) {
-    throw new Error('Sequins cannot list the Planner folder yet. Open the app once and accept the ' +
-      'Drive permission prompt, then try again. (' + e.message + ')');
-  }
+  catch (e) { return { noDrive: true }; }
   while (it.hasNext()) {
     const f = it.next(), nm = f.getName(), t = nm.match(PLANNER_COPY_RE);
     if (!t) continue;
@@ -1604,7 +1601,16 @@ function findPlannerCopy_(dateStr) {
 
 // Admin only, which is what importPushedDemand already requires. Writing rows a
 // planner then could not import would leave the Demand tab ahead of the store.
-function pullPlannerDay(dateStr) {
+// Accepts a pasted Drive URL or a bare file ID.
+function plannerRefId_(ref) {
+  const s = String(ref || '').trim();
+  if (!s) return '';
+  const m = s.match(/\/d\/([a-zA-Z0-9_-]{20,})/);
+  if (m) return m[1];
+  return /^[a-zA-Z0-9_-]{20,}$/.test(s) ? s : '';
+}
+
+function pullPlannerDay(dateStr, ref) {
   const user = getCurrentUser();
   if (!user.isAdmin) throw new Error('Not authorized');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateStr || ''))) throw new Error('Pick a production date.');
@@ -1612,9 +1618,21 @@ function pullPlannerDay(dateStr) {
   const loc = forecastDateMap_()[dateStr];
   if (!loc) throw new Error(dateStr + ' is not in the Compiled Forecast, so there is no week and day to file it under.');
 
-  const found = findPlannerCopy_(dateStr);
-  if (!found) throw new Error('No Planner copy for ' + dateStr + ' in the daily folder.');
-  if (found.blocked) throw new Error('Refusing to read "' + found.blocked + '". That is a master.');
+  let found = null;
+  const refId = plannerRefId_(ref);
+  if (refId) {
+    let ss;
+    try { ss = SpreadsheetApp.openById(refId); }
+    catch (e) { throw new Error('Could not open that link. Paste the Planner copy URL from its address bar. (' + e.message + ')'); }
+    found = { id: refId, name: ss.getName() };
+    if (/master/i.test(found.name)) throw new Error('Refusing to read "' + found.name + '". That is a master.');
+  } else {
+    found = findPlannerCopy_(dateStr);
+    if (found && found.noDrive) throw new Error('Paste the Planner copy link in the box below and press the button again. ' +
+      'Sequins can open any sheet by link already; finding it by name on its own needs a Drive permission this project has never had.');
+    if (!found) throw new Error('No Planner copy for ' + dateStr + ' in the daily folder. Paste its link below instead.');
+    if (found.blocked) throw new Error('Refusing to read "' + found.blocked + '". That is a master.');
+  }
 
   const tab = SpreadsheetApp.openById(found.id).getSheetByName(PLANNER_ASM_TAB);
   if (!tab) throw new Error('"' + PLANNER_ASM_TAB + '" not found in ' + found.name + '.');

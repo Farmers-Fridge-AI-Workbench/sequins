@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.274 — 2026-11-20    (pairs with Code.js v0.4.206)
+  Sequins ✨ — Index.html    v0.5.275 — 2026-11-20    (pairs with Code.js v0.4.207)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.274 Show that card. It only unhid when something was already waiting,
-           which is the one case Pull from Planner is not for.
+  v0.5.275 Pull from Planner takes a pasted link, so it needs no Drive
+           permission, and 84 dead dates collapse to one line.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -779,8 +779,10 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
                  style="background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:5px 7px;font-family:var(--mono);font-size:11px;color-scheme:dark">
           <button class="btn btn-ghost" onclick="pullPlannerDay()" id="pullPlannerBtn">Pull from Planner</button>
         </div>
+        <input type="text" id="pullPlannerRef" placeholder="Planner copy link (paste it here)"
+               style="width:100%;margin-top:8px;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:5px 7px;font-family:var(--mono);font-size:11px">
         <div id="pullPlannerStatus" style="margin-top:8px"></div>
-        <div style="font-size:10px;color:var(--muted);margin-top:6px">Check now re-reads what has already been written for us. Pull from Planner goes and opens that day's Planner copy, for when Demand Planning changed it after the push ran.</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:6px">Check now re-reads what has already been written for us. Pull from Planner opens that day's Planner copy itself, for when Demand Planning changed it after the push ran. Paste the copy's link above: Sequins can open any sheet by link, but finding it by name needs a Drive permission this project does not have.</div>
       </div>
       <div class="card" id="demandMigrateCard" style="display:none;border-color:var(--amber)">
         <div class="card-title"><span>Demand storage</span><span class="mode-badge mode-forecast">action needed</span></div>
@@ -4354,7 +4356,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.274';
+var APP_VERSION='v0.5.275';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4588,7 +4590,11 @@ function pullPlannerDay(){
   }).withFailureHandler(function(e){
     btn.disabled=false;btn.textContent='Pull from Planner';
     st.innerHTML='<div class="status status-err">'+escHtml(e.message)+'</div>';
-  }).pullPlannerDay(d);
+  }).pullPlannerDay(d,(document.getElementById('pullPlannerRef')||{}).value||'');
+}
+function pdToggleOld_(){
+  var d=document.getElementById('pdOldRows');
+  if(d)d.style.display=(d.style.display==='none')?'':'none';
 }
 function renderPushedDemandStatus_(items, importedCount){
   var card=document.getElementById('pushedDemandCard');
@@ -4600,18 +4606,33 @@ function renderPushedDemandStatus_(items, importedCount){
     el.innerHTML='<div class="status status-info">Nothing waiting — the Demand tab is empty or has not been written yet.</div>';
     return;
   }
-  var rows=items.map(function(i){
+  function line_(i){
     var did=(i.action!=='skip');
     var colour=did?'var(--green)':'var(--muted)';
-    var verb=did?(importedCount?'loaded':'ready')
-                :'skipped';
+    var verb=did?(importedCount?'loaded':'ready'):'skipped';
     return '<div style="display:flex;gap:10px;align-items:baseline;font-family:var(--mono);font-size:11px;padding:2px 0">'
       +'<span style="color:'+colour+';min-width:54px">'+verb+'</span>'
       +'<span style="min-width:88px">'+escHtml(i.date)+'</span>'
       +'<span style="min-width:150px;color:var(--muted)">'+escHtml(i.weekLabel?(i.weekLabel+' · '+i.day):'unmapped')+'</span>'
       +'<span style="min-width:120px">'+fmtUnits(i.units||0)+' units / '+(i.skuCount||0)+' SKUs</span>'
       +'<span style="color:var(--muted)">'+escHtml(i.reason||'')+'</span></div>';
-  }).join('');
+  }
+  // A row with no weekLabel has no week and day to file it under, which means a
+  // date that has rolled out of the Compiled Forecast window. There were 84 of
+  // them on 2026-11-20, burying the single line that said what had just
+  // happened. They will never become actionable, so they collapse to a count
+  // with the detail one click away. Anything still actionable stays listed.
+  var live=[],old=[];
+  items.forEach(function(i){ (i.weekLabel?live:old).push(i); });
+  var rows=live.map(line_).join('');
+  if(old.length){
+    var first=old[0].date,last=old[old.length-1].date;
+    rows+='<div style="font-family:var(--mono);font-size:11px;color:var(--muted);padding:4px 0">'
+      +'<a href="#" onclick="pdToggleOld_();return false" style="color:var(--muted)">'
+      +old.length+' older date'+(old.length===1?'':'s')+' skipped, '+escHtml(first)+' to '+escHtml(last)
+      +', no longer in the Compiled Forecast (show)</a></div>'
+      +'<div id="pdOldRows" style="display:none">'+old.map(line_).join('')+'</div>';
+  }
   var head=importedCount
     ? '<div class="status status-ok">\u2713 Loaded '+importedCount+' day(s) from the Production Planner</div>'
     : '<div class="status status-info">Nothing new to load</div>';
