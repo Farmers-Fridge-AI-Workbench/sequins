@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.205 — 2026-11-20    (pairs with Index.html v0.5.273)
+ * Sequins ✨ — Code.js    v0.4.206 — 2026-11-20    (pairs with Index.html v0.5.274)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.205 Pull a day's demand straight from the Planner copy, in the app, when
- *          Demand Planning changes it after the push has already run.
+ * v0.4.206 No server change. Paired with Index.html v0.5.274, which actually
+ *          shows the card Pull from Planner lives on.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────

@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.273 — 2026-11-20    (pairs with Code.js v0.4.205)
+  Sequins ✨ — Index.html    v0.5.274 — 2026-11-20    (pairs with Code.js v0.4.206)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.273 Pull from Planner, on the Load Demand card: re-read one day straight
-           from its Planner copy without opening the Planner's Apps Script.
+  v0.5.274 Show that card. It only unhid when something was already waiting,
+           which is the one case Pull from Planner is not for.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4354,7 +4354,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.273';
+var APP_VERSION='v0.5.274';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4594,8 +4594,7 @@ function renderPushedDemandStatus_(items, importedCount){
   var card=document.getElementById('pushedDemandCard');
   var el=document.getElementById('pushedDemandStatus');
   if(!card||!el)return;
-  card.style.display='';
-  var pd=document.getElementById('pullPlannerDate');if(pd&&!pd.value)pd.value=pullPlannerDefaultDate_();
+  showPushedDemandCard_();
   items=items||[];
   if(!items.length){
     el.innerHTML='<div class="status status-info">Nothing waiting — the Demand tab is empty or has not been written yet.</div>';
@@ -4619,8 +4618,18 @@ function renderPushedDemandStatus_(items, importedCount){
   el.innerHTML=head+'<div style="margin-top:8px">'+rows+'</div>';
 }
 // force=true is the "Check now" button: report even when nothing is pending.
+function showPushedDemandCard_(){
+  var c=document.getElementById('pushedDemandCard');
+  if(c)c.style.display='';
+  var pd=document.getElementById('pullPlannerDate');
+  if(pd&&!pd.value)pd.value=pullPlannerDefaultDate_();
+}
 function checkPushedDemand(force){
   if(!(CURRENT_USER&&CURRENT_USER.isAdmin))return;
+  // Before anything is fetched. The buttons are the point of the card, and one
+  // of them is for when there is nothing waiting, so neither can live behind a
+  // status that only arrives when there is.
+  showPushedDemandCard_();
   var btn=document.getElementById('pushedDemandBtn');
   if(force&&btn){btn.disabled=true;btn.textContent='Checking\u2026';}
   google.script.run.withSuccessHandler(function(st){
