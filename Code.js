@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.204 — 2026-11-16    (pairs with Index.html v0.5.272)
+ * Sequins ✨ — Code.js    v0.4.205 — 2026-11-20    (pairs with Index.html v0.5.273)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.204 No server change. Paired with Index.html v0.5.272, which stops a
- *          curfew warning carrying over onto a day that has no plan.
+ * v0.4.205 Pull a day's demand straight from the Planner copy, in the app, when
+ *          Demand Planning changes it after the push has already run.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -1554,6 +1554,113 @@ function planPushedDemandImport_() {
   });
 
   return { missing: false, items: items, excluded: pushed.excluded, skippedRows: pushed.skippedRows };
+}
+
+// ─── PULL FROM THE PLANNER ──────────────────────────────────────
+// 'Check now' only re-reads what has already been written FOR us. When Demand
+// Planning changes a day after the Planner push has run, the Demand tab holds
+// nothing new and Check now correctly reports nothing to do, which reads as the
+// app being broken. On 2026-11-20, 11/21 had moved by 265 units across 37 SKUs
+// in the Planner and there was no way to fetch it without opening the Planner's
+// own Apps Script. This is that way.
+//
+// Sequins is executeAs USER_DEPLOYING, so it opens the daily copy with Cori's
+// own Drive access whoever is clicking. It writes into the SAME Demand tab the
+// push writes, with a fresh PushedAt, because readPushedDemandRows_ keeps the
+// latest stamp per date and supersedes rather than merges. One channel, one
+// audit trail, and every guard in importPushedDemand still applies: an actual
+// it will not overwrite, a past day it leaves alone, identical data it skips.
+const PLANNER_DAILY_FOLDER = '1xEPBJg9qTUc8065JhdD8iKThiMm5PMa3';
+const PLANNER_ASM_TAB      = 'Assembly Summary';
+// Titles are 'PP 4.0 11.21.2026'. Month and day are NOT reliably zero padded,
+// so the title is parsed and the numbers compared, never built and matched as a
+// string. A folder also holds unrelated files (Demands 11.16.2026), which this
+// skips rather than mistaking for a day's plan.
+const PLANNER_COPY_RE      = /^PP\s*4\.0\s+(\d{1,2})\.(\d{1,2})\.(\d{4})\s*$/i;
+
+function findPlannerCopy_(dateStr) {
+  const m = String(dateStr).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return null;
+  const want = Number(m[2]) + '|' + Number(m[3]) + '|' + Number(m[1]);
+  // Drive is reached ONLY here, and only to read names. If the scope has not
+  // been granted yet the raw failure is an opaque permission stack trace, so
+  // say what it actually needs instead.
+  let it;
+  try { it = DriveApp.getFolderById(PLANNER_DAILY_FOLDER).getFiles(); }
+  catch (e) {
+    throw new Error('Sequins cannot list the Planner folder yet. Open the app once and accept the ' +
+      'Drive permission prompt, then try again. (' + e.message + ')');
+  }
+  while (it.hasNext()) {
+    const f = it.next(), nm = f.getName(), t = nm.match(PLANNER_COPY_RE);
+    if (!t) continue;
+    if (Number(t[1]) + '|' + Number(t[2]) + '|' + Number(t[3]) !== want) continue;
+    // The same guard the push carries. A master is a template, not a day's plan.
+    if (/master/i.test(nm)) return { blocked: nm };
+    return { id: f.getId(), name: nm };
+  }
+  return null;
+}
+
+// Admin only, which is what importPushedDemand already requires. Writing rows a
+// planner then could not import would leave the Demand tab ahead of the store.
+function pullPlannerDay(dateStr) {
+  const user = getCurrentUser();
+  if (!user.isAdmin) throw new Error('Not authorized');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dateStr || ''))) throw new Error('Pick a production date.');
+
+  const loc = forecastDateMap_()[dateStr];
+  if (!loc) throw new Error(dateStr + ' is not in the Compiled Forecast, so there is no week and day to file it under.');
+
+  const found = findPlannerCopy_(dateStr);
+  if (!found) throw new Error('No Planner copy for ' + dateStr + ' in the daily folder.');
+  if (found.blocked) throw new Error('Refusing to read "' + found.blocked + '". That is a master.');
+
+  const tab = SpreadsheetApp.openById(found.id).getSheetByName(PLANNER_ASM_TAB);
+  if (!tab) throw new Error('"' + PLANNER_ASM_TAB + '" not found in ' + found.name + '.');
+  const lastRow = tab.getLastRow();
+  if (lastRow < 2) throw new Error(found.name + ' has an empty ' + PLANNER_ASM_TAB + '.');
+
+  const rng  = tab.getRange(2, 1, lastRow - 1, 3);   // Production Date, SKU, Quantity
+  const vals = rng.getValues();
+  const disp = rng.getDisplayValues();               // dates survive the timezone, same as the Demand tab read
+  const tz   = Session.getScriptTimeZone();
+
+  const skus = {};
+  let rows = 0, units = 0, otherDates = 0;
+  vals.forEach(function(r, i) {
+    const d = normalizePushedDate_(disp[i][0], r[0], tz);
+    if (d !== dateStr) { if (d) otherDates++; return; }
+    const sku = String(r[1] || '').trim();
+    const qty = Math.round(parseFloat(String(r[2] || '').replace(/,/g, '')) || 0);
+    if (!sku || qty <= 0) return;
+    skus[sku] = qty; rows++; units += qty;
+  });
+  // The copy named for a date has to actually CARRY that date. Without this a
+  // half-built or mis-named file would write another day's numbers onto this one
+  // and the import would accept them, because by then they look like a push.
+  if (!rows) throw new Error(found.name + ' has no ' + PLANNER_ASM_TAB + ' rows for ' + dateStr +
+    (otherDates ? ' (it carries ' + otherDates + ' rows for other dates).' : '.'));
+
+  const wkm   = String(loc.weekLabel).match(/(\d+)\D+(\d{4})/);
+  const stamp = Utilities.formatDate(new Date(), tz, 'yyyy-MM-dd HH:mm:ss');
+  // Source is the workbook, exactly as the push writes it, so a pull and a push
+  // are the same kind of row afterwards. WHO pulled it goes to the audit log.
+  const out = Object.keys(skus).map(function(s) {
+    return [stamp, dateStr, loc.day, wkm ? wkm[1] : '', wkm ? wkm[2] : '', s, skus[s], found.name];
+  });
+
+  const dt = SpreadsheetApp.openById(PLAN_ARCHIVE_SHEET_ID).getSheetByName(PUSHED_DEMAND_TAB);
+  if (!dt) throw new Error('Tab "' + PUSHED_DEMAND_TAB + '" not found in the archive.');
+  dt.getRange(dt.getLastRow() + 1, 1, out.length, 8).setValues(out);
+
+  writeAuditLog_(user.email, 'pull_planner', loc.weekLabel, loc.day,
+    found.name + ' → ' + rows + ' SKUs, ' + units + ' units');
+
+  const res = importPushedDemand();
+  return { ok: true, date: dateStr, weekLabel: loc.weekLabel, day: loc.day,
+           source: found.name, rows: rows, units: units,
+           imported: res.imported || 0, items: res.items || [] };
 }
 
 // Read-only. Client calls this on load to find out whether anything is waiting.

@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.272 — 2026-11-16    (pairs with Code.js v0.4.204)
+  Sequins ✨ — Index.html    v0.5.273 — 2026-11-20    (pairs with Code.js v0.4.205)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.272 The curfew warning no longer survives onto a day that has no plan.
-           An unpublished day was showing the previous day's breached lines.
+  v0.5.273 Pull from Planner, on the Load Demand card: re-read one day straight
+           from its Planner copy without opening the Planner's Apps Script.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -773,9 +773,14 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
         <div class="card-title"><span>From the Production Planner</span><span class="mode-badge mode-forecast">auto</span></div>
         <div style="font-size:11px;color:var(--muted);margin-bottom:12px">Assembly Summary is pushed here on every CSV Automater run. Sequins picks it up when you open the app. Never overwrites an actual or a past day that is already loaded.</div>
         <div id="pushedDemandStatus"></div>
-        <div class="btn-row" style="margin-top:10px">
+        <div class="btn-row" style="margin-top:10px;align-items:center">
           <button class="btn btn-ghost" onclick="checkPushedDemand(true)" id="pushedDemandBtn">Check now</button>
+          <input type="date" id="pullPlannerDate" title="Production date to re-read from the Planner"
+                 style="background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:5px 7px;font-family:var(--mono);font-size:11px;color-scheme:dark">
+          <button class="btn btn-ghost" onclick="pullPlannerDay()" id="pullPlannerBtn">Pull from Planner</button>
         </div>
+        <div id="pullPlannerStatus" style="margin-top:8px"></div>
+        <div style="font-size:10px;color:var(--muted);margin-top:6px">Check now re-reads what has already been written for us. Pull from Planner goes and opens that day's Planner copy, for when Demand Planning changed it after the push ran.</div>
       </div>
       <div class="card" id="demandMigrateCard" style="display:none;border-color:var(--amber)">
         <div class="card-title"><span>Demand storage</span><span class="mode-badge mode-forecast">action needed</span></div>
@@ -4349,7 +4354,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.272';
+var APP_VERSION='v0.5.273';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4556,11 +4561,41 @@ function removeSandboxUser(email){STATE.sandboxUsers=(STATE.sandboxUsers||[]).fi
 // Populating WITHOUT a refresh is handled server-side instead: Code.js's
 // pushedDemandTrigger imports on a timer, setDemandDay_ bumps lastModified, and
 // the existing 8-second poll delivers it to every open tab. No client poller.
+// Check now can only find what has already been written INTO the Demand tab.
+// When Demand Planning edits a day after the Planner push has run, there is
+// nothing new there and Check now says so, which reads as Sequins being stuck.
+// This asks the server to open that day's Planner copy and write it across.
+function pullPlannerDefaultDate_(){
+  var d=new Date();d.setDate(d.getDate()+1);   // tomorrow: the day that is usually still moving
+  return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
+}
+function pullPlannerDay(){
+  var inp=document.getElementById('pullPlannerDate'),btn=document.getElementById('pullPlannerBtn'),
+      st=document.getElementById('pullPlannerStatus');
+  if(!inp||!btn||!st)return;
+  var d=inp.value;
+  if(!d){st.innerHTML='<div class="status status-warn">Pick a production date.</div>';return;}
+  btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Reading the Planner\u2026';st.innerHTML='';
+  google.script.run.withSuccessHandler(function(r){
+    btn.disabled=false;btn.textContent='Pull from Planner';
+    st.innerHTML='<div class="status status-ok">\u2713 Read '+fmtUnits(r.units)+' units across '+r.rows+' SKUs for '+escHtml(r.date)
+      +' ('+escHtml(r.weekLabel)+' \u00b7 '+escHtml(r.day)+') from '+escHtml(r.source)+'.</div>';
+    // The import already ran server-side. Re-read state so the Loaded Demand
+    // table and both plan views show the new numbers without a refresh.
+    google.script.run.withSuccessHandler(function(x){
+      STATE=x;renderLoadedDemand();renderSequence();renderWorkbench();
+    }).getState();
+  }).withFailureHandler(function(e){
+    btn.disabled=false;btn.textContent='Pull from Planner';
+    st.innerHTML='<div class="status status-err">'+escHtml(e.message)+'</div>';
+  }).pullPlannerDay(d);
+}
 function renderPushedDemandStatus_(items, importedCount){
   var card=document.getElementById('pushedDemandCard');
   var el=document.getElementById('pushedDemandStatus');
   if(!card||!el)return;
   card.style.display='';
+  var pd=document.getElementById('pullPlannerDate');if(pd&&!pd.value)pd.value=pullPlannerDefaultDate_();
   items=items||[];
   if(!items.length){
     el.innerHTML='<div class="status status-info">Nothing waiting — the Demand tab is empty or has not been written yet.</div>';
