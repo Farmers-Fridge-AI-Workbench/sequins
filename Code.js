@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.208 — 2026-11-23    (pairs with Index.html v0.5.276)
+ * Sequins ✨ — Code.js    v0.4.209 — 2026-11-23    (pairs with Index.html v0.5.277)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.208 grantDriveAccess(): run once from the editor to grant Drive read.
- *          Nothing else here touches Drive, so nothing else would ever ask.
+ * v0.4.209 Drive is granted, so the link box is an override now, not a
+ *          workaround. Wording follows.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -1647,7 +1647,7 @@ function pullPlannerDay(dateStr, ref) {
   } else {
     found = findPlannerCopy_(dateStr);
     if (found && found.noDrive) throw new Error('Paste the Planner copy link in the box below and press the button again. ' +
-      'Sequins can open any sheet by link already; finding it by name on its own needs a Drive permission this project has never had.');
+      'Finding the copy by name needs the Drive read permission, which is not granted right now.');
     if (!found) throw new Error('No Planner copy for ' + dateStr + ' in the daily folder. Paste its link below instead.');
     if (found.blocked) throw new Error('Refusing to read "' + found.blocked + '". That is a master.');
   }

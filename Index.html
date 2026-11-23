@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.276 — 2026-11-23    (pairs with Code.js v0.4.208)
+  Sequins ✨ — Index.html    v0.5.277 — 2026-11-23    (pairs with Code.js v0.4.209)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.276 No client change. Paired with Code.js v0.4.208, which adds the
-           one-time grantDriveAccess() errand.
+  v0.5.277 Pull from Planner says what the import did with the day, not just
+           what it read. The link box is an override now, and says so.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -779,10 +779,10 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
                  style="background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:5px 7px;font-family:var(--mono);font-size:11px;color-scheme:dark">
           <button class="btn btn-ghost" onclick="pullPlannerDay()" id="pullPlannerBtn">Pull from Planner</button>
         </div>
-        <input type="text" id="pullPlannerRef" placeholder="Planner copy link (paste it here)"
+        <input type="text" id="pullPlannerRef" placeholder="Optional: link to a different workbook, for a one-off plan"
                style="width:100%;margin-top:8px;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:5px 7px;font-family:var(--mono);font-size:11px">
         <div id="pullPlannerStatus" style="margin-top:8px"></div>
-        <div style="font-size:10px;color:var(--muted);margin-top:6px">Check now re-reads what has already been written for us. Pull from Planner opens that day's Planner copy itself, for when Demand Planning changed it after the push ran. Paste the copy's link above: Sequins can open any sheet by link, but finding it by name needs a Drive permission this project does not have.</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:6px">Check now re-reads what has already been written for us. Pull from Planner opens that day's Planner copy itself, for when Demand Planning changed it after the push ran, and finds it by name. Use the box only to point it somewhere else: a one-off plan built outside the daily copy, applied to whatever date you pick.</div>
       </div>
       <div class="card" id="demandMigrateCard" style="display:none;border-color:var(--amber)">
         <div class="card-title"><span>Demand storage</span><span class="mode-badge mode-forecast">action needed</span></div>
@@ -4356,7 +4356,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.276';
+var APP_VERSION='v0.5.277';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4580,8 +4580,13 @@ function pullPlannerDay(){
   btn.disabled=true;btn.innerHTML='<span class="spinner"></span>Reading the Planner\u2026';st.innerHTML='';
   google.script.run.withSuccessHandler(function(r){
     btn.disabled=false;btn.textContent='Pull from Planner';
+    var mine=null;
+    (r.items||[]).forEach(function(i){ if(i.date===r.date)mine=i; });
+    var verdict=!mine ? ''
+      : (mine.action!=='skip' ? ' Loaded into '+escHtml(r.weekLabel)+'.'
+                              : ' Stored demand unchanged: '+escHtml(mine.reason||'skipped')+'.');
     st.innerHTML='<div class="status status-ok">\u2713 Read '+fmtUnits(r.units)+' units across '+r.rows+' SKUs for '+escHtml(r.date)
-      +' ('+escHtml(r.weekLabel)+' \u00b7 '+escHtml(r.day)+') from '+escHtml(r.source)+'.</div>';
+      +' ('+escHtml(r.weekLabel)+' \u00b7 '+escHtml(r.day)+') from '+escHtml(r.source)+'.'+verdict+'</div>';
     // The import already ran server-side. Re-read state so the Loaded Demand
     // table and both plan views show the new numbers without a refresh.
     google.script.run.withSuccessHandler(function(x){
