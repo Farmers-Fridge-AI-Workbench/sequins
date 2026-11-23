@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.207 — 2026-11-20    (pairs with Index.html v0.5.275)
+ * Sequins ✨ — Code.js    v0.4.208 — 2026-11-23    (pairs with Index.html v0.5.276)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.207 Pull from Planner works off a pasted link, so it needs no Drive
- *          permission. The folder search switches on by itself if Drive lands.
+ * v0.4.208 grantDriveAccess(): run once from the editor to grant Drive read.
+ *          Nothing else here touches Drive, so nothing else would ever ask.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -1601,6 +1601,24 @@ function findPlannerCopy_(dateStr) {
 
 // Admin only, which is what importPushedDemand already requires. Writing rows a
 // planner then could not import would leave the Demand tab ahead of the store.
+// Run this ONCE from the script editor to grant the Drive read permission the
+// folder lookup needs, then never again.
+//
+// Running some other function does not do it. Apps Script asks for consent when
+// the code it is about to run reaches for something it has not been granted, so
+// getCurrentUser completed without a prompt on 2026-11-23 and left Drive exactly
+// as unauthorized as before. Nothing else in this project touches DriveApp, so
+// there was no function that WOULD ask. This is that function: it touches Drive
+// and does nothing else.
+//
+// Private helpers (trailing underscore) are not offered in the editor's run
+// dropdown, which is why this is public despite being a one-time errand.
+function grantDriveAccess() {
+  const name = DriveApp.getFolderById(PLANNER_DAILY_FOLDER).getName();
+  Logger.log('Drive is readable. Planner daily folder: ' + name);
+  return name;
+}
+
 // Accepts a pasted Drive URL or a bare file ID.
 function plannerRefId_(ref) {
   const s = String(ref || '').trim();
