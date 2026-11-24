@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.278 — 2026-11-24    (pairs with Code.js v0.4.210)
+  Sequins ✨ — Index.html    v0.5.279 — 2026-11-24    (pairs with Code.js v0.4.211)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.278 Forecast accuracy, as a tab in Admin. Scores Compiled against the
-           plan at a fixed horizon, by weekday.
+  v0.5.279 Forecast Accuracy is its own item in the Admin nav, not a tab buried
+           inside Users.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -413,6 +413,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
       <button class="nav-item" onclick="switchView('skus',this)"><span class="icon">🗂</span>SKU Library</button>
       <button class="nav-item" onclick="switchView('lines',this)"><span class="icon">⚙️</span>Line Config</button>
       <button class="nav-item" onclick="switchView('users',this)"><span class="icon">👥</span>Users</button>
+      <button class="nav-item" onclick="switchView('accuracy',this)"><span class="icon">🎯</span>Forecast Accuracy</button>
     </div>
     <div class="sb-wide-only" style="flex:1"></div>
     <div class="nav-spacer"></div>
@@ -926,32 +927,26 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
     </div>
 
     <!-- USERS -->
-    <div class="view" id="view-users">
-      <div class="page-header"><div><div class="page-title">Admin</div><div class="page-sub" id="adminSub">Admin and planner access</div></div></div>
-      <div style="display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:10px">
-        <button class="btn btn-sm" id="adminTabAccess" onclick="adminTab('access')">Access</button>
-        <button class="btn btn-sm btn-ghost" id="adminTabAcc" onclick="adminTab('accuracy')">Forecast accuracy</button>
-      </div>
-      <div id="adminPaneAccuracy" style="display:none">
-        <div class="card">
-          <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
-            <span>Compiled Forecast against the plan we settled on</span>
-            <span>
-              <select id="accHorizon" onchange="renderAccuracy()" style="background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-family:var(--mono);font-size:11px">
-                <option value="14">14 days out</option>
-                <option value="28">28 days out</option>
-                <option value="42">42 days out</option>
-                <option value="56">56 days out</option>
-              </select>
-            </span>
-          </div>
-          <div id="accHeadline" style="margin-bottom:12px"></div>
-          <div id="accByDay"></div>
-          <div id="accWorst" style="margin-top:16px"></div>
-          <div id="accNote" style="font-size:10px;color:var(--muted);margin-top:12px;line-height:1.6"></div>
+    <div class="view" id="view-accuracy">
+      <div class="page-header"><div><div class="page-title">Forecast Accuracy</div><div class="page-sub">How close Compiled lands to the plan we settle on</div></div></div>
+      <div class="card">
+        <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <span>By weekday</span>
+          <select id="accHorizon" onchange="renderAccuracy()" style="background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-family:var(--mono);font-size:11px">
+            <option value="14">14 days out</option>
+            <option value="28">28 days out</option>
+            <option value="42">42 days out</option>
+            <option value="56">56 days out</option>
+          </select>
         </div>
+        <div id="accHeadline" style="margin-bottom:12px"></div>
+        <div id="accByDay"></div>
+        <div id="accWorst" style="margin-top:16px"></div>
+        <div id="accNote" style="font-size:10px;color:var(--muted);margin-top:12px;line-height:1.6"></div>
       </div>
-      <div id="adminPaneAccess">
+    </div>
+    <div class="view" id="view-users">
+      <div class="page-header"><div><div class="page-title">Users</div><div class="page-sub">Admin and planner access</div></div></div>
       <div class="card" id="slackCard" style="display:none;margin-bottom:14px">
         <div class="card-title">Slack notice when demand lands</div>
         <div class="sb-note" style="margin-bottom:10px">Posts once, to whichever channel the webhook belongs to, as soon as pushed demand is imported and ready to publish. Nothing is sent on a run that imports nothing.</div>
@@ -1010,7 +1005,6 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           <div id="externalLinkBody" style="margin-bottom:10px"></div>
           <div id="externalViewerStatus" style="margin-top:8px"></div>
         </div>
-      </div>
       </div>
     </div>
 
@@ -4381,7 +4375,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.278';
+var APP_VERSION='v0.5.279';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4498,18 +4492,6 @@ function removeSlackHook(){
 var ACC_TOL={14:7,28:10,42:14,56:14};
 var ACC_MIN=8;                 // under this a weekday row is provisional, per Pick Tock
 var ACC_DATA=null;
-
-function adminTab(which){
-  var acc=(which==='accuracy');
-  document.getElementById('adminPaneAccess').style.display=acc?'none':'';
-  document.getElementById('adminPaneAccuracy').style.display=acc?'':'none';
-  document.getElementById('adminTabAccess').className='btn btn-sm'+(acc?' btn-ghost':'');
-  document.getElementById('adminTabAcc').className='btn btn-sm'+(acc?'':' btn-ghost');
-  document.getElementById('adminSub').textContent=acc
-    ?'How close Compiled lands to the plan we settle on'
-    :'Admin and planner access';
-  if(acc)loadAccuracy();
-}
 
 function loadAccuracy(){
   if(ACC_DATA){renderAccuracy();return;}
@@ -7989,6 +7971,7 @@ function viewAllowed_(name){
     case 'myline':    return !!(u.isAdmin||u.isFloorViewer);
     case 'demand': case 'skus': case 'lines': case 'users':
                       return !!(u.isAdmin||u.isPlanner||u.canEditRules);
+    case 'accuracy':  return !!u.isAdmin;
     default:          return true;   // Line Sequence is open to everyone
   }
 }
@@ -8003,7 +7986,8 @@ function switchView(name,btn){
   if(name==='demand'){loadForecastWeeks();renderLoadedDemand();}
   if(name==='skus'){renderSkuLibrary();loadObservedHc_();checkUpmHealth();}
   if(name==='lines'){renderLineConfig();renderRules();renderRulesAccess();renderLegend();}
-  if(name==='users'){renderUsers();renderSlackCard();adminTab('access');}
+  if(name==='users'){renderUsers();renderSlackCard();}
+  if(name==='accuracy')loadAccuracy();
   if(name==='sequence'){document.querySelector('.main').classList.remove('wb-active');renderSequence();}
   if(name==='workbench'){document.querySelector('.main').classList.add('wb-active');renderWorkbench();}
   if(name==='myline')initMyLine();

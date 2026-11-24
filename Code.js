@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.210 — 2026-11-24    (pairs with Index.html v0.5.278)
+ * Sequins ✨ — Code.js    v0.4.211 — 2026-11-24    (pairs with Index.html v0.5.279)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.210 forecastAccuracyData(): the forecast trail every day already keeps,
- *          handed to the client so Compiled can be scored against the plan.
+ * v0.4.211 No server change. Paired with Index.html v0.5.279, which gives
+ *          Forecast Accuracy its own item in the Admin nav.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
