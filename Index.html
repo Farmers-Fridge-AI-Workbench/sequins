@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.287 — 2026-11-24    (pairs with Code.js v0.4.219)
+  Sequins ✨ — Index.html    v0.5.288 — 2026-11-24    (pairs with Code.js v0.4.220)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.287 "All time" was not all time: its span moved with the horizon. Says
-           what it covers now, and the screen explains its own two dials.
+  v0.5.288 The horizon dial is gone. One fixed headline at two weeks out, and
+           a grid showing how each weekday decays further out.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -932,20 +932,12 @@ select option{background:var(--surface2);color:var(--text);}
       <div class="page-header"><div><div class="page-title">Forecast Accuracy</div><div class="page-sub">How close Compiled lands to the plan we settle on</div></div></div>
       <div class="card">
         <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
-          <span>By weekday</span>
-          <span style="display:flex;gap:8px;align-items:center">
+          <span>By weekday, two weeks out</span>
           <button class="btn btn-ghost btn-sm" onclick="refreshAccuracy()">↻ refresh</button>
-          <select id="accHorizon" class="form-select" onchange="renderAccuracy()" style="font-size:11px;padding:4px 6px">
-            <option value="14">14 days out</option>
-            <option value="28">28 days out</option>
-            <option value="42">42 days out</option>
-            <option value="56">56 days out</option>
-          </select>
-          </span>
         </div>
-        <div id="accHow" style="font-size:11px;color:var(--muted);margin:-4px 0 12px;line-height:1.6"></div>
         <div id="accHeadline" style="margin-bottom:12px"></div>
         <div id="accByDay"></div>
+        <div id="accDecay" style="margin-top:18px"></div>
         <div id="accWorst" style="margin-top:16px"></div>
         <div id="accNote" style="font-size:10px;color:var(--muted);margin-top:12px;line-height:1.6"></div>
       </div>
@@ -4385,7 +4377,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.287';
+var APP_VERSION='v0.5.288';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4502,6 +4494,8 @@ function removeSlackHook(){
 var ACC_TOL={14:7,28:10,42:14,56:14};
 var ACC_MIN=8;                 // under this a weekday row is provisional, per Pick Tock
 var ACC_WEEKS=13;              // rolling lookback, same as Pick Tock
+var ACC_BASE=14;               // the horizon everything on screen is quoted at
+var ACC_LADDER=[14,28,42,56];  // and the ones the decay grid walks
 var ACC_FETCHED='';            // when the data behind the chart was read
 var ACC_DATA=null;
 
@@ -4662,9 +4656,49 @@ function accYearMondays_(year){
 }
 
 var MONTH_SHORT=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+// What the dial used to make you discover one setting at a time. A row per
+// weekday, a column per lead time, so the shape is readable at a glance:
+// Monday holds up all the way out, Friday falls off a cliff and keeps falling.
+// Blank where we hold no forecast from that far back yet, which is honest and
+// fills in as the nightly snapshot accumulates.
+function renderAccuracyDecay(){
+  var el=document.getElementById('accDecay');if(!el)return;
+  var DOW=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var SHORT=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var sets=ACC_LADDER.map(function(h){
+    var by={};
+    accRows_(h).rows.forEach(function(r){(by[r.dow]=by[r.dow]||[]).push(Math.abs(r.err));});
+    var all=[];accRows_(h).rows.forEach(function(r){all.push(Math.abs(r.err));});
+    return {h:h,by:by,all:all};
+  });
+
+  function cell(arr){
+    if(!arr||!arr.length)return '<td style="text-align:right;color:var(--muted)">\u2014</td>';
+    var acc=100-accMed_(arr);
+    var col=acc>=95?'var(--green)':(acc>=90?'var(--amber)':'var(--red)');
+    return '<td style="text-align:right;color:'+col+';font-weight:700" title="'+arr.length+' day'+(arr.length===1?'':'s')+'">'
+      +acc.toFixed(0)+'%</td>';
+  }
+
+  var h='<div class="card-title" style="margin-bottom:6px">How it holds up further out</div>'
+    +'<div style="font-size:11px;color:var(--muted);margin-bottom:8px">The same weeks, graded against what Compiled said at each distance. '
+    +'A flat row is a day we forecast well however early we look. A row that falls is a day we only get right close in.</div>'
+    +'<table class="data-table"><thead><tr><th>Day</th>';
+  ACC_LADDER.forEach(function(x){h+='<th style="text-align:right">'+x+'d</th>';});
+  h+='</tr></thead><tbody>';
+  [1,2,3,4,5,6,0].forEach(function(k){
+    h+='<tr><td>'+SHORT[k]+'</td>';
+    sets.forEach(function(st){h+=cell(st.by[k]);});
+    h+='</tr>';
+  });
+  h+='<tr class="total-row"><td>All days</td>';
+  sets.forEach(function(st){h+=cell(st.all);});
+  h+='</tr></tbody></table>';
+  el.innerHTML=h;
+}
 function renderAccuracyOverTime(){
   var el=document.getElementById('accOverTime');if(!el)return;
-  var h=parseInt(document.getElementById('accHorizon').value,10)||14;
+  var h=ACC_BASE;
   var map=accWeekly_(h),ran=accWeekDayCount_();
   var scored=[];Object.keys(map).forEach(function(k){scored.push(map[k]);});
   if(!scored.length){el.innerHTML='<div class="sb-note">Nothing to plot at this horizon.</div>';
@@ -4742,7 +4776,7 @@ function renderAccuracyOverTime(){
 }
 function renderAccuracy(){
   if(!ACC_DATA)return;
-  var h=parseInt(document.getElementById('accHorizon').value,10)||14;
+  var h=ACC_BASE;
   var got=accRows_(h),rows=got.rows;
   var DOW=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   var SHORT=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -4754,10 +4788,6 @@ function renderAccuracy(){
     return;
   }
 
-  var howEl=document.getElementById('accHow');
-  if(howEl)howEl.innerHTML='Grading the last '+ACC_WEEKS+' weeks of production against what Compiled said <strong>'+h+' days before each day ran</strong>. '
-    +'Those are two different things: the weeks pick which days are graded, the dial picks which forecast they are graded against. '
-    +'A day only counts if we still hold a forecast from that far back, so the counts fall as you move the dial right.';
   var by={};rows.forEach(function(r){(by[r.dow]=by[r.dow]||[]).push(r);});
   var windowAcc=100-accMed_(rows.map(function(r){return Math.abs(r.err);}));
   var everRows=accRows_(h,true).rows;
@@ -4803,7 +4833,7 @@ function renderAccuracy(){
       +'<div style="flex:1;min-width:320px">'+bars+'</div>'
       +'<div style="text-align:center;min-width:150px">'
         +'<div style="font-family:var(--mono);font-size:44px;font-weight:800;line-height:1;color:'+tone(overall)+'">'+(overall===null?'\u2014':overall.toFixed(0)+'%')+'</div>'
-        +'<div style="font-size:11px;color:var(--muted);margin-top:6px">every day we can grade<br>'+everRows.length+' days, back to '+escHtml(firstDay)+'</div>'
+        +'<div style="font-size:11px;color:var(--muted);margin-top:6px">two weeks out<br>'+everRows.length+' days, back to '+escHtml(firstDay)+'</div>'
         +'<div style="font-size:11px;color:var(--muted);margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">last '+ACC_WEEKS+' weeks <strong style="color:'+tone(windowAcc)+'">'+windowAcc.toFixed(0)+'%</strong><br>'+rows.length+' days</div>'
       +'</div></div>';
 
@@ -4827,12 +4857,13 @@ function renderAccuracy(){
   document.getElementById('accNote').innerHTML=
     'How close Compiled was to the plan the day actually ran on, whole day rather than SKU by SKU. '
     +'Last '+ACC_WEEKS+' weeks, with any week containing a holiday left out entirely. '
-    +'Each day is scored against what Compiled said when we were '+h+' days out, meaning the last revision saved on or before that point. '
+    +'Every figure above is Compiled as it stood a fortnight before each day ran, meaning the last revision saved on or before that point. The grid underneath walks the same days out to eight weeks. '
     +'Days we hold no forecast that early for are left out, and a star marks a weekday with fewer than '+ACC_MIN+' behind it. '
     +'\u201cOver-forecast\u201d means Compiled was higher than the plan. '
     +'Median SKU-count difference between the two sides is '+(dN===null?'\u2014':dN)+', so this is close to like for like. '
     +'The plan is demand pushed from the Planner, which is what we committed to build, not what the floor recorded building: Run Sheet Actuals is still empty.'
     +'<br>Refreshed '+escHtml(ACC_FETCHED||'');
+  renderAccuracyDecay();
   renderAccuracyOverTime();
 }
 function renderUsers(){google.script.run.withSuccessHandler(function(list){document.getElementById('adminList').innerHTML=list.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removeAdmin(\''+email+'\')">✕</button></div>';}).join('');}).withFailureHandler(function(){}).getAdminListForClient();var planners=STATE.planners||[];document.getElementById('plannerList').innerHTML=planners.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removePlanner(\''+email+'\')">✕</button></div>';}).join('');var floorViewers=STATE.floorViewers||[];document.getElementById('floorViewerList').innerHTML=floorViewers.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removeFloorViewer(\''+email+'\')">✕</button></div>';}).join('');var sandboxUsers=STATE.sandboxUsers||[];document.getElementById('sandboxUserList').innerHTML=sandboxUsers.length?sandboxUsers.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removeSandboxUser(\''+email+'\')">✕</button></div>';}).join(''):'<div class="sb-note">Nobody yet.</div>';renderExternalViewers();renderPlanEmailSettings();}

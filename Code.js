@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.219 — 2026-11-24    (pairs with Index.html v0.5.287)
+ * Sequins ✨ — Code.js    v0.4.220 — 2026-11-24    (pairs with Index.html v0.5.288)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.219 No server change. Paired with Index.html v0.5.287, which stops
- *          calling a horizon-dependent span "all time".
+ * v0.4.220 No server change. Paired with Index.html v0.5.288, which retires
+ *          the horizon dial for a decay grid.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
