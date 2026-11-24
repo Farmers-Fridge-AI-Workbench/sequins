@@ -325,6 +325,64 @@ do not parse.
   One push can supersede another; Demands 2025 actual still outranks a
   push. Skip requires matching quantity AND mode AND source.
 
+## Forecast accuracy: settled 2026-11-24
+
+Admin > Forecast Accuracy. Built because Samad said Compiled was off against
+actuals, worst at weekends. Measured over 108 days: weekends are the better
+half, and **Friday is the problem**, roughly double any other day. Every
+weekday misses in the same direction, Compiled high against the plan, never
+low. Nobody has explained the one-sidedness yet; it is worth asking Demand
+Planning rather than guessing.
+
+- **"Actual" means the plan we committed to build, not what the floor built.**
+  It is the demand pushed from the Planner. `Run Sheet Actuals` is still empty,
+  so nothing here measures production. The screen says so and it must keep
+  saying so, because the two get conflated the moment the label gets shortened.
+- **Nothing new is captured.** Every day already keeps its last saves in the
+  Demand Store `History` column, slimmed to mode, date, SKU count, total units
+  and when. A day that reached an actual carries its own forecast trail.
+- **Score the forecast IN FORCE at the horizon**, meaning the last revision
+  saved on or before it, not the nearest save to it. If Compiled was last
+  revised 25 days out and untouched until the push, the forecast at 14 days out
+  IS that 25-day-old number, exactly. Scoring the nearest save within a
+  tolerance instead left whole weeks blank that were perfectly knowable.
+- **Two weeks out is the base**, quoted everywhere on the screen, with a grid
+  walking one to six weeks underneath. There is no horizon control: a dial that
+  silently rewrites every figure including the totals means nothing on the page
+  is a stable fact, and four spans of history ended up wearing one label.
+- **13-week rolling window**, matching Pick Tock. Today that is nearly all the
+  history there is, so revisit it around February when a year exists.
+- **Holiday weeks come out of the figures and stay in the week chart.** A paid
+  holiday closes the day and its volume lands on the neighbours, so every day
+  in that week measures a closure decision. The chart is where you look at them.
+- **Off-peak weeks are marked and still counted.** `offPeakDates` is a different
+  list from `holidayDates`: Memorial Day, 4 July, Labor Day, Columbus Day are
+  days the plant RUNS at reduced volume. The forecast was answerable, so they
+  score.
+
+**The nightly snapshot, `snapshotForecastIfDue_`:**
+
+Records Compiled after 8pm daily. Cori, 2026-11-24: "I don't always remember to
+hit that button when Kristen sends out the compiled forecast updates." Until
+then a forecast revision only became a data point if somebody pressed Load all
+weeks, which is the same shape as the UPM refresh that waited on someone opening
+SKU Library.
+
+- Rides `pushedDemandTrigger` rather than taking its own, for the reason already
+  recorded there: that trigger demonstrably fires and is checkable in the audit
+  log. No-op before 8pm and after it has run once.
+- Claims the day BEFORE the work. A run that dies half way through must not
+  re-walk the same weeks every fifteen minutes until midnight.
+- Carries the manual publish's guards: never an actual, never an empty week,
+  and nothing written when the numbers have not moved.
+- Covers the first **12 weeks** of the Compiled Forecast, not all of it. Each
+  week is a separate full read and the trigger shares a six-minute ceiling with
+  the demand import. Anything Kristen publishes further out than that still
+  needs the button.
+- History records **revisions, not repeats**, and the cap is `DEMAND_HISTORY_MAX`
+  (24, was 5). A nightly re-save of an unchanged day used to push an identical
+  entry, which would have buried real revisions under cron firings.
+
 ## Storage — hard ceiling
 
 **Script Properties has a ~500KB shared quota and fails silently when
