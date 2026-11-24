@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.282 — 2026-11-24    (pairs with Code.js v0.4.214)
+  Sequins ✨ — Index.html    v0.5.283 — 2026-11-24    (pairs with Code.js v0.4.215)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.282 The per-weekday count says 7 Mondays, not 7 days: next to a horizon
-           picker in days it read as a lead time.
+  v0.5.283 An all-time accuracy figure beside the rolling one, and the week
+           chart spans the calendar year banded by month.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4383,7 +4383,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.282';
+var APP_VERSION='v0.5.283';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4541,12 +4541,16 @@ function accWeekKey_(iso){
   return dt.getFullYear()+'-'+(dt.getMonth()+1)+'-'+dt.getDate();
 }
 
-function accRows_(h){
+// allTime drops the rolling window and keeps every day we hold. The window is
+// the right default for 'can I trust this now', and all time is the right
+// answer to 'how have we done', so the screen shows both rather than making
+// the reader guess which one a single number is.
+function accRows_(h,allTime){
   var tol=ACC_TOL[h]||14,hol=accHolidayWeeks_(),rows=[],skipped=0;
   var floor=new Date();floor.setDate(floor.getDate()-ACC_WEEKS*7);
   var floorIso=floor.getFullYear()+'-'+('0'+(floor.getMonth()+1)).slice(-2)+'-'+('0'+floor.getDate()).slice(-2);
   ((ACC_DATA&&ACC_DATA.days)||[]).forEach(function(d){
-    if(d.date<floorIso)return;
+    if(!allTime&&d.date<floorIso)return;
     if(hol[accWeekKey_(d.date)]){skipped++;return;}
     var best=null;
     d.fc.forEach(function(f){
@@ -4578,8 +4582,11 @@ function accCell_(v,n){
 // forecast reads through a holiday is the thing worth looking at, and averaging
 // it into Tuesday would hide it. Same reason the lookback does not apply here:
 // the point is the shape over all the history there is.
+// Keyed by the week's MONDAY rather than by the week label, so an empty week
+// can still be placed on the axis. A year with gaps in it is the point: Cori
+// wants to see the whole calendar and watch it fill.
 function accWeekly_(h){
-  var tol=ACC_TOL[h]||14,hol=accHolidayWeeks_(),buckets={},order=[];
+  var tol=ACC_TOL[h]||14,hol=accHolidayWeeks_(),buckets={};
   ((ACC_DATA&&ACC_DATA.days)||[]).forEach(function(d){
     var best=null;
     d.fc.forEach(function(f){
@@ -4587,49 +4594,92 @@ function accWeekly_(h){
       if(gap<=tol&&(!best||gap<Math.abs(best.lead-h)))best=f;
     });
     if(!best)return;
-    var key=d.weekLabel;
-    if(!buckets[key]){buckets[key]={label:key,errs:[],holiday:false,first:d.date};order.push(key);}
+    var key=accWeekKey_(d.date);
+    if(!buckets[key])buckets[key]={label:d.weekLabel,errs:[],holiday:false};
     buckets[key].errs.push(Math.abs((d.act-best.u)/best.u*100));
-    if(hol[accWeekKey_(d.date)])buckets[key].holiday=true;
-    if(d.date<buckets[key].first)buckets[key].first=d.date;
+    if(hol[key])buckets[key].holiday=true;
   });
-  var out=order.map(function(k){return buckets[k];});
-  out.sort(function(a,b){return a.first<b.first?-1:(a.first>b.first?1:0);});
-  out.forEach(function(b){b.acc=100-accMed_(b.errs);b.n=b.errs.length;});
+  Object.keys(buckets).forEach(function(k){
+    buckets[k].acc=100-accMed_(buckets[k].errs);
+    buckets[k].n=buckets[k].errs.length;
+  });
+  return buckets;
+}
+
+// Every Monday of a calendar year, so the axis is the year rather than whatever
+// happens to have data on it.
+function accYearMondays_(year){
+  var d=new Date(year,0,1);
+  d.setDate(d.getDate()-((d.getDay()+6)%7));      // back to that week's Monday
+  var out=[];
+  while(d.getFullYear()<=year){
+    if(d.getFullYear()===year||out.length===0){
+      out.push({key:d.getFullYear()+'-'+(d.getMonth()+1)+'-'+d.getDate(),
+                month:d.getMonth(),date:new Date(d.getTime())});
+    }
+    d.setDate(d.getDate()+7);
+    if(d.getFullYear()>year)break;
+  }
   return out;
 }
 
+var MONTH_SHORT=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function renderAccuracyOverTime(){
   var el=document.getElementById('accOverTime');if(!el)return;
   var h=parseInt(document.getElementById('accHorizon').value,10)||14;
-  var weeks=accWeekly_(h);
-  if(!weeks.length){el.innerHTML='<div class="sb-note">Nothing to plot at this horizon.</div>';
+  var map=accWeekly_(h);
+  var scored=[];Object.keys(map).forEach(function(k){scored.push(map[k]);});
+  if(!scored.length){el.innerHTML='<div class="sb-note">Nothing to plot at this horizon.</div>';
     document.getElementById('accTimeNote').innerHTML='';return;}
 
-  // Floor at 70 for the same reason as the by-day bars: a zero-based axis turns
-  // a 96 and an 88 into two nearly identical columns.
+  var year=(new Date()).getFullYear();
+  var mondays=accYearMondays_(year);
   var FLOOR=70;
-  var bars=weeks.map(function(b){
-    var pct=Math.max(2,Math.min(100,(b.acc-FLOOR)/(100-FLOOR)*100));
-    var col=b.holiday?'var(--purple)':(b.acc>=95?'var(--green)':(b.acc>=90?'var(--amber)':'var(--red)'));
-    var wk=String(b.label).replace(/^Wk\s*/,'').split(' ')[0];
-    return '<div style="flex:1 1 0;min-width:26px;display:flex;flex-direction:column;align-items:center;gap:4px" '
-      +'title="'+escHtml(b.label)+': '+b.acc.toFixed(1)+'% across '+b.n+' day'+(b.n===1?'':'s')
-      +(b.holiday?', holiday week':'')+'">'
-      +'<span style="font-family:var(--mono);font-size:9px;color:'+col+'">'+b.acc.toFixed(0)+'</span>'
-      +'<span style="width:100%;height:110px;display:flex;align-items:flex-end;background:var(--surface2);border-radius:3px;overflow:hidden">'
-      +'<span style="display:block;width:100%;height:'+pct.toFixed(1)+'%;background:'+col+'"></span></span>'
-      +'<span style="font-family:var(--mono);font-size:9px;color:var(--muted)">'+escHtml(wk)+'</span></div>';
-  }).join('');
 
-  el.innerHTML='<div style="display:flex;gap:4px;align-items:flex-end">'+bars+'</div>';
+  // Alternating month bands. Without them 52 columns are an undifferentiated
+  // row of sticks and 'which week was that' costs a hover each time.
+  var cols='',band='';
+  var runStart=0;
+  mondays.forEach(function(m,i){
+    var b=map[m.key];
+    var shade=(m.month%2===0)?'transparent':'rgba(255,255,255,.035)';
+    if(!b){
+      cols+='<div style="flex:1 1 0;min-width:11px;display:flex;flex-direction:column;align-items:center;gap:3px;background:'+shade+'" '
+        +'title="week of '+m.date.toDateString()+': no scoreable day">'
+        +'<span style="font-family:var(--mono);font-size:8px;color:transparent">0</span>'
+        +'<span style="width:100%;height:110px;display:flex;align-items:flex-end;background:var(--surface2);border-radius:2px;opacity:.35"></span></div>';
+    } else {
+      var pct=Math.max(2,Math.min(100,(b.acc-FLOOR)/(100-FLOOR)*100));
+      var col=b.holiday?'var(--purple)':(b.acc>=95?'var(--green)':(b.acc>=90?'var(--amber)':'var(--red)'));
+      cols+='<div style="flex:1 1 0;min-width:11px;display:flex;flex-direction:column;align-items:center;gap:3px;background:'+shade+'" '
+        +'title="'+escHtml(b.label)+': '+b.acc.toFixed(1)+'% across '+b.n+' day'+(b.n===1?'':'s')
+        +(b.holiday?', holiday week':'')+'">'
+        +'<span style="font-family:var(--mono);font-size:8px;color:'+col+'">'+b.acc.toFixed(0)+'</span>'
+        +'<span style="width:100%;height:110px;display:flex;align-items:flex-end;background:var(--surface2);border-radius:2px;overflow:hidden">'
+        +'<span style="display:block;width:100%;height:'+pct.toFixed(1)+'%;background:'+col+'"></span></span></div>';
+    }
+    var last=(i===mondays.length-1);
+    if(last||mondays[i+1].month!==m.month){
+      var span=i-runStart+1;
+      band+='<div style="flex:'+span+' 1 0;text-align:center;font-family:var(--mono);font-size:9px;color:var(--muted);'
+        +'border-top:1px solid var(--border);padding-top:3px;background:'+((m.month%2===0)?'transparent':'rgba(255,255,255,.035)')+'">'
+        +MONTH_SHORT[m.month]+'</div>';
+      runStart=i+1;
+    }
+  });
 
+  el.innerHTML='<div style="overflow-x:auto"><div style="min-width:760px">'
+    +'<div style="display:flex;gap:1px;align-items:flex-end">'+cols+'</div>'
+    +'<div style="display:flex;gap:1px;margin-top:2px">'+band+'</div>'
+    +'</div></div>';
+
+  var weeks=scored;
   var holN=weeks.filter(function(b){return b.holiday;}).length;
   var plain=weeks.filter(function(b){return !b.holiday;});
   var holAcc=accMed_(weeks.filter(function(b){return b.holiday;}).map(function(b){return b.acc;}));
   var plainAcc=accMed_(plain.map(function(b){return b.acc;}));
   document.getElementById('accTimeNote').innerHTML=
-    'One column per week, scored the same way as above at the '+h+'-day mark. Bars start at '+FLOOR+'%, not zero. '
+    'One column per week of '+year+', scored the same way as above at the '+h+'-day mark, with every week we have no scoreable day for left as an empty slot. Bars start at '+FLOOR+'%, not zero. '
     +'<span style="color:var(--purple)">Purple</span> is a week with a paid holiday in it, kept here on purpose: '
     +'those weeks are left out of the by-day chart so they do not drag a baseline around, and this is where you look at them. '
     +(holN&&plainAcc!==null&&holAcc!==null
@@ -4651,8 +4701,10 @@ function renderAccuracy(){
   }
 
   var by={};rows.forEach(function(r){(by[r.dow]=by[r.dow]||[]).push(r);});
-  var allAbs=rows.map(function(r){return Math.abs(r.err);});
-  var overall=100-accMed_(allAbs);
+  var windowAcc=100-accMed_(rows.map(function(r){return Math.abs(r.err);}));
+  var everRows=accRows_(h,true).rows;
+  var overall=everRows.length?100-accMed_(everRows.map(function(r){return Math.abs(r.err);})):null;
+  var firstDay=everRows.length?everRows[0].date:'';
 
   var wd=[],we=[];
   rows.forEach(function(r){((r.dow===0||r.dow===6)?we:wd).push(Math.abs(r.err));});
@@ -4691,7 +4743,7 @@ function renderAccuracy(){
       +'<span style="display:block;height:100%;width:'+pct.toFixed(1)+'%;background:'+tone(acc)+'"></span></span>'
       +'<span style="width:42px;text-align:right;color:'+tone(acc)+';font-weight:700">'+acc.toFixed(0)+'%</span>'
       +'<span style="color:var(--muted)">typically '+miss.toFixed(1)+'% '+(dir<0?'over':'under')+'-forecast'
-      +' '+'·'+' '+a.length+' '+DOW[k]+(a.length===1?'':'s')
+      +' '+'·'+' '+a.length+' of '+ACC_WEEKS+' '+DOW[k]+'s'
       +(a.length<ACC_MIN?' <span title="thin sample">*</span>':'')+'</span></div>';
   });
 
@@ -4699,15 +4751,16 @@ function renderAccuracy(){
     '<div style="display:flex;align-items:center;gap:28px;flex-wrap:wrap">'
       +'<div style="flex:1;min-width:320px">'+bars+'</div>'
       +'<div style="text-align:center;min-width:150px">'
-        +'<div style="font-family:var(--mono);font-size:44px;font-weight:800;line-height:1;color:'+tone(overall)+'">'+overall.toFixed(0)+'%</div>'
-        +'<div style="font-size:11px;color:var(--muted);margin-top:6px">overall<br>across '+rows.length+' days</div>'
+        +'<div style="font-family:var(--mono);font-size:44px;font-weight:800;line-height:1;color:'+tone(overall)+'">'+(overall===null?'\u2014':overall.toFixed(0)+'%')+'</div>'
+        +'<div style="font-size:11px;color:var(--muted);margin-top:6px">all time<br>'+everRows.length+' days since '+escHtml(firstDay)+'</div>'
+        +'<div style="font-size:11px;color:var(--muted);margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">last '+ACC_WEEKS+' weeks <strong style="color:'+tone(windowAcc)+'">'+windowAcc.toFixed(0)+'%</strong><br>'+rows.length+' days</div>'
       +'</div></div>';
 
   var worst=rows.slice().sort(function(a,b){return Math.abs(b.err)-Math.abs(a.err);}).slice(0,10);
   var w='<div class="card-title" style="margin-bottom:6px">Widest ten misses</div>'
     +'<table class="data-table"><thead><tr><th>Date</th><th>Day</th>'
     +'<th style="text-align:right">Forecast</th><th style="text-align:right">Plan</th>'
-    +'<th style="text-align:right">Miss</th><th style="text-align:right">Lead</th></tr></thead><tbody>';
+    +'<th style="text-align:right">Miss</th><th style="text-align:right" title="How far before the production day that forecast was saved">Days ahead</th></tr></thead><tbody>';
   worst.forEach(function(r){
     var col=Math.abs(r.err)>=15?'var(--red)':(Math.abs(r.err)>=8?'var(--amber)':'var(--green)');
     w+='<tr><td>'+escHtml(r.date)+'</td><td>'+DOW[r.dow]+'</td>'
