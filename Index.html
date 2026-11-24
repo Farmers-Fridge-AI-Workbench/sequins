@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.292 — 2026-11-24    (pairs with Code.js v0.4.224)
+  Sequins ✨ — Index.html    v0.5.293 — 2026-11-24    (pairs with Code.js v0.4.225)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.292 The decay grid counts in weeks, not 14/28/42/56 days. Planning
-           conversations happen in weeks.
+  v0.5.293 Every week to six in the decay grid, not every other week to eight.
+           A run of consecutive weeks shows a slope that sampling misses.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4377,7 +4377,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.292';
+var APP_VERSION='v0.5.293';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4495,7 +4495,7 @@ var ACC_TOL={14:7,28:10,42:14,56:14};
 var ACC_MIN=8;                 // under this a weekday row is provisional, per Pick Tock
 var ACC_WEEKS=13;              // rolling lookback, same as Pick Tock
 var ACC_BASE=14;               // the horizon everything on screen is quoted at
-var ACC_LADDER=[14,28,42,56];  // and the ones the decay grid walks
+var ACC_LADDER=[7,14,21,28,35,42];  // and the ones the decay grid walks
 var ACC_FETCHED='';            // when the data behind the chart was read
 var ACC_DATA=null;
 
@@ -4858,7 +4858,7 @@ function renderAccuracy(){
   document.getElementById('accNote').innerHTML=
     'How close Compiled was to the plan the day actually ran on, whole day rather than SKU by SKU. '
     +'Last '+ACC_WEEKS+' weeks, with any week containing a holiday left out entirely. '
-    +'Every figure above is Compiled as it stood a fortnight before each day ran, meaning the last revision saved on or before that point. The grid underneath walks the same days out to eight weeks. '
+    +'Every figure above is Compiled as it stood a fortnight before each day ran, meaning the last revision saved on or before that point. The grid underneath walks the same days out to six weeks. '
     +'Days we hold no forecast that early for are left out, and a star marks a weekday with fewer than '+ACC_MIN+' behind it. '
     +'\u201cOver-forecast\u201d means Compiled was higher than the plan. '
     +'Median SKU-count difference between the two sides is '+(dN===null?'\u2014':dN)+', so this is close to like for like. '

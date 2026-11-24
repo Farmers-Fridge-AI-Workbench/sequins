@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.224 — 2026-11-24    (pairs with Index.html v0.5.292)
+ * Sequins ✨ — Code.js    v0.4.225 — 2026-11-24    (pairs with Index.html v0.5.293)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.224 No server change. Paired with Index.html v0.5.292, the decay grid
- *          in weeks.
+ * v0.4.225 No server change. Paired with Index.html v0.5.293, weekly steps in
+ *          the decay grid.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
