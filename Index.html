@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.291 — 2026-11-24    (pairs with Code.js v0.4.223)
+  Sequins ✨ — Index.html    v0.5.292 — 2026-11-24    (pairs with Code.js v0.4.224)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.291 The sidebar legend starts collapsed, with the version stamp lifted
-           out of it so a deploy is still checkable at a glance.
+  v0.5.292 The decay grid counts in weeks, not 14/28/42/56 days. Planning
+           conversations happen in weeks.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4377,7 +4377,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.291';
+var APP_VERSION='v0.5.292';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4682,9 +4682,9 @@ function renderAccuracyDecay(){
 
   var h='<div class="card-title" style="margin-bottom:6px">How it holds up further out</div>'
     +'<div style="font-size:11px;color:var(--muted);margin-bottom:8px">The same weeks, graded against what Compiled said at each distance. '
-    +'A flat row is a day we forecast well however early we look. A row that falls is a day we only get right close in.</div>'
+    +'A flat row is a day we forecast well however early we look. A row that falls is a day we only get right close in. Two weeks is the column the chart above uses.</div>'
     +'<table class="data-table"><thead><tr><th>Day</th>';
-  ACC_LADDER.forEach(function(x){h+='<th style="text-align:right">'+x+'d</th>';});
+  ACC_LADDER.forEach(function(x){h+='<th style="text-align:right" title="'+x+' days">'+(x/7)+' wk</th>';});
   h+='</tr></thead><tbody>';
   [1,2,3,4,5,6,0].forEach(function(k){
     h+='<tr><td>'+SHORT[k]+'</td>';
