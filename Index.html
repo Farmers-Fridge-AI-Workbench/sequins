@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.279 — 2026-11-24    (pairs with Code.js v0.4.211)
+  Sequins ✨ — Index.html    v0.5.281 — 2026-11-24    (pairs with Code.js v0.4.213)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.279 Forecast Accuracy is its own item in the Admin nav, not a tab buried
-           inside Users.
+  v0.5.281 Week by week accuracy, with holiday weeks kept in and coloured so
+           the holiday plan can be read rather than averaged away.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -932,17 +932,25 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
       <div class="card">
         <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
           <span>By weekday</span>
+          <span style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-ghost btn-sm" onclick="refreshAccuracy()">↻ refresh</button>
           <select id="accHorizon" onchange="renderAccuracy()" style="background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-family:var(--mono);font-size:11px">
             <option value="14">14 days out</option>
             <option value="28">28 days out</option>
             <option value="42">42 days out</option>
             <option value="56">56 days out</option>
           </select>
+          </span>
         </div>
         <div id="accHeadline" style="margin-bottom:12px"></div>
         <div id="accByDay"></div>
         <div id="accWorst" style="margin-top:16px"></div>
         <div id="accNote" style="font-size:10px;color:var(--muted);margin-top:12px;line-height:1.6"></div>
+      </div>
+      <div class="card" style="margin-top:14px">
+        <div class="card-title">Week by week</div>
+        <div id="accOverTime"></div>
+        <div id="accTimeNote" style="font-size:10px;color:var(--muted);margin-top:10px;line-height:1.6"></div>
       </div>
     </div>
     <div class="view" id="view-users">
@@ -4375,7 +4383,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.279';
+var APP_VERSION='v0.5.281';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4491,13 +4499,18 @@ function removeSlackHook(){
 // questions.
 var ACC_TOL={14:7,28:10,42:14,56:14};
 var ACC_MIN=8;                 // under this a weekday row is provisional, per Pick Tock
+var ACC_WEEKS=13;              // rolling lookback, same as Pick Tock
+var ACC_FETCHED='';            // when the data behind the chart was read
 var ACC_DATA=null;
 
+function refreshAccuracy(){ACC_DATA=null;loadAccuracy();}
 function loadAccuracy(){
   if(ACC_DATA){renderAccuracy();return;}
   document.getElementById('accByDay').innerHTML='<div class="sb-note"><span class="spinner"></span>Reading the demand history\u2026</div>';
   google.script.run.withSuccessHandler(function(d){
-    ACC_DATA=d||{days:[]};renderAccuracy();
+    ACC_DATA=d||{days:[]};
+    ACC_FETCHED=new Date().toLocaleString('en-US',{weekday:'short',month:'numeric',day:'numeric',hour:'numeric',minute:'2-digit'});
+    renderAccuracy();
   }).withFailureHandler(function(e){
     document.getElementById('accByDay').innerHTML='<div class="status status-err">'+escHtml(e.message)+'</div>';
   }).forecastAccuracyData();
@@ -4530,7 +4543,10 @@ function accWeekKey_(iso){
 
 function accRows_(h){
   var tol=ACC_TOL[h]||14,hol=accHolidayWeeks_(),rows=[],skipped=0;
+  var floor=new Date();floor.setDate(floor.getDate()-ACC_WEEKS*7);
+  var floorIso=floor.getFullYear()+'-'+('0'+(floor.getMonth()+1)).slice(-2)+'-'+('0'+floor.getDate()).slice(-2);
   ((ACC_DATA&&ACC_DATA.days)||[]).forEach(function(d){
+    if(d.date<floorIso)return;
     if(hol[accWeekKey_(d.date)]){skipped++;return;}
     var best=null;
     d.fc.forEach(function(f){
@@ -4553,51 +4569,139 @@ function accCell_(v,n){
     +(n<ACC_MIN?'<span style="color:var(--muted)" title="fewer than '+ACC_MIN+' samples"> *</span>':'');
 }
 
+// Read as ACCURACY, not error. 96% lands differently from -4%, and the people
+// reading this are being asked whether they can trust a number, not to do
+// arithmetic on a signed percentage. Direction is kept, as a word, because a
+// forecast that is always high is a different problem from one that wobbles.
+// The by-day chart throws holiday weeks out, so a baseline is not polluted by a
+// closure decision. This one KEEPS them and colours them, because how badly the
+// forecast reads through a holiday is the thing worth looking at, and averaging
+// it into Tuesday would hide it. Same reason the lookback does not apply here:
+// the point is the shape over all the history there is.
+function accWeekly_(h){
+  var tol=ACC_TOL[h]||14,hol=accHolidayWeeks_(),buckets={},order=[];
+  ((ACC_DATA&&ACC_DATA.days)||[]).forEach(function(d){
+    var best=null;
+    d.fc.forEach(function(f){
+      var gap=Math.abs(f.lead-h);
+      if(gap<=tol&&(!best||gap<Math.abs(best.lead-h)))best=f;
+    });
+    if(!best)return;
+    var key=d.weekLabel;
+    if(!buckets[key]){buckets[key]={label:key,errs:[],holiday:false,first:d.date};order.push(key);}
+    buckets[key].errs.push(Math.abs((d.act-best.u)/best.u*100));
+    if(hol[accWeekKey_(d.date)])buckets[key].holiday=true;
+    if(d.date<buckets[key].first)buckets[key].first=d.date;
+  });
+  var out=order.map(function(k){return buckets[k];});
+  out.sort(function(a,b){return a.first<b.first?-1:(a.first>b.first?1:0);});
+  out.forEach(function(b){b.acc=100-accMed_(b.errs);b.n=b.errs.length;});
+  return out;
+}
+
+function renderAccuracyOverTime(){
+  var el=document.getElementById('accOverTime');if(!el)return;
+  var h=parseInt(document.getElementById('accHorizon').value,10)||14;
+  var weeks=accWeekly_(h);
+  if(!weeks.length){el.innerHTML='<div class="sb-note">Nothing to plot at this horizon.</div>';
+    document.getElementById('accTimeNote').innerHTML='';return;}
+
+  // Floor at 70 for the same reason as the by-day bars: a zero-based axis turns
+  // a 96 and an 88 into two nearly identical columns.
+  var FLOOR=70;
+  var bars=weeks.map(function(b){
+    var pct=Math.max(2,Math.min(100,(b.acc-FLOOR)/(100-FLOOR)*100));
+    var col=b.holiday?'var(--purple)':(b.acc>=95?'var(--green)':(b.acc>=90?'var(--amber)':'var(--red)'));
+    var wk=String(b.label).replace(/^Wk\s*/,'').split(' ')[0];
+    return '<div style="flex:1 1 0;min-width:26px;display:flex;flex-direction:column;align-items:center;gap:4px" '
+      +'title="'+escHtml(b.label)+': '+b.acc.toFixed(1)+'% across '+b.n+' day'+(b.n===1?'':'s')
+      +(b.holiday?', holiday week':'')+'">'
+      +'<span style="font-family:var(--mono);font-size:9px;color:'+col+'">'+b.acc.toFixed(0)+'</span>'
+      +'<span style="width:100%;height:110px;display:flex;align-items:flex-end;background:var(--surface2);border-radius:3px;overflow:hidden">'
+      +'<span style="display:block;width:100%;height:'+pct.toFixed(1)+'%;background:'+col+'"></span></span>'
+      +'<span style="font-family:var(--mono);font-size:9px;color:var(--muted)">'+escHtml(wk)+'</span></div>';
+  }).join('');
+
+  el.innerHTML='<div style="display:flex;gap:4px;align-items:flex-end">'+bars+'</div>';
+
+  var holN=weeks.filter(function(b){return b.holiday;}).length;
+  var plain=weeks.filter(function(b){return !b.holiday;});
+  var holAcc=accMed_(weeks.filter(function(b){return b.holiday;}).map(function(b){return b.acc;}));
+  var plainAcc=accMed_(plain.map(function(b){return b.acc;}));
+  document.getElementById('accTimeNote').innerHTML=
+    'One column per week, scored the same way as above at the '+h+'-day mark. Bars start at '+FLOOR+'%, not zero. '
+    +'<span style="color:var(--purple)">Purple</span> is a week with a paid holiday in it, kept here on purpose: '
+    +'those weeks are left out of the by-day chart so they do not drag a baseline around, and this is where you look at them. '
+    +(holN&&plainAcc!==null&&holAcc!==null
+       ? ('Holiday weeks median '+holAcc.toFixed(0)+'% against '+plainAcc.toFixed(0)+'% for the rest.')
+       : (holN?'':'No holiday week has scoreable days yet.'));
+}
 function renderAccuracy(){
   if(!ACC_DATA)return;
   var h=parseInt(document.getElementById('accHorizon').value,10)||14;
   var got=accRows_(h),rows=got.rows;
   var DOW=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var SHORT=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 
   if(!rows.length){
-    document.getElementById('accHeadline').innerHTML='<div class="status status-warn">No day has a forecast saved within '+got.tol+' days of '+h+' days out.</div>';
+    document.getElementById('accHeadline').innerHTML='<div class="status status-warn">No day inside the last '+ACC_WEEKS+' weeks has a forecast saved within '+got.tol+' days of the '+h+'-day mark.</div>';
     document.getElementById('accByDay').innerHTML='';document.getElementById('accWorst').innerHTML='';
+    document.getElementById('accNote').innerHTML='';
     return;
   }
 
   var by={};rows.forEach(function(r){(by[r.dow]=by[r.dow]||[]).push(r);});
+  var allAbs=rows.map(function(r){return Math.abs(r.err);});
+  var overall=100-accMed_(allAbs);
+
   var wd=[],we=[];
   rows.forEach(function(r){((r.dow===0||r.dow===6)?we:wd).push(Math.abs(r.err));});
   var mwd=accMed_(wd),mwe=accMed_(we);
-
-  // Samad's claim, answered first and in his terms, because that is the question
-  // in the room. Burying it under a table would make the reader do the work.
+  // Samad's question, answered first and in his words. Burying the answer under
+  // the chart would make the reader do the work of finding it.
   var verdict=(mwd===null||mwe===null)?'':
-    (mwe>mwd+1 ? 'Weekends ARE worse.'
-    : (mwd>mwe+1 ? 'Weekends are <strong>not</strong> the problem. Weekdays miss by more.'
-                 : 'Weekends and weekdays miss by about the same.'));
+    (mwe>mwd+1 ? 'Weekends <strong>are</strong> the weaker half.'
+    : (mwd>mwe+1 ? 'Weekends are <strong>not</strong> the weak spot. Weekdays miss by more.'
+                 : 'Weekends and weekdays are about equally good.'));
   document.getElementById('accHeadline').innerHTML=
     '<div style="font-family:var(--mono);font-size:12px;line-height:1.7">'
-    +'<div style="font-size:13px;margin-bottom:6px">'+verdict+'</div>'
-    +'Mon to Fri <strong>'+(mwd===null?'\u2014':mwd.toFixed(1)+'%')+'</strong> typical miss across '+wd.length+' days'
-    +' '+'·'+' Sat and Sun <strong>'+(mwe===null?'\u2014':mwe.toFixed(1)+'%')+'</strong> across '+we.length+' days</div>';
+    +'<div style="font-size:13px;margin-bottom:4px">'+verdict+'</div>'
+    +'<span style="color:var(--muted)">Mon to Fri</span> '+(100-mwd).toFixed(0)+'%'
+    +' <span style="color:var(--muted)">'+'·'+' Sat and Sun</span> '+(100-mwe).toFixed(0)+'%</div>';
 
-  var html='<table class="data-table"><thead><tr><th>Day</th><th style="text-align:right">Days</th>'
-    +'<th style="text-align:right">Typical miss</th><th style="text-align:right">Direction</th>'
-    +'<th style="text-align:right">Median forecast</th><th style="text-align:right">Median plan</th></tr></thead><tbody>';
+  function tone(acc){ return acc>=95?'var(--green)':(acc>=90?'var(--amber)':'var(--red)'); }
+
+  var bars='';
   [1,2,3,4,5,6,0].forEach(function(k){
     var a=by[k]||[];
+    if(!a.length){
+      bars+='<div style="display:flex;align-items:center;gap:12px;padding:3px 0;font-family:var(--mono);font-size:11px">'
+        +'<span style="width:34px;color:var(--muted)">'+SHORT[k]+'</span>'
+        +'<span style="color:var(--muted)">no day at this horizon</span></div>';
+      return;
+    }
     var e=a.map(function(r){return r.err;});
-    var absE=e.map(Math.abs);
-    html+='<tr><td>'+DOW[k]+'</td>'
-      +'<td style="text-align:right">'+a.length+'</td>'
-      +'<td style="text-align:right">'+accCell_(accMed_(absE),a.length)+'</td>'
-      +'<td style="text-align:right">'+accCell_(accMed_(e),a.length)+'</td>'
-      +'<td style="text-align:right">'+(a.length?fmtUnits(Math.round(accMed_(a.map(function(r){return r.fc;})))):'\u2014')+'</td>'
-      +'<td style="text-align:right">'+(a.length?fmtUnits(Math.round(accMed_(a.map(function(r){return r.act;})))):'\u2014')+'</td></tr>';
+    var miss=accMed_(e.map(Math.abs)),acc=100-miss,dir=accMed_(e);
+    // The bar starts at 70%, not 0. Everything lands between 85 and 100 and a
+    // zero-based bar makes seven near-identical full bars that say nothing.
+    var pct=Math.max(0,Math.min(100,(acc-70)/30*100));
+    bars+='<div style="display:flex;align-items:center;gap:12px;padding:3px 0;font-family:var(--mono);font-size:11px">'
+      +'<span style="width:34px">'+SHORT[k]+'</span>'
+      +'<span style="flex:0 0 340px;max-width:40vw;height:14px;background:var(--surface2);border-radius:3px;overflow:hidden">'
+      +'<span style="display:block;height:100%;width:'+pct.toFixed(1)+'%;background:'+tone(acc)+'"></span></span>'
+      +'<span style="width:42px;text-align:right;color:'+tone(acc)+';font-weight:700">'+acc.toFixed(0)+'%</span>'
+      +'<span style="color:var(--muted)">typically '+miss.toFixed(1)+'% '+(dir<0?'over':'under')+'-forecast'
+      +' '+'·'+' '+a.length+' day'+(a.length===1?'':'s')
+      +(a.length<ACC_MIN?' <span title="thin sample">*</span>':'')+'</span></div>';
   });
-  html+='</tbody></table>';
-  document.getElementById('accByDay').innerHTML=html;
+
+  document.getElementById('accByDay').innerHTML=
+    '<div style="display:flex;align-items:center;gap:28px;flex-wrap:wrap">'
+      +'<div style="flex:1;min-width:320px">'+bars+'</div>'
+      +'<div style="text-align:center;min-width:150px">'
+        +'<div style="font-family:var(--mono);font-size:44px;font-weight:800;line-height:1;color:'+tone(overall)+'">'+overall.toFixed(0)+'%</div>'
+        +'<div style="font-size:11px;color:var(--muted);margin-top:6px">overall<br>across '+rows.length+' days</div>'
+      +'</div></div>';
 
   var worst=rows.slice().sort(function(a,b){return Math.abs(b.err)-Math.abs(a.err);}).slice(0,10);
   var w='<div class="card-title" style="margin-bottom:6px">Widest ten misses</div>'
@@ -4605,10 +4709,11 @@ function renderAccuracy(){
     +'<th style="text-align:right">Forecast</th><th style="text-align:right">Plan</th>'
     +'<th style="text-align:right">Miss</th><th style="text-align:right">Lead</th></tr></thead><tbody>';
   worst.forEach(function(r){
+    var col=Math.abs(r.err)>=15?'var(--red)':(Math.abs(r.err)>=8?'var(--amber)':'var(--green)');
     w+='<tr><td>'+escHtml(r.date)+'</td><td>'+DOW[r.dow]+'</td>'
       +'<td style="text-align:right">'+fmtUnits(r.fc)+'</td>'
       +'<td style="text-align:right">'+fmtUnits(r.act)+'</td>'
-      +'<td style="text-align:right">'+accCell_(r.err,ACC_MIN)+'</td>'
+      +'<td style="text-align:right;color:'+col+'">'+(r.err>0?'+':'')+r.err.toFixed(1)+'%</td>'
       +'<td style="text-align:right">'+r.lead+'d</td></tr>';
   });
   w+='</tbody></table>';
@@ -4616,13 +4721,15 @@ function renderAccuracy(){
 
   var dN=accMed_(rows.map(function(r){return Math.abs(r.dN);}));
   document.getElementById('accNote').innerHTML=
-    'Each day is scored against its nearest saved forecast within '+got.tol+' days of the '+h+'-day mark; '
-    +'days without one are left out. Negative means Compiled was HIGH against the plan. '
-    +'A star marks a row with fewer than '+ACC_MIN+' days behind it. '
-    +got.skipped+' day(s) dropped for sitting in a week with a paid holiday in it. '
-    +'Median SKU-count difference between the two sides is '+(dN===null?'\u2014':dN)+', so the comparison is close to like for like. '
-    +'The \u201cplan\u201d column is demand pushed from the Planner, which is what we committed to build. '
-    +'It is not what the floor recorded building: Run Sheet Actuals is still empty.';
+    'How close Compiled was to the plan the day actually ran on, whole day rather than SKU by SKU. '
+    +'Last '+ACC_WEEKS+' weeks, with any week containing a holiday left out entirely. '
+    +'Each day is scored against its nearest saved forecast within '+got.tol+' days of the '+h+'-day mark; '
+    +'days without one are left out, and a star marks a weekday with fewer than '+ACC_MIN+' behind it. '
+    +'\u201cOver-forecast\u201d means Compiled was higher than the plan. '
+    +'Median SKU-count difference between the two sides is '+(dN===null?'\u2014':dN)+', so this is close to like for like. '
+    +'The plan is demand pushed from the Planner, which is what we committed to build, not what the floor recorded building: Run Sheet Actuals is still empty.'
+    +'<br>Refreshed '+escHtml(ACC_FETCHED||'');
+  renderAccuracyOverTime();
 }
 function renderUsers(){google.script.run.withSuccessHandler(function(list){document.getElementById('adminList').innerHTML=list.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removeAdmin(\''+email+'\')">✕</button></div>';}).join('');}).withFailureHandler(function(){}).getAdminListForClient();var planners=STATE.planners||[];document.getElementById('plannerList').innerHTML=planners.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removePlanner(\''+email+'\')">✕</button></div>';}).join('');var floorViewers=STATE.floorViewers||[];document.getElementById('floorViewerList').innerHTML=floorViewers.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removeFloorViewer(\''+email+'\')">✕</button></div>';}).join('');var sandboxUsers=STATE.sandboxUsers||[];document.getElementById('sandboxUserList').innerHTML=sandboxUsers.length?sandboxUsers.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removeSandboxUser(\''+email+'\')">✕</button></div>';}).join(''):'<div class="sb-note">Nobody yet.</div>';renderExternalViewers();renderPlanEmailSettings();}
 

@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.211 — 2026-11-24    (pairs with Index.html v0.5.279)
+ * Sequins ✨ — Code.js    v0.4.213 — 2026-11-24    (pairs with Index.html v0.5.281)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.211 No server change. Paired with Index.html v0.5.279, which gives
- *          Forecast Accuracy its own item in the Admin nav.
+ * v0.4.213 No server change. Paired with Index.html v0.5.281, accuracy week
+ *          by week.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
