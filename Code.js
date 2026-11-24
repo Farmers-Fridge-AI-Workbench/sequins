@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.209 — 2026-11-23    (pairs with Index.html v0.5.277)
+ * Sequins ✨ — Code.js    v0.4.210 — 2026-11-24    (pairs with Index.html v0.5.278)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.209 Drive is granted, so the link box is an override now, not a
- *          workaround. Wording follows.
+ * v0.4.210 forecastAccuracyData(): the forecast trail every day already keeps,
+ *          handed to the client so Compiled can be scored against the plan.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -596,6 +596,60 @@ function getDemandDay_(weekLabel, day) {
     if (parsed) return parsed;
   }
   return getSection_(demandDayKey_(weekLabel, day));
+}
+
+// ─── FORECAST ACCURACY ──────────────────────────────────────────
+// Nothing new is captured for this. Every day already keeps its last five saves
+// in the Demand Store history column, slimmed to mode, SKU count, total units
+// and when, so a day that has reached an actual carries its own forecast trail.
+//
+// This hands back the raw pairs and lets the client do the arithmetic, the same
+// division of labour as the sequencer: the horizon is a thing you want to move
+// and re-read instantly, and a round trip per horizon would make that a chore.
+//
+// What the 'actual' IS matters and is easy to misread. It is the demand pushed
+// from the Planner, which is what we committed to build, not what the floor
+// recorded building. Run Sheet Actuals is still empty. So this answers how close
+// Compiled lands to the plan we settle on, which is the question Demand Planning
+// is actually being asked, but it is not a measurement of production.
+function forecastAccuracyData() {
+  const user = getCurrentUser();
+  if (!user.isAdmin) throw new Error('Not authorized');
+
+  const store = demandStoreRead_();
+  const out = [];
+  Object.keys(store).forEach(function(key) {
+    const rec = store[key];
+    const pay = demandStoreParse_(rec.payload);
+    if (!pay || pay.mode !== 'actual' || !pay.date) return;
+
+    let act = 0;
+    const skus = pay.skus || {};
+    const actN = Object.keys(skus).length;
+    Object.keys(skus).forEach(function(s) { act += Math.round(Number(skus[s]) || 0); });
+    if (act <= 0) return;
+
+    const hist = demandStoreParse_(rec.history) || [];
+    const day0 = new Date(pay.date + 'T12:00:00').getTime();
+    const fc = [];
+    hist.forEach(function(h) {
+      if (!h || h.mode !== 'forecast' || !(h.totalUnits > 0) || !h.savedAt) return;
+      // Lead time is MEASURED from the saved stamp, never assumed from position
+      // in the array. The five entries are whenever someone happened to save,
+      // so they sit anywhere from a fortnight to three months out.
+      const lead = Math.round((day0 - new Date(h.savedAt).getTime()) / 86400000);
+      if (lead < 0) return;
+      fc.push({ u: Math.round(h.totalUnits), n: h.skuCount || 0, lead: lead });
+    });
+    if (!fc.length) return;
+
+    const parts = key.split('\u0000');
+    out.push({ weekLabel: parts[0], day: parts[1], date: pay.date,
+               act: act, actN: actN, fc: fc });
+  });
+
+  out.sort(function(a, b) { return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0); });
+  return { days: out };
 }
 
 function getDemandHistory_(weekLabel, day) {

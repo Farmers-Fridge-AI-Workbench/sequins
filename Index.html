@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.277 — 2026-11-23    (pairs with Code.js v0.4.209)
+  Sequins ✨ — Index.html    v0.5.278 — 2026-11-24    (pairs with Code.js v0.4.210)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.277 Pull from Planner says what the import did with the day, not just
-           what it read. The link box is an override now, and says so.
+  v0.5.278 Forecast accuracy, as a tab in Admin. Scores Compiled against the
+           plan at a fixed horizon, by weekday.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -927,7 +927,31 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 
     <!-- USERS -->
     <div class="view" id="view-users">
-      <div class="page-header"><div><div class="page-title">Users</div><div class="page-sub">Admin and planner access</div></div></div>
+      <div class="page-header"><div><div class="page-title">Admin</div><div class="page-sub" id="adminSub">Admin and planner access</div></div></div>
+      <div style="display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:10px">
+        <button class="btn btn-sm" id="adminTabAccess" onclick="adminTab('access')">Access</button>
+        <button class="btn btn-sm btn-ghost" id="adminTabAcc" onclick="adminTab('accuracy')">Forecast accuracy</button>
+      </div>
+      <div id="adminPaneAccuracy" style="display:none">
+        <div class="card">
+          <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+            <span>Compiled Forecast against the plan we settled on</span>
+            <span>
+              <select id="accHorizon" onchange="renderAccuracy()" style="background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-family:var(--mono);font-size:11px">
+                <option value="14">14 days out</option>
+                <option value="28">28 days out</option>
+                <option value="42">42 days out</option>
+                <option value="56">56 days out</option>
+              </select>
+            </span>
+          </div>
+          <div id="accHeadline" style="margin-bottom:12px"></div>
+          <div id="accByDay"></div>
+          <div id="accWorst" style="margin-top:16px"></div>
+          <div id="accNote" style="font-size:10px;color:var(--muted);margin-top:12px;line-height:1.6"></div>
+        </div>
+      </div>
+      <div id="adminPaneAccess">
       <div class="card" id="slackCard" style="display:none;margin-bottom:14px">
         <div class="card-title">Slack notice when demand lands</div>
         <div class="sb-note" style="margin-bottom:10px">Posts once, to whichever channel the webhook belongs to, as soon as pushed demand is imported and ready to publish. Nothing is sent on a run that imports nothing.</div>
@@ -986,6 +1010,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           <div id="externalLinkBody" style="margin-bottom:10px"></div>
           <div id="externalViewerStatus" style="margin-top:8px"></div>
         </div>
+      </div>
       </div>
     </div>
 
@@ -4356,7 +4381,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.277';
+var APP_VERSION='v0.5.278';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4458,6 +4483,164 @@ function testSlackHook(){
 function removeSlackHook(){
   if(!confirm('Remove the webhook? Nobody will be told when demand lands.'))return;
   google.script.run.withSuccessHandler(renderSlackCard).withFailureHandler(function(){}).clearSlackWebhook();
+}
+// ─── FORECAST ACCURACY ──────────────────────────────────────────
+// Samad, 2026-11-24: Compiled is off against actuals, worst at weekends. The
+// first half is right and the second half is not, which is the whole reason
+// this screen exists rather than a one-off answer in a chat window.
+//
+// A FIXED horizon is the load-bearing part. The five saved forecasts per day sit
+// anywhere from 14 to 83 days out, and error grows with distance, so scoring
+// whatever happens to survive mixes a two-week miss with a three-month one and
+// calls the average a number. Measured against the nearest forecast at a chosen
+// horizon, Friday reads -11% at 14 days and -20% at 56. Both true, different
+// questions.
+var ACC_TOL={14:7,28:10,42:14,56:14};
+var ACC_MIN=8;                 // under this a weekday row is provisional, per Pick Tock
+var ACC_DATA=null;
+
+function adminTab(which){
+  var acc=(which==='accuracy');
+  document.getElementById('adminPaneAccess').style.display=acc?'none':'';
+  document.getElementById('adminPaneAccuracy').style.display=acc?'':'none';
+  document.getElementById('adminTabAccess').className='btn btn-sm'+(acc?' btn-ghost':'');
+  document.getElementById('adminTabAcc').className='btn btn-sm'+(acc?'':' btn-ghost');
+  document.getElementById('adminSub').textContent=acc
+    ?'How close Compiled lands to the plan we settle on'
+    :'Admin and planner access';
+  if(acc)loadAccuracy();
+}
+
+function loadAccuracy(){
+  if(ACC_DATA){renderAccuracy();return;}
+  document.getElementById('accByDay').innerHTML='<div class="sb-note"><span class="spinner"></span>Reading the demand history\u2026</div>';
+  google.script.run.withSuccessHandler(function(d){
+    ACC_DATA=d||{days:[]};renderAccuracy();
+  }).withFailureHandler(function(e){
+    document.getElementById('accByDay').innerHTML='<div class="status status-err">'+escHtml(e.message)+'</div>';
+  }).forecastAccuracyData();
+}
+
+function accMed_(a){
+  if(!a.length)return null;
+  var s=a.slice().sort(function(x,y){return x-y;}),m=Math.floor(s.length/2);
+  return s.length%2?s[m]:(s[m-1]+s[m])/2;
+}
+
+// A week containing a paid holiday is thrown out whole, not just the holiday.
+// Thanksgiving week is the proof: the day itself goes to zero and the volume it
+// would have carried lands on its neighbours, so every day in that week is
+// measuring a closure decision rather than a forecast.
+function accHolidayWeeks_(){
+  var out={},raw=(STATE.sequencingRules&&STATE.sequencingRules.holidayDates)||'';
+  String(raw).split(',').forEach(function(d){
+    d=d.trim();if(!/^\d{4}-\d{2}-\d{2}$/.test(d))return;
+    out[accWeekKey_(d)]=true;
+  });
+  return out;
+}
+function accWeekKey_(iso){
+  var dt=new Date(iso+'T12:00:00');
+  var day=(dt.getDay()+6)%7;                 // Monday = 0
+  dt.setDate(dt.getDate()-day);
+  return dt.getFullYear()+'-'+(dt.getMonth()+1)+'-'+dt.getDate();
+}
+
+function accRows_(h){
+  var tol=ACC_TOL[h]||14,hol=accHolidayWeeks_(),rows=[],skipped=0;
+  ((ACC_DATA&&ACC_DATA.days)||[]).forEach(function(d){
+    if(hol[accWeekKey_(d.date)]){skipped++;return;}
+    var best=null;
+    d.fc.forEach(function(f){
+      var gap=Math.abs(f.lead-h);
+      if(gap<=tol&&(!best||gap<Math.abs(best.lead-h)))best=f;
+    });
+    if(!best)return;
+    var dt=new Date(d.date+'T12:00:00');
+    rows.push({date:d.date,dow:dt.getDay(),weekLabel:d.weekLabel,day:d.day,
+               fc:best.u,fcN:best.n,act:d.act,actN:d.actN,lead:best.lead,
+               err:(d.act-best.u)/best.u*100,dN:d.actN-best.n});
+  });
+  return {rows:rows,skipped:skipped,tol:tol};
+}
+
+function accCell_(v,n){
+  if(v===null)return '<span style="color:var(--muted)">\u2014</span>';
+  var col=Math.abs(v)>=15?'var(--red)':(Math.abs(v)>=8?'var(--amber)':'var(--green)');
+  return '<span style="color:'+col+'">'+(v>0?'+':'')+v.toFixed(1)+'%</span>'
+    +(n<ACC_MIN?'<span style="color:var(--muted)" title="fewer than '+ACC_MIN+' samples"> *</span>':'');
+}
+
+function renderAccuracy(){
+  if(!ACC_DATA)return;
+  var h=parseInt(document.getElementById('accHorizon').value,10)||14;
+  var got=accRows_(h),rows=got.rows;
+  var DOW=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+  if(!rows.length){
+    document.getElementById('accHeadline').innerHTML='<div class="status status-warn">No day has a forecast saved within '+got.tol+' days of '+h+' days out.</div>';
+    document.getElementById('accByDay').innerHTML='';document.getElementById('accWorst').innerHTML='';
+    return;
+  }
+
+  var by={};rows.forEach(function(r){(by[r.dow]=by[r.dow]||[]).push(r);});
+  var wd=[],we=[];
+  rows.forEach(function(r){((r.dow===0||r.dow===6)?we:wd).push(Math.abs(r.err));});
+  var mwd=accMed_(wd),mwe=accMed_(we);
+
+  // Samad's claim, answered first and in his terms, because that is the question
+  // in the room. Burying it under a table would make the reader do the work.
+  var verdict=(mwd===null||mwe===null)?'':
+    (mwe>mwd+1 ? 'Weekends ARE worse.'
+    : (mwd>mwe+1 ? 'Weekends are <strong>not</strong> the problem. Weekdays miss by more.'
+                 : 'Weekends and weekdays miss by about the same.'));
+  document.getElementById('accHeadline').innerHTML=
+    '<div style="font-family:var(--mono);font-size:12px;line-height:1.7">'
+    +'<div style="font-size:13px;margin-bottom:6px">'+verdict+'</div>'
+    +'Mon to Fri <strong>'+(mwd===null?'\u2014':mwd.toFixed(1)+'%')+'</strong> typical miss across '+wd.length+' days'
+    +' '+'·'+' Sat and Sun <strong>'+(mwe===null?'\u2014':mwe.toFixed(1)+'%')+'</strong> across '+we.length+' days</div>';
+
+  var html='<table class="data-table"><thead><tr><th>Day</th><th style="text-align:right">Days</th>'
+    +'<th style="text-align:right">Typical miss</th><th style="text-align:right">Direction</th>'
+    +'<th style="text-align:right">Median forecast</th><th style="text-align:right">Median plan</th></tr></thead><tbody>';
+  [1,2,3,4,5,6,0].forEach(function(k){
+    var a=by[k]||[];
+    var e=a.map(function(r){return r.err;});
+    var absE=e.map(Math.abs);
+    html+='<tr><td>'+DOW[k]+'</td>'
+      +'<td style="text-align:right">'+a.length+'</td>'
+      +'<td style="text-align:right">'+accCell_(accMed_(absE),a.length)+'</td>'
+      +'<td style="text-align:right">'+accCell_(accMed_(e),a.length)+'</td>'
+      +'<td style="text-align:right">'+(a.length?fmtUnits(Math.round(accMed_(a.map(function(r){return r.fc;})))):'\u2014')+'</td>'
+      +'<td style="text-align:right">'+(a.length?fmtUnits(Math.round(accMed_(a.map(function(r){return r.act;})))):'\u2014')+'</td></tr>';
+  });
+  html+='</tbody></table>';
+  document.getElementById('accByDay').innerHTML=html;
+
+  var worst=rows.slice().sort(function(a,b){return Math.abs(b.err)-Math.abs(a.err);}).slice(0,10);
+  var w='<div class="card-title" style="margin-bottom:6px">Widest ten misses</div>'
+    +'<table class="data-table"><thead><tr><th>Date</th><th>Day</th>'
+    +'<th style="text-align:right">Forecast</th><th style="text-align:right">Plan</th>'
+    +'<th style="text-align:right">Miss</th><th style="text-align:right">Lead</th></tr></thead><tbody>';
+  worst.forEach(function(r){
+    w+='<tr><td>'+escHtml(r.date)+'</td><td>'+DOW[r.dow]+'</td>'
+      +'<td style="text-align:right">'+fmtUnits(r.fc)+'</td>'
+      +'<td style="text-align:right">'+fmtUnits(r.act)+'</td>'
+      +'<td style="text-align:right">'+accCell_(r.err,ACC_MIN)+'</td>'
+      +'<td style="text-align:right">'+r.lead+'d</td></tr>';
+  });
+  w+='</tbody></table>';
+  document.getElementById('accWorst').innerHTML=w;
+
+  var dN=accMed_(rows.map(function(r){return Math.abs(r.dN);}));
+  document.getElementById('accNote').innerHTML=
+    'Each day is scored against its nearest saved forecast within '+got.tol+' days of the '+h+'-day mark; '
+    +'days without one are left out. Negative means Compiled was HIGH against the plan. '
+    +'A star marks a row with fewer than '+ACC_MIN+' days behind it. '
+    +got.skipped+' day(s) dropped for sitting in a week with a paid holiday in it. '
+    +'Median SKU-count difference between the two sides is '+(dN===null?'\u2014':dN)+', so the comparison is close to like for like. '
+    +'The \u201cplan\u201d column is demand pushed from the Planner, which is what we committed to build. '
+    +'It is not what the floor recorded building: Run Sheet Actuals is still empty.';
 }
 function renderUsers(){google.script.run.withSuccessHandler(function(list){document.getElementById('adminList').innerHTML=list.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removeAdmin(\''+email+'\')">✕</button></div>';}).join('');}).withFailureHandler(function(){}).getAdminListForClient();var planners=STATE.planners||[];document.getElementById('plannerList').innerHTML=planners.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removePlanner(\''+email+'\')">✕</button></div>';}).join('');var floorViewers=STATE.floorViewers||[];document.getElementById('floorViewerList').innerHTML=floorViewers.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removeFloorViewer(\''+email+'\')">✕</button></div>';}).join('');var sandboxUsers=STATE.sandboxUsers||[];document.getElementById('sandboxUserList').innerHTML=sandboxUsers.length?sandboxUsers.map(function(email){return'<div style="display:flex;align-items:center;justify-content:space-between;background:var(--surface2);border-radius:5px;padding:5px 10px"><span style="font-family:var(--mono);font-size:11px">'+email+'</span><button class="btn btn-danger btn-sm" onclick="removeSandboxUser(\''+email+'\')">✕</button></div>';}).join(''):'<div class="sb-note">Nobody yet.</div>';renderExternalViewers();renderPlanEmailSettings();}
 
@@ -7820,7 +8003,7 @@ function switchView(name,btn){
   if(name==='demand'){loadForecastWeeks();renderLoadedDemand();}
   if(name==='skus'){renderSkuLibrary();loadObservedHc_();checkUpmHealth();}
   if(name==='lines'){renderLineConfig();renderRules();renderRulesAccess();renderLegend();}
-  if(name==='users'){renderUsers();renderSlackCard();}
+  if(name==='users'){renderUsers();renderSlackCard();adminTab('access');}
   if(name==='sequence'){document.querySelector('.main').classList.remove('wb-active');renderSequence();}
   if(name==='workbench'){document.querySelector('.main').classList.add('wb-active');renderWorkbench();}
   if(name==='myline')initMyLine();
