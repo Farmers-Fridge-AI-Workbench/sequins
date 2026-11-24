@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.290 — 2026-11-24    (pairs with Code.js v0.4.222)
+  Sequins ✨ — Index.html    v0.5.291 — 2026-11-24    (pairs with Code.js v0.4.223)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.290 The by-weekday card says what it measures rather than abbreviating
-           it into "By weekday, two weeks out".
+  v0.5.291 The sidebar legend starts collapsed, with the version stamp lifted
+           out of it so a deploy is still checkable at a glance.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -419,8 +419,8 @@ select option{background:var(--surface2);color:var(--text);}
     <div class="sb-wide-only" style="flex:1"></div>
     <div class="nav-spacer"></div>
     <div class="sidebar-section sb-wide-only">
-      <div class="sidebar-label" onclick="toggleLegend()" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between">Legend <span id="legendArrow" style="font-size:10px;color:var(--muted);display:inline-block;transition:transform .2s">▾</span></div>
-      <div id="legendBody" style="display:flex;flex-direction:column;gap:5px;padding:4px 4px 8px;max-height:900px;overflow:hidden;transition:max-height .25s ease,opacity .2s;opacity:1">
+      <div class="sidebar-label" onclick="toggleLegend()" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between">Legend <span id="legendArrow" style="font-size:10px;color:var(--muted);display:inline-block;transition:transform .2s;transform:rotate(-90deg)">▾</span></div>
+      <div id="legendBody" style="display:flex;flex-direction:column;gap:5px;padding:4px 4px 8px;max-height:0px;opacity:0;overflow:hidden;transition:max-height .25s ease,opacity .2s;opacity:1">
         <div class="legend-row"><span class="sku-tag tag-usda">USDA</span><span class="legend-desc">Needs a USDA-approved line</span></div>
         <div class="legend-row"><span class="legend-desc" style="opacity:.75">Food-contact class and line capability decide routing; category only prefers a home line.</span></div>
         <div class="legend-row"><span class="sku-tag tag-wrap">wrap</span><span class="legend-desc" id="legendWrap">Wrap — soft home line</span></div>
@@ -434,8 +434,8 @@ select option{background:var(--surface2);color:var(--text);}
         <div class="legend-row"><span class="mode-badge mode-actual" style="font-size:9px;padding:1px 6px;flex-shrink:0">actual</span><span class="legend-desc">Confirmed demand</span></div>
         <div class="legend-row"><span class="mode-badge mode-forecast" style="font-size:9px;padding:1px 6px;flex-shrink:0">forecast</span><span class="legend-desc">Projected demand</span></div>
         <div class="legend-row"><div class="live-dot" style="width:7px;height:7px;flex-shrink:0;margin:0 1px"></div><span class="legend-desc">Live — polls every 8s</span></div>
-        <div class="legend-row" style="margin-top:6px;opacity:.55"><span class="legend-desc" id="legendVersion" style="font-family:var(--mono);font-size:10px" title="Which build the browser is actually running. If this does not match the file you pushed, the deployment is serving an older version."></span></div>
       </div>
+      <div class="legend-row" style="padding:2px 8px 8px;opacity:.55"><span class="legend-desc" id="legendVersion" style="font-family:var(--mono);font-size:10px" title="Which build the browser is actually running. If this does not match the file you pushed, the deployment is serving an older version."></span></div>
     </div>
     <div class="sb-wide-only" style="flex:1"></div>
     <div class="nav-spacer"></div>
@@ -4377,7 +4377,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.290';
+var APP_VERSION='v0.5.291';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4661,12 +4661,6 @@ var MONTH_SHORT=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','No
 // Monday holds up all the way out, Friday falls off a cliff and keeps falling.
 // Blank where we hold no forecast from that far back yet, which is honest and
 // fills in as the nightly snapshot accumulates.
-function accToggleLegend_(a){
-  var d=document.getElementById('accLegendBody');if(!d)return;
-  var open=(d.style.display!=='none');
-  d.style.display=open?'none':'flex';
-  a.innerHTML=(open?'\u25b8':'\u25be')+' legend';
-}
 function renderAccuracyDecay(){
   var el=document.getElementById('accDecay');if(!el)return;
   var DOW=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -4755,8 +4749,7 @@ function renderAccuracyOverTime(){
   function sw(c,t){return '<span style="display:inline-flex;align-items:center;gap:5px">'
     +'<span style="width:10px;height:10px;border-radius:2px;background:'+c+';display:inline-block"></span>'+t+'</span>';}
   var legend='<div style="margin-bottom:10px">'
-    +'<a href="#" onclick="accToggleLegend_(this);return false" style="font-family:var(--mono);font-size:10px;color:var(--muted)">\u25b8 legend</a>'
-    +'<div id="accLegendBody" style="display:none;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:8px">'
+    +'<div id="accLegendBody" style="display:flex;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:10px;color:var(--muted)">'
     +sw('var(--green)','95% or better')
     +sw('var(--amber)','90 to 94%')
     +sw('var(--red)','under 90%')
