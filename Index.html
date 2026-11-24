@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.289 — 2026-11-24    (pairs with Code.js v0.4.221)
+  Sequins ✨ — Index.html    v0.5.290 — 2026-11-24    (pairs with Code.js v0.4.222)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.289 The week chart's legend starts rolled up. You learn it once and then
-           it is five lines of card spent on something you know.
+  v0.5.290 The by-weekday card says what it measures rather than abbreviating
+           it into "By weekday, two weeks out".
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -932,7 +932,7 @@ select option{background:var(--surface2);color:var(--text);}
       <div class="page-header"><div><div class="page-title">Forecast Accuracy</div><div class="page-sub">How close Compiled lands to the plan we settle on</div></div></div>
       <div class="card">
         <div class="card-title" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
-          <span>By weekday, two weeks out</span>
+          <span>Two weeks before each day ran</span>
           <button class="btn btn-ghost btn-sm" onclick="refreshAccuracy()">↻ refresh</button>
         </div>
         <div id="accHeadline" style="margin-bottom:12px"></div>
@@ -4377,7 +4377,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.289';
+var APP_VERSION='v0.5.290';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
