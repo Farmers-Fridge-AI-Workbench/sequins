@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.286 — 2026-11-24    (pairs with Code.js v0.4.218)
+  Sequins ✨ — Index.html    v0.5.287 — 2026-11-24    (pairs with Code.js v0.4.219)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.286 Score what Compiled said at the horizon, not the nearest saved entry
-           to it. The blank weeks were never unknowable.
+  v0.5.287 "All time" was not all time: its span moved with the horizon. Says
+           what it covers now, and the screen explains its own two dials.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -943,6 +943,7 @@ select option{background:var(--surface2);color:var(--text);}
           </select>
           </span>
         </div>
+        <div id="accHow" style="font-size:11px;color:var(--muted);margin:-4px 0 12px;line-height:1.6"></div>
         <div id="accHeadline" style="margin-bottom:12px"></div>
         <div id="accByDay"></div>
         <div id="accWorst" style="margin-top:16px"></div>
@@ -4384,7 +4385,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.286';
+var APP_VERSION='v0.5.287';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4753,6 +4754,10 @@ function renderAccuracy(){
     return;
   }
 
+  var howEl=document.getElementById('accHow');
+  if(howEl)howEl.innerHTML='Grading the last '+ACC_WEEKS+' weeks of production against what Compiled said <strong>'+h+' days before each day ran</strong>. '
+    +'Those are two different things: the weeks pick which days are graded, the dial picks which forecast they are graded against. '
+    +'A day only counts if we still hold a forecast from that far back, so the counts fall as you move the dial right.';
   var by={};rows.forEach(function(r){(by[r.dow]=by[r.dow]||[]).push(r);});
   var windowAcc=100-accMed_(rows.map(function(r){return Math.abs(r.err);}));
   var everRows=accRows_(h,true).rows;
@@ -4798,7 +4803,7 @@ function renderAccuracy(){
       +'<div style="flex:1;min-width:320px">'+bars+'</div>'
       +'<div style="text-align:center;min-width:150px">'
         +'<div style="font-family:var(--mono);font-size:44px;font-weight:800;line-height:1;color:'+tone(overall)+'">'+(overall===null?'\u2014':overall.toFixed(0)+'%')+'</div>'
-        +'<div style="font-size:11px;color:var(--muted);margin-top:6px">all time<br>'+everRows.length+' days since '+escHtml(firstDay)+'</div>'
+        +'<div style="font-size:11px;color:var(--muted);margin-top:6px">every day we can grade<br>'+everRows.length+' days, back to '+escHtml(firstDay)+'</div>'
         +'<div style="font-size:11px;color:var(--muted);margin-top:10px;padding-top:8px;border-top:1px solid var(--border)">last '+ACC_WEEKS+' weeks <strong style="color:'+tone(windowAcc)+'">'+windowAcc.toFixed(0)+'%</strong><br>'+rows.length+' days</div>'
       +'</div></div>';
 
