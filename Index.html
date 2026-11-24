@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.285 — 2026-11-24    (pairs with Code.js v0.4.217)
+  Sequins ✨ — Index.html    v0.5.286 — 2026-11-24    (pairs with Code.js v0.4.218)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.285 A legend on the week chart. The colours are accuracy bands, not
-           which way the week missed.
+  v0.5.286 Score what Compiled said at the horizon, not the nearest saved entry
+           to it. The blank weeks were never unknowable.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4384,7 +4384,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.285';
+var APP_VERSION='v0.5.286';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4554,6 +4554,27 @@ function accWeekKey_(iso){
 // the right default for 'can I trust this now', and all time is the right
 // answer to 'how have we done', so the screen shows both rather than making
 // the reader guess which one a single number is.
+// What the forecast SAID when we were h days out, which is not the same as the
+// nearest saved entry to h. If Compiled was last revised 25 days out and not
+// touched again until the push, then the forecast in force at 14 days out IS
+// that 25-day-old number, and there is nothing approximate about it.
+//
+// Scoring the nearest entry within a tolerance instead is what left weeks of
+// 10-26 and 11-02 blank at 14 days: their trails jump from 4 days to 25 and
+// nothing lands near the mark. Both weeks have seven actual days and a
+// perfectly knowable 14-day forecast.
+//
+// Entries are snapshots taken as the value was REPLACED, so an entry stamped
+// lead 25 held the value in force before that point. The one covering lead h is
+// therefore the smallest lead that is still >= h.
+function accPick_(fc,h){
+  var best=null;
+  fc.forEach(function(f){
+    if(f.lead<h)return;
+    if(!best||f.lead<best.lead)best=f;
+  });
+  return best;
+}
 function accRows_(h,allTime){
   var tol=ACC_TOL[h]||14,hol=accHolidayWeeks_(),rows=[],skipped=0;
   var floor=new Date();floor.setDate(floor.getDate()-ACC_WEEKS*7);
@@ -4561,11 +4582,7 @@ function accRows_(h,allTime){
   ((ACC_DATA&&ACC_DATA.days)||[]).forEach(function(d){
     if(!allTime&&d.date<floorIso)return;
     if(hol[accWeekKey_(d.date)]){skipped++;return;}
-    var best=null;
-    d.fc.forEach(function(f){
-      var gap=Math.abs(f.lead-h);
-      if(gap<=tol&&(!best||gap<Math.abs(best.lead-h)))best=f;
-    });
+    var best=accPick_(d.fc,h);
     if(!best)return;
     var dt=new Date(d.date+'T12:00:00');
     rows.push({date:d.date,dow:dt.getDay(),weekLabel:d.weekLabel,day:d.day,
@@ -4605,11 +4622,7 @@ function accWeekDayCount_(){
 function accWeekly_(h){
   var tol=ACC_TOL[h]||14,hol=accHolidayWeeks_(),off=accOffPeakWeeks_(),buckets={};
   ((ACC_DATA&&ACC_DATA.days)||[]).forEach(function(d){
-    var best=null;
-    d.fc.forEach(function(f){
-      var gap=Math.abs(f.lead-h);
-      if(gap<=tol&&(!best||gap<Math.abs(best.lead-h)))best=f;
-    });
+    var best=accPick_(d.fc,h);
     if(!best)return;
     var key=accWeekKey_(d.date);
     if(!buckets[key])buckets[key]={label:d.weekLabel,errs:[],holiday:false,offPeak:false};
@@ -4669,7 +4682,7 @@ function renderAccuracyOverTime(){
     var shade=(m.month%2===0)?'transparent':'rgba(255,255,255,.035)';
     if(!b){
       cols+='<div style="flex:1 1 0;min-width:14px;display:flex;flex-direction:column;align-items:center;gap:3px;background:'+shade+'" '
-        +'title="Wk '+accIsoWeek_(m.date)+', week of '+m.date.toDateString()+': no scoreable day">'
+        +'title="Wk '+accIsoWeek_(m.date)+', week of '+m.date.toDateString()+': '+(ran[m.key]?(ran[m.key]+' day(s) ran, but no forecast saved '+h+'+ days out'):'nothing recorded yet')+'">'
         +'<span style="font-family:var(--mono);font-size:8px;color:transparent">0</span>'
         +'<span style="width:100%;height:110px;display:flex;align-items:flex-end;background:var(--surface2);border-radius:2px;opacity:.35"></span>'
         +'<span style="font-family:var(--mono);font-size:8px;color:var(--border2)">'+accIsoWeek_(m.date)+'</span></div>';
@@ -4719,7 +4732,7 @@ function renderAccuracyOverTime(){
   var holAcc=accMed_(weeks.filter(function(b){return b.holiday;}).map(function(b){return b.acc;}));
   var plainAcc=accMed_(plain.map(function(b){return b.acc;}));
   document.getElementById('accTimeNote').innerHTML=
-    'One column per week of '+year+', scored the same way as above at the '+h+'-day mark, with every week we have no scoreable day for left as an empty slot. Bars start at '+FLOOR+'%, not zero. '
+    'One column per week of '+year+', scored the same way as above at the '+h+'-day mark, with every week we have no scoreable day for left as an empty slot. A nightly snapshot records Compiled at 8pm, so a revision becomes a data point whether or not anyone pressed a button. Bars start at '+FLOOR+'%, not zero. '
     +'An empty slot can mean the week has not run, or that it ran but no forecast survives from that far out, which is why switching the horizon fills some of them in. Hover one to see which. '+'<span style="color:var(--purple)">Purple</span> is a week with a paid holiday in it, kept here on purpose: '
     +'those weeks are left out of the by-day chart so they do not drag a baseline around, and this is where you look at them. '
     +(holN&&plainAcc!==null&&holAcc!==null
@@ -4749,15 +4762,8 @@ function renderAccuracy(){
   var wd=[],we=[];
   rows.forEach(function(r){((r.dow===0||r.dow===6)?we:wd).push(Math.abs(r.err));});
   var mwd=accMed_(wd),mwe=accMed_(we);
-  // Samad's question, answered first and in his words. Burying the answer under
-  // the chart would make the reader do the work of finding it.
-  var verdict=(mwd===null||mwe===null)?'':
-    (mwe>mwd+1 ? 'Weekends <strong>are</strong> the weaker half.'
-    : (mwd>mwe+1 ? 'Weekends are <strong>not</strong> the weak spot. Weekdays miss by more.'
-                 : 'Weekends and weekdays are about equally good.'));
   document.getElementById('accHeadline').innerHTML=
     '<div style="font-family:var(--mono);font-size:12px;line-height:1.7">'
-    +'<div style="font-size:13px;margin-bottom:4px">'+verdict+'</div>'
     +'<span style="color:var(--muted)">Mon to Fri</span> '+(100-mwd).toFixed(0)+'%'
     +' <span style="color:var(--muted)">'+'·'+' Sat and Sun</span> '+(100-mwe).toFixed(0)+'%</div>';
 
@@ -4816,8 +4822,8 @@ function renderAccuracy(){
   document.getElementById('accNote').innerHTML=
     'How close Compiled was to the plan the day actually ran on, whole day rather than SKU by SKU. '
     +'Last '+ACC_WEEKS+' weeks, with any week containing a holiday left out entirely. '
-    +'Each day is scored against its nearest saved forecast within '+got.tol+' days of the '+h+'-day mark; '
-    +'days without one are left out, and a star marks a weekday with fewer than '+ACC_MIN+' behind it. '
+    +'Each day is scored against what Compiled said when we were '+h+' days out, meaning the last revision saved on or before that point. '
+    +'Days we hold no forecast that early for are left out, and a star marks a weekday with fewer than '+ACC_MIN+' behind it. '
     +'\u201cOver-forecast\u201d means Compiled was higher than the plan. '
     +'Median SKU-count difference between the two sides is '+(dN===null?'\u2014':dN)+', so this is close to like for like. '
     +'The plan is demand pushed from the Planner, which is what we committed to build, not what the floor recorded building: Run Sheet Actuals is still empty.'

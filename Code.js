@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.217 — 2026-11-24    (pairs with Index.html v0.5.285)
+ * Sequins ✨ — Code.js    v0.4.218 — 2026-11-24    (pairs with Index.html v0.5.286)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.217 No server change. Paired with Index.html v0.5.285, a legend on the
- *          week chart.
+ * v0.4.218 A nightly 8pm forecast snapshot, so a Compiled revision becomes a
+ *          data point without anyone remembering to press a button.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────
@@ -791,7 +791,14 @@ function demandIndex_() {
 // present, it's slimmed and pushed onto that day's history key, capped at 5.
 function setDemandDay_(weekLabel, day, dayData, prevDay) {
   let hist = getDemandHistory_(weekLabel, day);
-  if (prevDay) hist = [slimHistoryEntry_(prevDay)].concat(hist).slice(0, 5);
+  // A nightly snapshot re-saves a day whether or not Compiled moved, so an
+  // unconditional push would bury five real revisions under ninety identical
+  // ones. Only a CHANGE earns a history entry; an unchanged re-save leaves the
+  // trail exactly as it was, which is also what makes the trail readable as a
+  // list of revisions rather than a list of cron firings.
+  if (prevDay && !(hist.length && sameDemandSkus_(prevDay.skus || {}, dayData.skus || {}))) {
+    hist = [slimHistoryEntry_(prevDay)].concat(hist).slice(0, DEMAND_HISTORY_MAX);
+  }
   demandStoreWrite_(weekLabel, day, dayData, hist);
   // Bumps sequins_meta so the client's 8-second poll notices. Deliberately
   // non-fatal: the demand is already committed to the Sheet, and a full
@@ -922,7 +929,7 @@ function migrateLegacyState_() {
           const liveData = { skus: src.skus, mode: src.mode, date: src.date, publishedBy: src.publishedBy, publishedAt: src.publishedAt };
           setDemandDay_(weekLabel, day, liveData, null);
           if (src.history && src.history.length) {
-            const slimHist = src.history.map(slimHistoryEntry_).slice(0, 5);
+            const slimHist = src.history.map(slimHistoryEntry_).slice(0, DEMAND_HISTORY_MAX);
             setSection_(demandHistoryKey_(weekLabel, day), slimHist);
           }
         } catch(e) {
@@ -1419,6 +1426,12 @@ const LABOR_SHARE_SOURCE = 'labor-share';
 // Stamped onto every day this importer writes. It is what separates a pushed
 // day from a Demands 2025 actual now that both carry mode 'actual'.
 const PUSHED_SOURCE     = 'assembly_summary';
+// Was 5. That cap dates from when a history entry was a full per-SKU snapshot
+// and the whole thing lived in Script Properties against a 500KB ceiling. An
+// entry is now five numbers, and it lives in the Sheet, so a longer trail costs
+// about a kilobyte per day and buys the forecast-accuracy view a readable
+// history instead of five arbitrary points.
+const DEMAND_HISTORY_MAX = 24;
 
 // Resolves a Demand-tab date cell to 'yyyy-MM-dd'. Display value first (already
 // correct in the spreadsheet's own timezone), then the raw Date as a last resort.
@@ -2074,11 +2087,91 @@ function syncLaborShare() {
 // One consequence worth knowing: Workbench recomputes live on every render, so
 // demand arriving mid-session can move an unpublished plan. Line Sequence is
 // safe — it renders the published snapshot and never moves until you publish.
+// ─── NIGHTLY FORECAST SNAPSHOT ───────────────────────────────────
+// Until now a forecast revision only became a data point if somebody happened
+// to press Load all weeks after Kristen sent one. Cori, 2026-11-24: “I don't
+// always remember to hit that button.” Which is the same shape as the UPM
+// refresh that sat behind opening SKU Library and went nineteen days without
+// running: work that must happen on a schedule, hung off a page someone has to
+// visit.
+//
+// Rides pushedDemandTrigger rather than taking its own trigger, for the reason
+// recorded there: that one demonstrably fires and is checkable in the audit
+// log. The due-check is what makes it daily.
+const FORECAST_SNAP_KEY  = 'sequins_forecast_snapshot';
+const FORECAST_SNAP_HOUR = 20;      // 8pm, Cori 2026-11-24
+const FORECAST_SNAP_WEEKS = 12;     // enough runway to feed the 56-day horizon
+
+function snapshotForecastIfDue_() {
+  const props = PropertiesService.getScriptProperties();
+  const tz    = Session.getScriptTimeZone();
+  const now   = new Date();
+  if (now.getHours() < FORECAST_SNAP_HOUR) return { ran: false, reason: 'before ' + FORECAST_SNAP_HOUR + ':00' };
+  const today = Utilities.formatDate(now, tz, 'yyyy-MM-dd');
+  if (String(props.getProperty(FORECAST_SNAP_KEY) || '') === today) return { ran: false, reason: 'already ran today' };
+
+  // Claim the day BEFORE the work, not after. A run that dies half way through
+  // has still written some days, and retrying every fifteen minutes until
+  // midnight would re-walk the same weeks over and over.
+  props.setProperty(FORECAST_SNAP_KEY, today);
+
+  const lock = LockService.getScriptLock();
+  let got = false;
+  try { got = lock.tryLock(1000); } catch (e) { got = false; }
+  if (!got) return { ran: false, reason: 'busy' };
+
+  try {
+    const weeks = fetchForecastWeeks().slice(0, FORECAST_SNAP_WEEKS);
+    let saved = 0, skippedActual = 0, unchanged = 0;
+    weeks.forEach(function(w) {
+      let data;
+      try { data = fetchForecastWeekData(w.label); }
+      catch (e) { Logger.log('snapshot: ' + w.label + ' unreadable: ' + e.message); return; }
+      const weekData = getDemandWeek_(w.label);
+      Object.keys(data.skuData || {}).forEach(function(day) {
+        const skus = data.skuData[day] || {};
+        const existing = weekData[day];
+        // The same two guards the manual publish carries. An actual is the
+        // record and a snapshot must never touch it, and an empty week means
+        // Compiled is not filled in yet rather than that everything is zero.
+        if (existing && existing.mode === 'actual') { skippedActual++; return; }
+        if (!Object.keys(skus).length) return;
+        if (existing && sameDemandSkus_(existing.skus, skus)) { unchanged++; return; }
+        setDemandDay_(w.label, day, {
+          skus: skus, mode: 'forecast', date: (data.dates || {})[day] || '',
+          publishedBy: 'nightly snapshot', publishedAt: new Date().toISOString()
+        }, existing);
+        saved++;
+      });
+    });
+    Logger.log('snapshotForecastIfDue_: ' + weeks.length + ' week(s), ' + saved + ' day(s) revised, ' +
+               unchanged + ' unchanged, ' + skippedActual + ' already actual');
+    writeAuditLog_('nightly snapshot', 'forecast_snapshot', '', '',
+      weeks.length + ' weeks, ' + saved + ' revised, ' + unchanged + ' unchanged');
+    return { ran: true, weeks: weeks.length, saved: saved, unchanged: unchanged };
+  } catch (e) {
+    Logger.log('snapshotForecastIfDue_ failed: ' + e.message);
+    return { ran: false, error: e.message };
+  } finally {
+    try { lock.releaseLock(); } catch (e) {}
+  }
+}
+
 function pushedDemandTrigger() {
   assertAdminOrScheduled_();
   try {
     const res = importPushedDemand();
     Logger.log('pushedDemandTrigger: imported ' + ((res && res.imported) || 0) + ' day(s)');
+  } catch (err) {
+    Logger.log('pushedDemandTrigger failed: ' + err.message);
+  }
+
+  // After the import, for the same reason the UPM catch-up goes last: the
+  // demand landing is the job, and a snapshot that throws must not take it
+  // down. No-op before 8pm and after it has run once, so the cost on the other
+  // ninety-odd firings a day is one property read.
+  try {
+    snapshotForecastIfDue_();
   } catch (err) {
     Logger.log('pushedDemandTrigger failed: ' + err.message);
   }
