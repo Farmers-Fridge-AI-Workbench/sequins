@@ -1,9 +1,9 @@
 /**
- * Sequins ✨ — Code.js    v0.4.220 — 2026-11-24    (pairs with Index.html v0.5.288)
+ * Sequins ✨ — Code.js    v0.4.221 — 2026-11-24    (pairs with Index.html v0.5.289)
  * Full history: git log. This header carries the LATEST change only.
  *
- * v0.4.220 No server change. Paired with Index.html v0.5.288, which retires
- *          the horizon dial for a decay grid.
+ * v0.4.221 No server change. Paired with Index.html v0.5.289, a collapsible
+ *          chart legend.
  */
 
 // ─── SHEET IDs ────────────────────────────────────────────────────────────────

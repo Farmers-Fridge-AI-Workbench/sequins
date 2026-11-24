@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.288 — 2026-11-24    (pairs with Code.js v0.4.220)
+  Sequins ✨ — Index.html    v0.5.289 — 2026-11-24    (pairs with Code.js v0.4.221)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.288 The horizon dial is gone. One fixed headline at two weeks out, and
-           a grid showing how each weekday decays further out.
+  v0.5.289 The week chart's legend starts rolled up. You learn it once and then
+           it is five lines of card spent on something you know.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4377,7 +4377,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.288';
+var APP_VERSION='v0.5.289';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4661,6 +4661,12 @@ var MONTH_SHORT=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','No
 // Monday holds up all the way out, Friday falls off a cliff and keeps falling.
 // Blank where we hold no forecast from that far back yet, which is honest and
 // fills in as the nightly snapshot accumulates.
+function accToggleLegend_(a){
+  var d=document.getElementById('accLegendBody');if(!d)return;
+  var open=(d.style.display!=='none');
+  d.style.display=open?'none':'flex';
+  a.innerHTML=(open?'\u25b8':'\u25be')+' legend';
+}
 function renderAccuracyDecay(){
   var el=document.getElementById('accDecay');if(!el)return;
   var DOW=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -4748,14 +4754,16 @@ function renderAccuracyOverTime(){
   // over-forecast, so as a colour it would be a one-entry legend.
   function sw(c,t){return '<span style="display:inline-flex;align-items:center;gap:5px">'
     +'<span style="width:10px;height:10px;border-radius:2px;background:'+c+';display:inline-block"></span>'+t+'</span>';}
-  var legend='<div style="display:flex;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:10px;color:var(--muted);margin-bottom:10px">'
+  var legend='<div style="margin-bottom:10px">'
+    +'<a href="#" onclick="accToggleLegend_(this);return false" style="font-family:var(--mono);font-size:10px;color:var(--muted)">\u25b8 legend</a>'
+    +'<div id="accLegendBody" style="display:none;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:8px">'
     +sw('var(--green)','95% or better')
     +sw('var(--amber)','90 to 94%')
     +sw('var(--red)','under 90%')
     +sw('var(--purple)','paid holiday week, left out of the figures above')
     +sw('var(--teal)','off-peak week, still counted above')
     +sw('var(--surface2)','no day we can score')+'<span>number under each bar is the week</span>'
-    +'</div>';
+    +'</div></div>';
   el.innerHTML=legend+'<div style="overflow-x:auto"><div style="min-width:860px">'
     +'<div style="display:flex;gap:1px;align-items:flex-end">'+cols+'</div>'
     +'<div style="display:flex;gap:1px;margin-top:2px">'+band+'</div>'
