@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.281 — 2026-11-24    (pairs with Code.js v0.4.213)
+  Sequins ✨ — Index.html    v0.5.282 — 2026-11-24    (pairs with Code.js v0.4.214)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.281 Week by week accuracy, with holiday weeks kept in and coloured so
-           the holiday plan can be read rather than averaged away.
+  v0.5.282 The per-weekday count says 7 Mondays, not 7 days: next to a horizon
+           picker in days it read as a lead time.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -4383,7 +4383,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.281';
+var APP_VERSION='v0.5.282';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
@@ -4691,7 +4691,7 @@ function renderAccuracy(){
       +'<span style="display:block;height:100%;width:'+pct.toFixed(1)+'%;background:'+tone(acc)+'"></span></span>'
       +'<span style="width:42px;text-align:right;color:'+tone(acc)+';font-weight:700">'+acc.toFixed(0)+'%</span>'
       +'<span style="color:var(--muted)">typically '+miss.toFixed(1)+'% '+(dir<0?'over':'under')+'-forecast'
-      +' '+'·'+' '+a.length+' day'+(a.length===1?'':'s')
+      +' '+'·'+' '+a.length+' '+DOW[k]+(a.length===1?'':'s')
       +(a.length<ACC_MIN?' <span title="thin sample">*</span>':'')+'</span></div>';
   });
 
