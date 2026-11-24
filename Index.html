@@ -1,9 +1,9 @@
 <!--
-  Sequins ✨ — Index.html    v0.5.283 — 2026-11-24    (pairs with Code.js v0.4.215)
+  Sequins ✨ — Index.html    v0.5.284 — 2026-11-24    (pairs with Code.js v0.4.216)
   Full history: git log. This header carries the LATEST change only.
 
-  v0.5.283 An all-time accuracy figure beside the rolling one, and the week
-           chart spans the calendar year banded by month.
+  v0.5.284 Dropdown options were white on white on Windows. Fixed on the
+           shared class, so every select in the app, not just the new one.
 -->
 <!DOCTYPE html>
 <html lang="en">
@@ -261,7 +261,8 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
 .form-label{font-size:10px;font-family:var(--mono);color:var(--muted);text-transform:uppercase;letter-spacing:.06em;}
 .form-input{background:var(--surface2);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:12px;padding:7px 10px;border-radius:6px;outline:none;width:100%;}
 .form-input:focus{border-color:var(--teal);}
-.form-select{background:var(--surface2);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:12px;padding:7px 10px;border-radius:6px;cursor:pointer;}
+.form-select{background:var(--surface2);border:1px solid var(--border2);color:var(--text);font-family:var(--mono);font-size:12px;padding:7px 10px;border-radius:6px;cursor:pointer;color-scheme:dark;}
+select option{background:var(--surface2);color:var(--text);}
 .inline-input{background:var(--surface2);border:1px solid transparent;color:var(--text);font-family:var(--mono);font-size:11px;padding:3px 6px;border-radius:4px;outline:none;width:100%;}
 .inline-input:focus{border-color:var(--teal);}
 .btn{padding:7px 16px;border-radius:6px;font-family:var(--mono);font-size:11px;cursor:pointer;border:none;font-weight:500;white-space:nowrap;}
@@ -934,7 +935,7 @@ html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--s
           <span>By weekday</span>
           <span style="display:flex;gap:8px;align-items:center">
           <button class="btn btn-ghost btn-sm" onclick="refreshAccuracy()">↻ refresh</button>
-          <select id="accHorizon" onchange="renderAccuracy()" style="background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-family:var(--mono);font-size:11px">
+          <select id="accHorizon" class="form-select" onchange="renderAccuracy()" style="font-size:11px;padding:4px 6px">
             <option value="14">14 days out</option>
             <option value="28">28 days out</option>
             <option value="42">42 days out</option>
@@ -4383,7 +4384,7 @@ function migrateLineCaps(){
 // The version stamp had drifted six versions behind (v0.5.111 while the file
 // header said v0.5.117) because it was a hand-typed string in the markup. It
 // now comes from APP_VERSION, one place, updated with the header.
-var APP_VERSION='v0.5.283';
+var APP_VERSION='v0.5.284';
 function renderLegend(){
   var v=document.getElementById('legendVersion');
   if(v)v.textContent='Index '+APP_VERSION;
